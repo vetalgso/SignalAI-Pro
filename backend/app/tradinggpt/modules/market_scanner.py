@@ -27,6 +27,7 @@ class ScannerResult:
     score: float
     opportunity_score: float
     consensus_score: float
+    timeframe_consensus_score: float
     ranking_score: float
     confidence: int
     risk: str
@@ -34,6 +35,10 @@ class ScannerResult:
     trade_direction: str
     signal_action: str | None
     forecast_direction: str | None
+    timeframe_directions: dict[str, str]
+    trend_direction: str
+    trade_style: str
+    reasons: list[str]
     quality_penalty: int
     warnings: list[str]
 
@@ -44,6 +49,10 @@ class ScannerResult:
             "score": round(self.score, 2),
             "opportunity_score": round(self.opportunity_score, 2),
             "consensus_score": round(self.consensus_score, 2),
+            "timeframe_consensus_score": round(
+                self.timeframe_consensus_score,
+                2,
+            ),
             "ranking_score": round(self.ranking_score, 2),
             "confidence": self.confidence,
             "risk": self.risk,
@@ -51,6 +60,10 @@ class ScannerResult:
             "trade_direction": self.trade_direction,
             "signal_action": self.signal_action,
             "forecast_direction": self.forecast_direction,
+            "timeframe_directions": self.timeframe_directions,
+            "trend_direction": self.trend_direction,
+            "trade_style": self.trade_style,
+            "reasons": self.reasons,
             "quality_penalty": self.quality_penalty,
             "warnings": self.warnings,
         }
@@ -98,6 +111,7 @@ class CryptoMarketScanner:
             results,
             key=lambda item: (
                 item.ranking_score,
+                item.timeframe_consensus_score,
                 item.opportunity_score,
                 item.consensus_score,
                 item.confidence,
@@ -208,10 +222,20 @@ class CryptoMarketScanner:
             consensus_score,
         )
 
+        timeframe_analysis = ScoringEngine.timeframe_analysis(
+            forecast,
+            trade_direction,
+        )
+
+        timeframe_consensus_score = float(
+            timeframe_analysis["timeframe_consensus_score"]
+        )
+
         ranking_score = ScoringEngine.ranking_score(
             opportunity_score,
             consensus_score,
             confidence,
+            timeframe_consensus_score,
         )
 
         recommendation = ScoringEngine.recommendation(
@@ -236,12 +260,22 @@ class CryptoMarketScanner:
             forecast
         )
 
+        reasons = ScoringEngine.explanation_reasons(
+            signal=signal,
+            news=news,
+            trade_direction=trade_direction,
+            consensus_score=consensus_score,
+            timeframe_analysis=timeframe_analysis,
+            risk=risk,
+        )
+
         return ScannerResult(
             asset=asset,
             symbol=symbol,
             score=score,
             opportunity_score=opportunity_score,
             consensus_score=consensus_score,
+            timeframe_consensus_score=timeframe_consensus_score,
             ranking_score=ranking_score,
             confidence=confidence,
             risk=risk,
@@ -249,6 +283,10 @@ class CryptoMarketScanner:
             trade_direction=trade_direction,
             signal_action=signal_action,
             forecast_direction=forecast_direction,
+            timeframe_directions=timeframe_analysis["directions"],
+            trend_direction=timeframe_analysis["trend_direction"],
+            trade_style=timeframe_analysis["trade_style"],
+            reasons=reasons,
             quality_penalty=quality_penalty,
             warnings=warnings,
         )

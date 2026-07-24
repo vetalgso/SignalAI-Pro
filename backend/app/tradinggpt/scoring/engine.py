@@ -26,6 +26,20 @@ class ScoringEngine:
     FORECAST_WEIGHT = 0.40
     NEWS_WEIGHT = 0.15
 
+    TIMEFRAME_WEIGHTS = {
+        15: 0.10,
+        60: 0.20,
+        240: 0.30,
+        1440: 0.40,
+    }
+
+    TIMEFRAME_LABELS = {
+        15: "15m",
+        60: "1H",
+        240: "4H",
+        1440: "1D",
+    }
+
     @staticmethod
     def signal_score(signal: dict[str, Any] | None) -> float:
         if not signal:
@@ -325,17 +339,242 @@ class ScoringEngine:
 
         return max(0.0, min(100.0, opportunity))
 
+    @classmethod
+    def timeframe_analysis(
+        cls,
+        forecast: dict[str, Any] | None,
+        trade_direction: TradeDirection = "NEUTRAL",
+    ) -> dict[str, Any]:
+        """
+        Builds a normalized multi-timeframe market view.
+
+        Supported horizons:
+            15m, 1H, 4H, 1D
+
+        timeframe_consensus_score:
+            100 = all directional horizons agree
+            50 = neutral or insufficient evidence
+            0 = equally split directional conflict
+        """
+        result: dict[str, Any] = {
+            "directions": {},
+            "scores": {},
+            "timeframe_consensus_score": 50.0,
+            "trend_direction": "NEUTRAL",
+            "trade_style": "NEUTRAL",
+            "reasons": [],
+        }
+
+        if not forecast:
+            result["reasons"].append(
+                "Multi-timeframe forecast data is unavailable."
+            )
+            return result
+
+        items = forecast.get("forecasts", [])
+
+        if not items:
+            result["reasons"].append(
+                "Multi-timeframe forecast horizons are unavailable."
+            )
+            return result
+
+        weighted_long = 0.0
+        weighted_short = 0.0
+        directional_weight = 0.0
+
+        for item in items:
+            try:
+                horizon = int(item.get("horizon_minutes", 0))
+            except (TypeError, ValueError):
+                continue
+
+            if horizon not in cls.TIMEFRAME_WEIGHTS:
+                continue
+
+            probabilities = item.get("probabilities", {})
+            up = float(probabilities.get("up", 0.0) or 0.0)
+            down = float(probabilities.get("down", 0.0) or 0.0)
+
+            directional_score = max(
+                0.0,
+                min(100.0, 50.0 + up * 50.0 - down * 50.0),
+            )
+
+            direction = cls.trade_direction(
+                directional_score,
+                neutral_band=5.0,
+            )
+
+            label = cls.TIMEFRAME_LABELS[horizon]
+            weight = cls.TIMEFRAME_WEIGHTS[horizon]
+
+            result["directions"][label] = direction
+            result["scores"][label] = round(directional_score, 2)
+
+            if direction == "LONG":
+                weighted_long += weight
+                directional_weight += weight
+            elif direction == "SHORT":
+                weighted_short += weight
+                directional_weight += weight
+
+        directions = result["directions"]
+
+        if not directions:
+            result["reasons"].append(
+                "Supported forecast horizons are unavailable."
+            )
+            return result
+
+        if directional_weight > 0:
+            dominant_weight = max(weighted_long, weighted_short)
+            opposing_weight = min(weighted_long, weighted_short)
+
+            consensus = (
+                50.0
+                + (
+                    dominant_weight - opposing_weight
+                ) / directional_weight * 50.0
+            )
+
+            result["timeframe_consensus_score"] = round(
+                max(0.0, min(100.0, consensus)),
+                2,
+            )
+
+        long_term_direction = directions.get("1D")
+        medium_term_direction = directions.get("4H")
+
+        if (
+            long_term_direction
+            and long_term_direction != "NEUTRAL"
+        ):
+            trend_direction = long_term_direction
+        elif (
+            medium_term_direction
+            and medium_term_direction != "NEUTRAL"
+        ):
+            trend_direction = medium_term_direction
+        elif weighted_long > weighted_short:
+            trend_direction = "LONG"
+        elif weighted_short > weighted_long:
+            trend_direction = "SHORT"
+        else:
+            trend_direction = "NEUTRAL"
+
+        result["trend_direction"] = trend_direction
+
+        if trade_direction == "NEUTRAL":
+            trade_style = "NEUTRAL"
+        elif trend_direction == "NEUTRAL":
+            trade_style = "MIXED"
+        elif trade_direction == trend_direction:
+            trade_style = "TREND_FOLLOWING"
+        else:
+            trade_style = "COUNTER_TREND"
+
+        result["trade_style"] = trade_style
+
+        for label in ("15m", "1H", "4H", "1D"):
+            direction = directions.get(label)
+
+            if direction:
+                result["reasons"].append(
+                    f"Forecast {label}: {direction}."
+                )
+
+        result["reasons"].append(
+            "Timeframe alignment: "
+            f"{result['timeframe_consensus_score']:.0f}%."
+        )
+
+        if trend_direction != "NEUTRAL":
+            result["reasons"].append(
+                f"Primary trend: {trend_direction}."
+            )
+
+        if trade_style != "NEUTRAL":
+            result["reasons"].append(
+                f"Trade style: {trade_style}."
+            )
+
+        return result
+
+    @staticmethod
+    def explanation_reasons(
+        *,
+        signal: dict[str, Any] | None,
+        news: dict[str, Any] | None,
+        trade_direction: TradeDirection,
+        consensus_score: float,
+        timeframe_analysis: dict[str, Any],
+        risk: str,
+    ) -> list[str]:
+        reasons: list[str] = []
+
+        if signal:
+            decision = signal.get("decision", {})
+            action = decision.get("action")
+            signal_confidence = decision.get("confidence")
+
+            if action:
+                if signal_confidence is None:
+                    reasons.append(f"Signal Engine: {action}.")
+                else:
+                    reasons.append(
+                        "Signal Engine: "
+                        f"{action} ({float(signal_confidence):.0f}%)."
+                    )
+
+        reasons.extend(timeframe_analysis.get("reasons", []))
+
+        if news and news.get("articles"):
+            sentiment_counts = {
+                "positive": 0,
+                "neutral": 0,
+                "negative": 0,
+            }
+
+            for article in news["articles"]:
+                sentiment = article.get("sentiment", "neutral")
+
+                if sentiment in sentiment_counts:
+                    sentiment_counts[sentiment] += 1
+
+            dominant_sentiment = max(
+                sentiment_counts,
+                key=sentiment_counts.get,
+            )
+
+            reasons.append(
+                f"News sentiment: {dominant_sentiment.upper()}."
+            )
+
+        reasons.append(
+            f"Source consensus: {consensus_score:.0f}%."
+        )
+        reasons.append(f"Final direction: {trade_direction}.")
+        reasons.append(f"Risk level: {risk.upper()}.")
+
+        return reasons
+
     @staticmethod
     def ranking_score(
         opportunity_score: float,
         consensus_score: float,
         confidence: int,
+        timeframe_consensus_score: float | None = None,
     ) -> float:
         """
         Produces a unified market-ranking score.
 
-        Opportunity remains the primary component, while source
-        consensus and confidence reward more reliable setups.
+        Ranking v2 compatibility:
+            when timeframe_consensus_score is omitted, the original
+            opportunity/consensus/confidence formula is preserved.
+
+        Ranking v3:
+            timeframe alignment becomes an explicit reliability factor.
         """
         normalized_opportunity = max(
             0.0,
@@ -350,11 +589,24 @@ class ScoringEngine:
             min(100, confidence),
         )
 
-        ranking = (
-            normalized_opportunity * 0.60
-            + normalized_consensus * 0.25
-            + normalized_confidence * 0.15
-        )
+        if timeframe_consensus_score is None:
+            ranking = (
+                normalized_opportunity * 0.60
+                + normalized_consensus * 0.25
+                + normalized_confidence * 0.15
+            )
+        else:
+            normalized_timeframe_consensus = max(
+                0.0,
+                min(100.0, timeframe_consensus_score),
+            )
+
+            ranking = (
+                normalized_opportunity * 0.50
+                + normalized_consensus * 0.20
+                + normalized_timeframe_consensus * 0.20
+                + normalized_confidence * 0.10
+            )
 
         return max(0.0, min(100.0, ranking))
 

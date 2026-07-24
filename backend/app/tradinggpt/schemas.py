@@ -75,6 +75,7 @@ class MarketScanAsset(BaseModel):
     score: float
     opportunity_score: float
     consensus_score: float = Field(ge=0, le=100)
+    timeframe_consensus_score: float = Field(ge=0, le=100)
     ranking_score: float = Field(ge=0, le=100)
     confidence: int
     risk: str
@@ -82,6 +83,17 @@ class MarketScanAsset(BaseModel):
     trade_direction: Literal["LONG", "SHORT", "NEUTRAL"]
     signal_action: str | None = None
     forecast_direction: str | None = None
+    timeframe_directions: dict[str, str] = Field(
+        default_factory=dict
+    )
+    trend_direction: Literal["LONG", "SHORT", "NEUTRAL"]
+    trade_style: Literal[
+        "TREND_FOLLOWING",
+        "COUNTER_TREND",
+        "MIXED",
+        "NEUTRAL",
+    ]
+    reasons: list[str] = Field(default_factory=list)
     quality_penalty: int
     warnings: list[str] = Field(default_factory=list)
 
