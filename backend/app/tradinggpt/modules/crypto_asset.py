@@ -8,6 +8,7 @@ from app.indicators.service import calculate_indicator_snapshot
 from app.news import NewsService
 from app.services.binance_market import BinanceMarketService
 from app.signal_engine.service import build_signal_analysis
+from app.tradinggpt.quality_guard import AnalysisQualityGuard
 from app.tradinggpt.schemas import (
     AnalysisFactor,
     AssistantChatRequest,
@@ -128,6 +129,16 @@ class CryptoAssetAnalysisModule:
             news_available=news is not None,
         )
 
+        quality_penalty, quality_warnings = (
+            AnalysisQualityGuard.confidence_penalty(
+                signal=signal,
+                forecast=forecast,
+                news=news,
+            )
+        )
+
+        confidence = max(15, confidence - quality_penalty)
+
         market_view = self._market_view(weighted_score)
         risk = self._risk_level(signal, forecast, request.context.risk_level)
         recommendation = self._recommendation(weighted_score, confidence)
@@ -186,6 +197,18 @@ class CryptoAssetAnalysisModule:
                 )
             )
 
+        factors.append(
+            AnalysisFactor(
+                type="data_quality",
+                score=max(0, 100 - quality_penalty * 3),
+                summary=(
+                    "Качество подтверждения достаточное."
+                    if not quality_warnings
+                    else " ".join(quality_warnings)
+                ),
+            )
+        )
+
         answer = self._build_answer(
             asset=asset,
             recommendation=recommendation,
@@ -216,6 +239,8 @@ class CryptoAssetAnalysisModule:
                 "recommendation": recommendation,
                 "combined_score": round(weighted_score, 2),
                 "sources_available": available_sources,
+                "quality_penalty": quality_penalty,
+                "quality_warnings": quality_warnings,
                 "signal": signal,
                 "forecast": forecast,
                 "news": news,
@@ -378,9 +403,24 @@ class CryptoAssetAnalysisModule:
         if "high" in forecast_risks:
             return "high"
 
+        elevated_count = forecast_risks.count("elevated")
+
+        if elevated_count >= 2:
+            return "high"
+
+        if elevated_count == 1 and profile_risk == "high":
+            return "high"
+
         if signal:
             warnings = signal["decision"].get("warnings", [])
-            if len(warnings) >= 2:
+
+            volume_ratio = float(
+                signal.get("indicators", {})
+                .get("volume", {})
+                .get("ratio", 1)
+            )
+
+            if len(warnings) >= 2 or volume_ratio < 0.25:
                 return "high"
 
         return profile_risk

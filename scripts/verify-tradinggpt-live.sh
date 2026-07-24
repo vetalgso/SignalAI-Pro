@@ -42,7 +42,14 @@ assert payload["details"]["recommendation"] in {
     "CAUTIOUS_SELL",
     "AVOID_OR_REDUCE",
 }
-assert len(payload["factors"]) == 3
+assert len(payload["factors"]) == 4
+assert "quality_penalty" in payload["details"]
+assert "quality_warnings" in payload["details"]
+assert payload["risk"] in {"medium", "high"}
+assert any(
+    factor["type"] == "data_quality"
+    for factor in payload["factors"]
+)
 
 print("Live TradingGPT asset analysis verification passed.")
 '
