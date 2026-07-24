@@ -4,11 +4,10 @@ import asyncio
 from typing import Any
 
 from app.forecasting import ForecastService
-from app.indicators.service import calculate_indicator_snapshot
 from app.news import NewsService
-from app.services.binance_market import BinanceMarketService
 from app.signal_engine.service import build_signal_analysis
 from app.tradinggpt.quality_guard import AnalysisQualityGuard
+from app.tradinggpt.data import MarketDataService
 from app.tradinggpt.schemas import (
     AnalysisFactor,
     AssistantChatRequest,
@@ -38,6 +37,10 @@ FORECAST_HORIZONS = [60, 240, 1440, 2880]
 
 
 class CryptoAssetAnalysisModule:
+
+    def __init__(self):
+        self.market_data = MarketDataService()
+
     async def analyze(
         self,
         asset: str,
@@ -74,18 +77,27 @@ class CryptoAssetAnalysisModule:
             available_sources=available_sources,
         )
 
-    async def _load_signal(self, symbol: str) -> dict[str, Any] | None:
+    
+    async def _load_signal(
+        self,
+        symbol: str,
+    ) -> dict[str, Any] | None:
         try:
-            candles = await BinanceMarketService().klines(symbol, "1h", 250)
-            snapshot = calculate_indicator_snapshot(candles)
-            decision = build_signal_analysis(snapshot)
+            snapshot = await self.market_data.get_market_snapshot(
+                asset=symbol.removesuffix("USDT"),
+                interval="1h",
+                candle_limit=250,
+            )
+
+            decision = build_signal_analysis(snapshot.indicators)
 
             return {
-                "symbol": symbol,
-                "interval": "1h",
-                "price": float(snapshot["price"]),
-                "indicators": snapshot,
+                "symbol": snapshot.symbol,
+                "interval": snapshot.interval,
+                "price": snapshot.price,
+                "indicators": snapshot.indicators,
                 "decision": decision,
+                "market_data": snapshot.model_dump(),
             }
         except Exception:
             return None
