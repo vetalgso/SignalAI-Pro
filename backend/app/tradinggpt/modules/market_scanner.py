@@ -27,6 +27,7 @@ class ScannerResult:
     score: float
     opportunity_score: float
     consensus_score: float
+    ranking_score: float
     confidence: int
     risk: str
     recommendation: str
@@ -43,6 +44,7 @@ class ScannerResult:
             "score": round(self.score, 2),
             "opportunity_score": round(self.opportunity_score, 2),
             "consensus_score": round(self.consensus_score, 2),
+            "ranking_score": round(self.ranking_score, 2),
             "confidence": self.confidence,
             "risk": self.risk,
             "recommendation": self.recommendation,
@@ -95,9 +97,10 @@ class CryptoMarketScanner:
         ranked = sorted(
             results,
             key=lambda item: (
+                item.ranking_score,
                 item.opportunity_score,
+                item.consensus_score,
                 item.confidence,
-                -item.quality_penalty,
             ),
             reverse=True,
         )
@@ -205,6 +208,12 @@ class CryptoMarketScanner:
             consensus_score,
         )
 
+        ranking_score = ScoringEngine.ranking_score(
+            opportunity_score,
+            consensus_score,
+            confidence,
+        )
+
         recommendation = ScoringEngine.recommendation(
             score,
             confidence,
@@ -233,6 +242,7 @@ class CryptoMarketScanner:
             score=score,
             opportunity_score=opportunity_score,
             consensus_score=consensus_score,
+            ranking_score=ranking_score,
             confidence=confidence,
             risk=risk,
             recommendation=recommendation,

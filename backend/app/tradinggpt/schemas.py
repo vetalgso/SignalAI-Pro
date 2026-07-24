@@ -75,6 +75,7 @@ class MarketScanAsset(BaseModel):
     score: float
     opportunity_score: float
     consensus_score: float = Field(ge=0, le=100)
+    ranking_score: float = Field(ge=0, le=100)
     confidence: int
     risk: str
     recommendation: str

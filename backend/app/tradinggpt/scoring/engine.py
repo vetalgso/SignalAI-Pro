@@ -326,6 +326,39 @@ class ScoringEngine:
         return max(0.0, min(100.0, opportunity))
 
     @staticmethod
+    def ranking_score(
+        opportunity_score: float,
+        consensus_score: float,
+        confidence: int,
+    ) -> float:
+        """
+        Produces a unified market-ranking score.
+
+        Opportunity remains the primary component, while source
+        consensus and confidence reward more reliable setups.
+        """
+        normalized_opportunity = max(
+            0.0,
+            min(100.0, opportunity_score),
+        )
+        normalized_consensus = max(
+            0.0,
+            min(100.0, consensus_score),
+        )
+        normalized_confidence = max(
+            0,
+            min(100, confidence),
+        )
+
+        ranking = (
+            normalized_opportunity * 0.60
+            + normalized_consensus * 0.25
+            + normalized_confidence * 0.15
+        )
+
+        return max(0.0, min(100.0, ranking))
+
+    @staticmethod
     def recommendation(
         score: float,
         confidence: int,
