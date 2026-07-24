@@ -198,9 +198,97 @@ class ScoringEngine:
         return "NEUTRAL"
 
     @staticmethod
+    def source_direction(
+        score: float,
+        *,
+        neutral_band: float = 8.0,
+    ) -> TradeDirection:
+        return ScoringEngine.trade_direction(
+            score,
+            neutral_band=neutral_band,
+        )
+
+    @classmethod
+    def consensus_score(
+        cls,
+        *,
+        combined_direction: TradeDirection,
+        signal_score: float,
+        forecast_score: float,
+        news_score: float,
+        signal_available: bool,
+        forecast_available: bool,
+        news_available: bool,
+    ) -> float:
+        """
+        Measures weighted directional agreement between available sources.
+
+        100:
+            all directional sources agree with the final direction.
+
+        50:
+            neutral evidence or no directional evidence.
+
+        0:
+            all directional sources oppose the final direction.
+        """
+        if combined_direction == "NEUTRAL":
+            return 50.0
+
+        sources = (
+            (
+                signal_score,
+                cls.SIGNAL_WEIGHT,
+                signal_available,
+            ),
+            (
+                forecast_score,
+                cls.FORECAST_WEIGHT,
+                forecast_available,
+            ),
+            (
+                news_score,
+                cls.NEWS_WEIGHT,
+                news_available,
+            ),
+        )
+
+        agreeing_weight = 0.0
+        opposing_weight = 0.0
+        directional_weight = 0.0
+
+        for source_score, weight, available in sources:
+            if not available:
+                continue
+
+            source_direction = cls.source_direction(source_score)
+
+            if source_direction == "NEUTRAL":
+                continue
+
+            directional_weight += weight
+
+            if source_direction == combined_direction:
+                agreeing_weight += weight
+            else:
+                opposing_weight += weight
+
+        if directional_weight == 0:
+            return 50.0
+
+        consensus = (
+            50.0
+            + agreeing_weight / directional_weight * 50.0
+            - opposing_weight / directional_weight * 50.0
+        )
+
+        return max(0.0, min(100.0, consensus))
+
+    @staticmethod
     def opportunity_score(
         score: float,
         confidence: int,
+        consensus_score: float = 50.0,
     ) -> float:
         """
         Measures actionable directional strength independently of LONG/SHORT.
@@ -222,9 +310,18 @@ class ScoringEngine:
             min(1.0, confidence / 100),
         )
 
-        opportunity = directional_strength * (
-            0.35 + confidence_factor * 0.65
+        consensus_factor = max(
+            0.0,
+            min(1.0, consensus_score / 100),
         )
+
+        reliability_factor = (
+            0.25
+            + confidence_factor * 0.50
+            + consensus_factor * 0.25
+        )
+
+        opportunity = directional_strength * reliability_factor
 
         return max(0.0, min(100.0, opportunity))
 
@@ -282,12 +379,27 @@ class ScoringEngine:
         )
 
         direction = cls.trade_direction(score)
-        opportunity = cls.opportunity_score(score, confidence)
+
+        consensus = cls.consensus_score(
+            combined_direction=direction,
+            signal_score=signal_score,
+            forecast_score=forecast_score,
+            news_score=news_score,
+            signal_available=signal is not None,
+            forecast_available=forecast is not None,
+            news_available=news is not None,
+        )
+
+        opportunity = cls.opportunity_score(
+            score,
+            confidence,
+            consensus,
+        )
 
         return ScoringResult(
             score=score,
             opportunity_score=opportunity,
-            consensus_score=50.0,
+            consensus_score=consensus,
             confidence=confidence,
             trade_direction=direction,
             signal_score=signal_score,

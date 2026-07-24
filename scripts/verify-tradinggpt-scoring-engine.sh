@@ -142,13 +142,32 @@ print(
     },
 )
 
-assert ScoringEngine.recommendation(90, 90) == "LONG"
-assert ScoringEngine.recommendation(10, 90) == "SHORT"
+assert ScoringEngine.recommendation(
+    90,
+    90,
+    ScoringEngine.opportunity_score(90, 90, 100),
+) == "LONG"
+
+assert ScoringEngine.recommendation(
+    10,
+    90,
+    ScoringEngine.opportunity_score(10, 90, 100),
+) == "SHORT"
+
 assert ScoringEngine.recommendation(70, 60) == "WAIT"
 assert ScoringEngine.recommendation(30, 60) == "WAIT"
 
-assert ScoringEngine.recommendation(85, 60) == "CAUTIOUS_BUY"
-assert ScoringEngine.recommendation(15, 60) == "CAUTIOUS_SHORT"
+assert ScoringEngine.recommendation(
+    85,
+    60,
+    ScoringEngine.opportunity_score(85, 60, 100),
+) == "CAUTIOUS_BUY"
+
+assert ScoringEngine.recommendation(
+    15,
+    60,
+    ScoringEngine.opportunity_score(15, 60, 100),
+) == "CAUTIOUS_SHORT"
 assert ScoringEngine.recommendation(90, 30) == "WAIT"
 assert ScoringEngine.recommendation(50, 90) == "WAIT"
 
