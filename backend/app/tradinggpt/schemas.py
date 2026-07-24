@@ -56,4 +56,5 @@ class AssistantChatResponse(BaseModel):
     factors: list[AnalysisFactor] = Field(default_factory=list)
     portfolio: list[PortfolioAllocationItem] = Field(default_factory=list)
     follow_up_questions: list[str] = Field(default_factory=list)
+    details: dict = Field(default_factory=dict)
     disclaimer: str

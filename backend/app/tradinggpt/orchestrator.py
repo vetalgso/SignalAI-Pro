@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from app.tradinggpt.intent_classifier import classify_intent
+from app.tradinggpt.modules.crypto_asset import CryptoAssetAnalysisModule, SUPPORTED_CRYPTO_ASSETS
 from app.tradinggpt.schemas import (
     AnalysisFactor,
     AssistantChatRequest,
@@ -26,6 +27,11 @@ class TradingGPTOrchestrator:
             return self._build_portfolio_response(request)
 
         if intent == "asset_analysis":
+            asset = self._extract_asset(request.message)
+
+            if asset in SUPPORTED_CRYPTO_ASSETS:
+                return await CryptoAssetAnalysisModule().analyze(asset, request)
+
             return self._build_asset_response(request)
 
         if intent == "daily_opportunities":
