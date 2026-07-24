@@ -287,6 +287,7 @@ class ScoringEngine:
         return ScoringResult(
             score=score,
             opportunity_score=opportunity,
+            consensus_score=50.0,
             confidence=confidence,
             trade_direction=direction,
             signal_score=signal_score,
