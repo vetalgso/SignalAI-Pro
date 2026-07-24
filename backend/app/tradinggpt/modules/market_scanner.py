@@ -26,6 +26,7 @@ class ScannerResult:
     symbol: str
     score: float
     opportunity_score: float
+    consensus_score: float
     confidence: int
     risk: str
     recommendation: str
@@ -41,6 +42,7 @@ class ScannerResult:
             "symbol": self.symbol,
             "score": round(self.score, 2),
             "opportunity_score": round(self.opportunity_score, 2),
+            "consensus_score": round(self.consensus_score, 2),
             "confidence": self.confidence,
             "risk": self.risk,
             "recommendation": self.recommendation,
@@ -186,9 +188,21 @@ class CryptoMarketScanner:
         confidence = max(15, confidence - quality_penalty)
 
         trade_direction = ScoringEngine.trade_direction(score)
+
+        consensus_score = ScoringEngine.consensus_score(
+            combined_direction=trade_direction,
+            signal_score=signal_score,
+            forecast_score=forecast_score,
+            news_score=news_score,
+            signal_available=signal is not None,
+            forecast_available=forecast is not None,
+            news_available=news is not None,
+        )
+
         opportunity_score = ScoringEngine.opportunity_score(
             score,
             confidence,
+            consensus_score,
         )
 
         recommendation = ScoringEngine.recommendation(
@@ -218,6 +232,7 @@ class CryptoMarketScanner:
             symbol=symbol,
             score=score,
             opportunity_score=opportunity_score,
+            consensus_score=consensus_score,
             confidence=confidence,
             risk=risk,
             recommendation=recommendation,
