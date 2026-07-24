@@ -58,3 +58,36 @@ class AssistantChatResponse(BaseModel):
     follow_up_questions: list[str] = Field(default_factory=list)
     details: dict = Field(default_factory=dict)
     disclaimer: str
+
+
+class MarketScanRequest(BaseModel):
+    assets: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+    risk_level: Literal["low", "medium", "high"] = "medium"
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class MarketScanAsset(BaseModel):
+    asset: str
+    symbol: str
+    score: float
+    confidence: int
+    risk: str
+    recommendation: str
+    signal_action: str | None = None
+    forecast_direction: str | None = None
+    quality_penalty: int
+    warnings: list[str] = Field(default_factory=list)
+
+
+class MarketScanResponse(BaseModel):
+    scanned_assets: int
+    successful_assets: int
+    failed_assets: int
+    opportunities: list[MarketScanAsset]
+    watchlist: list[MarketScanAsset]
+    avoid: list[MarketScanAsset]
+    ranking: list[MarketScanAsset]
+    errors: list[dict[str, str]]
