@@ -73,9 +73,11 @@ class MarketScanAsset(BaseModel):
     asset: str
     symbol: str
     score: float
+    opportunity_score: float
     confidence: int
     risk: str
     recommendation: str
+    trade_direction: Literal["LONG", "SHORT", "NEUTRAL"]
     signal_action: str | None = None
     forecast_direction: str | None = None
     quality_penalty: int

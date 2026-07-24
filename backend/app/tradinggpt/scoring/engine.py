@@ -2,16 +2,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.tradinggpt.scoring.models import ScoringResult
+from app.tradinggpt.scoring.models import ScoringResult, TradeDirection
 
 
 class ScoringEngine:
     """
     Centralized TradingGPT scoring logic.
 
-    Current formulas intentionally preserve the behavior that previously lived
-    in CryptoAssetAnalysisModule. This allows the scoring implementation to be
-    improved later without coupling it to orchestration and response building.
+    score:
+        0 = strong SHORT
+        50 = neutral
+        100 = strong LONG
+
+    opportunity_score:
+        0 = no actionable edge
+        100 = strong directional opportunity
+
+    confidence:
+        Reliability of the combined evidence before quality penalties.
     """
 
     SIGNAL_WEIGHT = 0.45
@@ -28,10 +36,10 @@ class ScoringEngine:
         confidence = float(decision["confidence"])
 
         if action == "LONG":
-            return 50 + confidence / 2
+            return max(0.0, min(100.0, 50 + confidence / 2))
 
         if action == "SHORT":
-            return 50 - confidence / 2
+            return max(0.0, min(100.0, 50 - confidence / 2))
 
         scores = decision.get("score", {})
         long_score = float(scores.get("long_score", 0))
@@ -54,15 +62,14 @@ class ScoringEngine:
         total_weight = 0.0
 
         for item in forecast["forecasts"]:
-            probabilities = item["probabilities"]
+            probabilities = item.get("probabilities", {})
 
-            directional_score = (
-                50
-                + float(probabilities["up"]) * 50
-                - float(probabilities["down"]) * 50
-            )
+            up = float(probabilities.get("up", 0.0))
+            down = float(probabilities.get("down", 0.0))
 
-            horizon = int(item["horizon_minutes"])
+            directional_score = 50 + up * 50 - down * 50
+
+            horizon = int(item.get("horizon_minutes", 0))
 
             weight = {
                 60: 1.0,
@@ -177,24 +184,79 @@ class ScoringEngine:
         return combined, max(20, confidence)
 
     @staticmethod
+    def trade_direction(
+        score: float,
+        *,
+        neutral_band: float = 8.0,
+    ) -> TradeDirection:
+        if score >= 50 + neutral_band:
+            return "LONG"
+
+        if score <= 50 - neutral_band:
+            return "SHORT"
+
+        return "NEUTRAL"
+
+    @staticmethod
+    def opportunity_score(
+        score: float,
+        confidence: int,
+    ) -> float:
+        """
+        Measures actionable directional strength independently of LONG/SHORT.
+
+        Directional strength:
+            score 50 -> 0
+            score 0/100 -> 100
+
+        Confidence scales the directional edge so weakly confirmed extremes do
+        not automatically become high-quality opportunities.
+        """
+        directional_strength = min(
+            100.0,
+            abs(score - 50.0) * 2,
+        )
+
+        confidence_factor = max(
+            0.0,
+            min(1.0, confidence / 100),
+        )
+
+        opportunity = directional_strength * (
+            0.35 + confidence_factor * 0.65
+        )
+
+        return max(0.0, min(100.0, opportunity))
+
+    @staticmethod
     def recommendation(
         score: float,
         confidence: int,
+        opportunity_score: float | None = None,
     ) -> str:
+        opportunity = (
+            ScoringEngine.opportunity_score(score, confidence)
+            if opportunity_score is None
+            else opportunity_score
+        )
+
         if confidence < 35:
             return "WAIT"
 
-        if score >= 68:
-            return "BUY"
+        direction = ScoringEngine.trade_direction(score)
 
-        if score >= 58:
-            return "CAUTIOUS_BUY"
+        if direction == "NEUTRAL":
+            return "WAIT"
 
-        if score <= 32:
-            return "AVOID_OR_REDUCE"
+        if opportunity >= 68:
+            return direction
 
-        if score <= 42:
-            return "CAUTIOUS_SELL"
+        if opportunity >= 48:
+            return (
+                "CAUTIOUS_BUY"
+                if direction == "LONG"
+                else "CAUTIOUS_SHORT"
+            )
 
         return "WAIT"
 
@@ -219,9 +281,14 @@ class ScoringEngine:
             news_available=news is not None,
         )
 
+        direction = cls.trade_direction(score)
+        opportunity = cls.opportunity_score(score, confidence)
+
         return ScoringResult(
             score=score,
+            opportunity_score=opportunity,
             confidence=confidence,
+            trade_direction=direction,
             signal_score=signal_score,
             forecast_score=forecast_score,
             news_score=news_score,

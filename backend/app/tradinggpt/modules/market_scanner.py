@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.tradinggpt.quality_guard import AnalysisQualityGuard
+from app.tradinggpt.scoring import ScoringEngine
 
 
 DEFAULT_SCAN_ASSETS = [
@@ -24,9 +25,11 @@ class ScannerResult:
     asset: str
     symbol: str
     score: float
+    opportunity_score: float
     confidence: int
     risk: str
     recommendation: str
+    trade_direction: str
     signal_action: str | None
     forecast_direction: str | None
     quality_penalty: int
@@ -37,9 +40,11 @@ class ScannerResult:
             "asset": self.asset,
             "symbol": self.symbol,
             "score": round(self.score, 2),
+            "opportunity_score": round(self.opportunity_score, 2),
             "confidence": self.confidence,
             "risk": self.risk,
             "recommendation": self.recommendation,
+            "trade_direction": self.trade_direction,
             "signal_action": self.signal_action,
             "forecast_direction": self.forecast_direction,
             "quality_penalty": self.quality_penalty,
@@ -88,7 +93,7 @@ class CryptoMarketScanner:
         ranked = sorted(
             results,
             key=lambda item: (
-                item.score,
+                item.opportunity_score,
                 item.confidence,
                 -item.quality_penalty,
             ),
@@ -98,7 +103,12 @@ class CryptoMarketScanner:
         opportunities = [
             item
             for item in ranked
-            if item.recommendation in {"BUY", "CAUTIOUS_BUY"}
+            if item.recommendation in {
+                "LONG",
+                "SHORT",
+                "CAUTIOUS_BUY",
+                "CAUTIOUS_SHORT",
+            }
         ][:limit]
 
         watchlist = [
@@ -110,10 +120,10 @@ class CryptoMarketScanner:
         avoid = [
             item
             for item in reversed(ranked)
-            if item.recommendation in {
-                "CAUTIOUS_SELL",
-                "AVOID_OR_REDUCE",
-            }
+            if (
+                item.risk == "high"
+                and item.confidence < 35
+            )
         ][:limit]
 
         return {
@@ -175,9 +185,16 @@ class CryptoMarketScanner:
 
         confidence = max(15, confidence - quality_penalty)
 
-        recommendation = self.crypto_asset_module._recommendation(
+        trade_direction = ScoringEngine.trade_direction(score)
+        opportunity_score = ScoringEngine.opportunity_score(
             score,
             confidence,
+        )
+
+        recommendation = ScoringEngine.recommendation(
+            score,
+            confidence,
+            opportunity_score,
         )
 
         risk = self.crypto_asset_module._risk_level(
@@ -200,9 +217,11 @@ class CryptoMarketScanner:
             asset=asset,
             symbol=symbol,
             score=score,
+            opportunity_score=opportunity_score,
             confidence=confidence,
             risk=risk,
             recommendation=recommendation,
+            trade_direction=trade_direction,
             signal_action=signal_action,
             forecast_direction=forecast_direction,
             quality_penalty=quality_penalty,

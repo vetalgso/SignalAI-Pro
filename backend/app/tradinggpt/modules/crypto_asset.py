@@ -307,7 +307,22 @@ class CryptoAssetAnalysisModule:
 
     @staticmethod
     def _recommendation(score: float, confidence: int) -> str:
-        return ScoringEngine.recommendation(score, confidence)
+        if confidence < 35:
+            return "WAIT"
+
+        if score >= 68:
+            return "BUY"
+
+        if score >= 58:
+            return "CAUTIOUS_BUY"
+
+        if score <= 32:
+            return "AVOID_OR_REDUCE"
+
+        if score <= 42:
+            return "CAUTIOUS_SELL"
+
+        return "WAIT"
 
     @staticmethod
     def _risk_level(
