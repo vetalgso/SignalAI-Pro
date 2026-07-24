@@ -7,6 +7,7 @@ from app.forecasting import ForecastService
 from app.news import NewsService
 from app.signal_engine.service import build_signal_analysis
 from app.tradinggpt.quality_guard import AnalysisQualityGuard
+from app.tradinggpt.scoring import ScoringEngine
 from app.tradinggpt.data import MarketDataService
 from app.tradinggpt.schemas import (
     AnalysisFactor,
@@ -262,75 +263,15 @@ class CryptoAssetAnalysisModule:
 
     @staticmethod
     def _signal_score(signal: dict[str, Any] | None) -> float:
-        if not signal:
-            return 50.0
-
-        decision = signal["decision"]
-        action = decision["action"]
-        confidence = float(decision["confidence"])
-
-        if action == "LONG":
-            return 50 + confidence / 2
-
-        if action == "SHORT":
-            return 50 - confidence / 2
-
-        scores = decision.get("score", {})
-        long_score = float(scores.get("long_score", 0))
-        short_score = float(scores.get("short_score", 0))
-
-        return max(0.0, min(100.0, 50 + (long_score - short_score) / 2))
+        return ScoringEngine.signal_score(signal)
 
     @staticmethod
     def _forecast_score(forecast: dict[str, Any] | None) -> float:
-        if not forecast or not forecast.get("forecasts"):
-            return 50.0
-
-        weighted_total = 0.0
-        total_weight = 0.0
-
-        for item in forecast["forecasts"]:
-            probabilities = item["probabilities"]
-            directional_score = (
-                50
-                + float(probabilities["up"]) * 50
-                - float(probabilities["down"]) * 50
-            )
-
-            horizon = int(item["horizon_minutes"])
-            weight = {
-                60: 1.0,
-                240: 1.1,
-                1440: 1.25,
-                2880: 1.0,
-            }.get(horizon, 1.0)
-
-            weighted_total += directional_score * weight
-            total_weight += weight
-
-        return max(0.0, min(100.0, weighted_total / total_weight))
+        return ScoringEngine.forecast_score(forecast)
 
     @staticmethod
     def _news_score(news: dict[str, Any] | None) -> float:
-        if not news or not news.get("articles"):
-            return 50.0
-
-        weighted_sentiment = 0.0
-        total_weight = 0.0
-
-        for article in news["articles"]:
-            sentiment_value = {
-                "positive": 1.0,
-                "neutral": 0.0,
-                "negative": -1.0,
-            }.get(article.get("sentiment"), 0.0)
-
-            weight = max(1.0, float(article.get("impact_score", 50)))
-            weighted_sentiment += sentiment_value * weight
-            total_weight += weight
-
-        normalized = weighted_sentiment / total_weight if total_weight else 0.0
-        return max(0.0, min(100.0, 50 + normalized * 50))
+        return ScoringEngine.news_score(news)
 
     @staticmethod
     def _combined_score(
@@ -342,29 +283,14 @@ class CryptoAssetAnalysisModule:
         forecast_available: bool,
         news_available: bool,
     ) -> tuple[float, int]:
-        sources = [
-            (signal_score, 0.45, signal_available),
-            (forecast_score, 0.40, forecast_available),
-            (news_score, 0.15, news_available),
-        ]
-
-        weighted_total = 0.0
-        total_weight = 0.0
-
-        for score, weight, available in sources:
-            if available:
-                weighted_total += score * weight
-                total_weight += weight
-
-        if total_weight == 0:
-            return 50.0, 0
-
-        combined = weighted_total / total_weight
-        distance_from_neutral = abs(combined - 50) * 2
-        coverage = total_weight
-        confidence = round(min(95, distance_from_neutral * 0.65 + coverage * 35))
-
-        return combined, max(20, confidence)
+        return ScoringEngine.combined_score(
+            signal_score=signal_score,
+            forecast_score=forecast_score,
+            news_score=news_score,
+            signal_available=signal_available,
+            forecast_available=forecast_available,
+            news_available=news_available,
+        )
 
     @staticmethod
     def _market_view(score: float) -> str:
@@ -381,22 +307,7 @@ class CryptoAssetAnalysisModule:
 
     @staticmethod
     def _recommendation(score: float, confidence: int) -> str:
-        if confidence < 35:
-            return "WAIT"
-
-        if score >= 68:
-            return "BUY"
-
-        if score >= 58:
-            return "CAUTIOUS_BUY"
-
-        if score <= 32:
-            return "AVOID_OR_REDUCE"
-
-        if score <= 42:
-            return "CAUTIOUS_SELL"
-
-        return "WAIT"
+        return ScoringEngine.recommendation(score, confidence)
 
     @staticmethod
     def _risk_level(
