@@ -103,6 +103,19 @@ class TradingGPTOrchestrator:
             else ""
         )
 
+        active_trades = [
+            trade
+            for trade in engine_result.trades
+            if trade.action != "HOLD"
+        ]
+
+        trade_summary = (
+            f" Для ребалансировки требуется "
+            f"{len(active_trades)} операций."
+            if current_allocations
+            else ""
+        )
+
         answer = (
             f"{capital_text} сформирована целевая структура портфеля. "
             f"Профиль риска: {context.risk_level}. "
@@ -117,6 +130,7 @@ class TradingGPTOrchestrator:
             f"{engine_result.cash_reserve_percent:.1f}%. "
             f"Максимальная доля одной позиции: "
             f"{engine_result.max_position_percent:.1f}%."
+            f"{trade_summary}"
             f"{warning_text}"
         )
 
@@ -213,6 +227,36 @@ class TradingGPTOrchestrator:
                     engine_result.max_risk_per_trade_percent
                 ),
                 "warnings": engine_result.warnings,
+                "trade_plan": [
+                    {
+                        "asset": trade.asset,
+                        "action": trade.action,
+                        "current_percent": round(
+                            trade.current_percent,
+                            2,
+                        ),
+                        "target_percent": round(
+                            trade.target_percent,
+                            2,
+                        ),
+                        "delta_percent": round(
+                            trade.delta_percent,
+                            2,
+                        ),
+                        "current_amount": (
+                            trade.current_amount
+                        ),
+                        "target_amount": (
+                            trade.target_amount
+                        ),
+                        "trade_amount": (
+                            trade.trade_amount
+                        ),
+                        "currency": trade.currency,
+                        "reason": trade.reason,
+                    }
+                    for trade in engine_result.trades
+                ],
                 "portfolio": engine_result.to_dict(),
             },
             disclaimer=DISCLAIMER,

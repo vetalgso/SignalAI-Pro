@@ -7,6 +7,8 @@ from app.tradinggpt.portfolio.models import (
     PortfolioPosition,
     PortfolioResult,
     PortfolioRisk,
+    RebalanceTrade,
+    TradeAction,
 )
 
 
@@ -141,6 +143,13 @@ class PortfolioEngine:
             current_allocations=current_allocations or {},
         )
 
+        trades = cls._build_rebalance_trades(
+            allocation=allocation,
+            capital=capital,
+            currency=currency,
+            current_allocations=current_allocations or {},
+        )
+
         portfolio_risk_score = cls._portfolio_risk_score(
             allocation
         )
@@ -173,6 +182,7 @@ class PortfolioEngine:
             cash_reserve_percent=cash_reserve_percent,
             invested_percent=invested_percent,
             positions=positions,
+            trades=trades,
             warnings=warnings,
         )
 
@@ -291,6 +301,159 @@ class PortfolioEngine:
             )
 
         return positions
+
+    @classmethod
+    def _build_rebalance_trades(
+        cls,
+        *,
+        allocation: Mapping[str, float],
+        capital: float | None,
+        currency: str,
+        current_allocations: Mapping[str, float],
+    ) -> list[RebalanceTrade]:
+        trades: list[RebalanceTrade] = []
+        all_assets = list(allocation)
+
+        for asset in current_allocations:
+            if asset not in allocation:
+                all_assets.append(asset)
+
+        for asset in all_assets:
+            current_percent = float(
+                current_allocations.get(asset, 0.0)
+            )
+            target_percent = float(
+                allocation.get(asset, 0.0)
+            )
+            delta_percent = (
+                target_percent - current_percent
+            )
+
+            action = cls._trade_action(
+                current_percent=current_percent,
+                target_percent=target_percent,
+                delta_percent=delta_percent,
+            )
+
+            current_amount = (
+                round(
+                    capital * current_percent / 100.0,
+                    2,
+                )
+                if capital is not None
+                else None
+            )
+            target_amount = (
+                round(
+                    capital * target_percent / 100.0,
+                    2,
+                )
+                if capital is not None
+                else None
+            )
+            trade_amount = (
+                round(
+                    abs(capital * delta_percent / 100.0),
+                    2,
+                )
+                if capital is not None
+                else None
+            )
+
+            reason = cls._trade_reason(
+                action=action,
+                current_percent=current_percent,
+                target_percent=target_percent,
+                delta_percent=delta_percent,
+                currency=currency,
+                trade_amount=trade_amount,
+            )
+
+            trades.append(
+                RebalanceTrade(
+                    asset=asset,
+                    action=action,
+                    current_percent=current_percent,
+                    target_percent=target_percent,
+                    delta_percent=delta_percent,
+                    current_amount=current_amount,
+                    target_amount=target_amount,
+                    trade_amount=trade_amount,
+                    currency=currency.upper(),
+                    reason=reason,
+                )
+            )
+
+        return trades
+
+    @staticmethod
+    def _trade_action(
+        *,
+        current_percent: float,
+        target_percent: float,
+        delta_percent: float,
+    ) -> TradeAction:
+        tolerance = max(
+            0.01,
+            target_percent * 0.001,
+        )
+
+        if (
+            current_percent > 0
+            and target_percent <= tolerance
+        ):
+            return "EXIT"
+
+        if delta_percent > tolerance:
+            return "BUY"
+
+        if delta_percent < -tolerance:
+            return "SELL"
+
+        return "HOLD"
+
+    @staticmethod
+    def _trade_reason(
+        *,
+        action: TradeAction,
+        current_percent: float,
+        target_percent: float,
+        delta_percent: float,
+        currency: str,
+        trade_amount: float | None,
+    ) -> str:
+        amount_text = (
+            f"{trade_amount:,.2f} {currency.upper()}"
+            if trade_amount is not None
+            else f"{abs(delta_percent):.2f}% портфеля"
+        )
+
+        if action == "BUY":
+            return (
+                f"Увеличить позицию с "
+                f"{current_percent:.2f}% до "
+                f"{target_percent:.2f}%: купить на "
+                f"{amount_text}."
+            )
+
+        if action == "SELL":
+            return (
+                f"Сократить позицию с "
+                f"{current_percent:.2f}% до "
+                f"{target_percent:.2f}%: продать на "
+                f"{amount_text}."
+            )
+
+        if action == "EXIT":
+            return (
+                f"Закрыть позицию полностью: продать на "
+                f"{amount_text}."
+            )
+
+        return (
+            f"Сохранить позицию около "
+            f"{target_percent:.2f}% без операции."
+        )
 
     @staticmethod
     def _position_action(

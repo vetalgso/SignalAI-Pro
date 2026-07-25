@@ -11,6 +11,13 @@ PortfolioAction = Literal[
     "AVOID",
 ]
 
+TradeAction = Literal[
+    "BUY",
+    "SELL",
+    "HOLD",
+    "EXIT",
+]
+
 PortfolioRisk = Literal[
     "low",
     "medium",
@@ -29,6 +36,20 @@ class PortfolioPosition:
 
 
 @dataclass(frozen=True, slots=True)
+class RebalanceTrade:
+    asset: str
+    action: TradeAction
+    current_percent: float
+    target_percent: float
+    delta_percent: float
+    current_amount: float | None
+    target_amount: float | None
+    trade_amount: float | None
+    currency: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class PortfolioResult:
     capital: float | None
     currency: str
@@ -39,6 +60,7 @@ class PortfolioResult:
     cash_reserve_percent: float
     invested_percent: float
     positions: list[PortfolioPosition]
+    trades: list[RebalanceTrade]
     warnings: list[str]
 
     def to_dict(self) -> dict:
@@ -82,6 +104,30 @@ class PortfolioResult:
                     "reason": position.reason,
                 }
                 for position in self.positions
+            ],
+            "trades": [
+                {
+                    "asset": trade.asset,
+                    "action": trade.action,
+                    "current_percent": round(
+                        trade.current_percent,
+                        2,
+                    ),
+                    "target_percent": round(
+                        trade.target_percent,
+                        2,
+                    ),
+                    "delta_percent": round(
+                        trade.delta_percent,
+                        2,
+                    ),
+                    "current_amount": trade.current_amount,
+                    "target_amount": trade.target_amount,
+                    "trade_amount": trade.trade_amount,
+                    "currency": trade.currency,
+                    "reason": trade.reason,
+                }
+                for trade in self.trades
             ],
             "warnings": self.warnings,
         }
