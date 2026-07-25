@@ -45,6 +45,8 @@ class RebalanceTrade:
     current_amount: float | None
     target_amount: float | None
     trade_amount: float | None
+    estimated_fee: float | None
+    net_cash_flow: float | None
     currency: str
     reason: str
 
@@ -61,6 +63,11 @@ class PortfolioResult:
     invested_percent: float
     positions: list[PortfolioPosition]
     trades: list[RebalanceTrade]
+    min_trade_amount: float
+    trading_fee_percent: float
+    rebalance_tolerance_percent: float
+    trade_rounding_amount: float
+    estimated_total_fees: float
     warnings: list[str]
 
     def to_dict(self) -> dict:
@@ -88,6 +95,28 @@ class PortfolioResult:
                 self.invested_percent,
                 2,
             ),
+            "execution": {
+                "min_trade_amount": round(
+                    self.min_trade_amount,
+                    2,
+                ),
+                "trading_fee_percent": round(
+                    self.trading_fee_percent,
+                    4,
+                ),
+                "rebalance_tolerance_percent": round(
+                    self.rebalance_tolerance_percent,
+                    4,
+                ),
+                "trade_rounding_amount": round(
+                    self.trade_rounding_amount,
+                    2,
+                ),
+                "estimated_total_fees": round(
+                    self.estimated_total_fees,
+                    2,
+                ),
+            },
             "positions": [
                 {
                     "asset": position.asset,
@@ -124,6 +153,8 @@ class PortfolioResult:
                     "current_amount": trade.current_amount,
                     "target_amount": trade.target_amount,
                     "trade_amount": trade.trade_amount,
+                    "estimated_fee": trade.estimated_fee,
+                    "net_cash_flow": trade.net_cash_flow,
                     "currency": trade.currency,
                     "reason": trade.reason,
                 }

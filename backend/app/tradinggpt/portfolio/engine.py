@@ -104,11 +104,21 @@ class PortfolioEngine:
         currency: str = "USD",
         max_position_percent: float = 25.0,
         current_allocations: Mapping[str, float] | None = None,
+        min_trade_amount: float = 25.0,
+        trading_fee_percent: float = 0.1,
+        rebalance_tolerance_percent: float = 0.5,
+        trade_rounding_amount: float = 1.0,
     ) -> PortfolioResult:
         cls._validate_inputs(
             capital=capital,
             max_position_percent=max_position_percent,
             current_allocations=current_allocations,
+            min_trade_amount=min_trade_amount,
+            trading_fee_percent=trading_fee_percent,
+            rebalance_tolerance_percent=(
+                rebalance_tolerance_percent
+            ),
+            trade_rounding_amount=trade_rounding_amount,
         )
 
         allocation = dict(
@@ -148,6 +158,20 @@ class PortfolioEngine:
             capital=capital,
             currency=currency,
             current_allocations=current_allocations or {},
+            min_trade_amount=min_trade_amount,
+            trading_fee_percent=trading_fee_percent,
+            rebalance_tolerance_percent=(
+                rebalance_tolerance_percent
+            ),
+            trade_rounding_amount=trade_rounding_amount,
+        )
+
+        estimated_total_fees = round(
+            sum(
+                trade.estimated_fee or 0.0
+                for trade in trades
+            ),
+            2,
         )
 
         portfolio_risk_score = cls._portfolio_risk_score(
@@ -183,6 +207,13 @@ class PortfolioEngine:
             invested_percent=invested_percent,
             positions=positions,
             trades=trades,
+            min_trade_amount=min_trade_amount,
+            trading_fee_percent=trading_fee_percent,
+            rebalance_tolerance_percent=(
+                rebalance_tolerance_percent
+            ),
+            trade_rounding_amount=trade_rounding_amount,
+            estimated_total_fees=estimated_total_fees,
             warnings=warnings,
         )
 
@@ -310,6 +341,10 @@ class PortfolioEngine:
         capital: float | None,
         currency: str,
         current_allocations: Mapping[str, float],
+        min_trade_amount: float,
+        trading_fee_percent: float,
+        rebalance_tolerance_percent: float,
+        trade_rounding_amount: float,
     ) -> list[RebalanceTrade]:
         trades: list[RebalanceTrade] = []
         all_assets = list(allocation)
@@ -333,6 +368,9 @@ class PortfolioEngine:
                 current_percent=current_percent,
                 target_percent=target_percent,
                 delta_percent=delta_percent,
+                rebalance_tolerance_percent=(
+                    rebalance_tolerance_percent
+                ),
             )
 
             current_amount = (
@@ -351,13 +389,52 @@ class PortfolioEngine:
                 if capital is not None
                 else None
             )
-            trade_amount = (
-                round(
-                    abs(capital * delta_percent / 100.0),
-                    2,
-                )
+
+            raw_trade_amount = (
+                abs(capital * delta_percent / 100.0)
                 if capital is not None
                 else None
+            )
+
+            trade_amount = (
+                cls._round_trade_amount(
+                    raw_trade_amount,
+                    trade_rounding_amount,
+                )
+                if raw_trade_amount is not None
+                else None
+            )
+
+            if (
+                action != "HOLD"
+                and trade_amount is not None
+                and trade_amount < min_trade_amount
+            ):
+                action = "HOLD"
+                trade_amount = 0.0
+
+            if action == "HOLD":
+                trade_amount = (
+                    0.0
+                    if capital is not None
+                    else None
+                )
+
+            estimated_fee = (
+                round(
+                    trade_amount
+                    * trading_fee_percent
+                    / 100.0,
+                    2,
+                )
+                if trade_amount is not None
+                else None
+            )
+
+            net_cash_flow = cls._net_cash_flow(
+                action=action,
+                trade_amount=trade_amount,
+                estimated_fee=estimated_fee,
             )
 
             reason = cls._trade_reason(
@@ -367,6 +444,11 @@ class PortfolioEngine:
                 delta_percent=delta_percent,
                 currency=currency,
                 trade_amount=trade_amount,
+                estimated_fee=estimated_fee,
+                min_trade_amount=min_trade_amount,
+                rebalance_tolerance_percent=(
+                    rebalance_tolerance_percent
+                ),
             )
 
             trades.append(
@@ -379,6 +461,8 @@ class PortfolioEngine:
                     current_amount=current_amount,
                     target_amount=target_amount,
                     trade_amount=trade_amount,
+                    estimated_fee=estimated_fee,
+                    net_cash_flow=net_cash_flow,
                     currency=currency.upper(),
                     reason=reason,
                 )
@@ -392,25 +476,65 @@ class PortfolioEngine:
         current_percent: float,
         target_percent: float,
         delta_percent: float,
+        rebalance_tolerance_percent: float,
     ) -> TradeAction:
-        tolerance = max(
-            0.01,
-            target_percent * 0.001,
-        )
-
         if (
             current_percent > 0
-            and target_percent <= tolerance
+            and target_percent <= 0
         ):
             return "EXIT"
 
-        if delta_percent > tolerance:
+        if (
+            abs(delta_percent)
+            <= rebalance_tolerance_percent
+        ):
+            return "HOLD"
+
+        if delta_percent > 0:
             return "BUY"
 
-        if delta_percent < -tolerance:
-            return "SELL"
+        return "SELL"
 
-        return "HOLD"
+    @staticmethod
+    def _round_trade_amount(
+        amount: float,
+        rounding_amount: float,
+    ) -> float:
+        units = int(
+            amount / rounding_amount + 0.5
+        )
+
+        return round(
+            units * rounding_amount,
+            2,
+        )
+
+    @staticmethod
+    def _net_cash_flow(
+        *,
+        action: TradeAction,
+        trade_amount: float | None,
+        estimated_fee: float | None,
+    ) -> float | None:
+        if (
+            trade_amount is None
+            or estimated_fee is None
+        ):
+            return None
+
+        if action == "BUY":
+            return round(
+                -(trade_amount + estimated_fee),
+                2,
+            )
+
+        if action in {"SELL", "EXIT"}:
+            return round(
+                trade_amount - estimated_fee,
+                2,
+            )
+
+        return 0.0
 
     @staticmethod
     def _trade_reason(
@@ -421,11 +545,22 @@ class PortfolioEngine:
         delta_percent: float,
         currency: str,
         trade_amount: float | None,
+        estimated_fee: float | None,
+        min_trade_amount: float,
+        rebalance_tolerance_percent: float,
     ) -> str:
         amount_text = (
             f"{trade_amount:,.2f} {currency.upper()}"
             if trade_amount is not None
             else f"{abs(delta_percent):.2f}% портфеля"
+        )
+
+        fee_text = (
+            f" Оценочная комиссия: "
+            f"{estimated_fee:,.2f} "
+            f"{currency.upper()}."
+            if estimated_fee
+            else ""
         )
 
         if action == "BUY":
@@ -434,6 +569,7 @@ class PortfolioEngine:
                 f"{current_percent:.2f}% до "
                 f"{target_percent:.2f}%: купить на "
                 f"{amount_text}."
+                f"{fee_text}"
             )
 
         if action == "SELL":
@@ -442,17 +578,33 @@ class PortfolioEngine:
                 f"{current_percent:.2f}% до "
                 f"{target_percent:.2f}%: продать на "
                 f"{amount_text}."
+                f"{fee_text}"
             )
 
         if action == "EXIT":
             return (
                 f"Закрыть позицию полностью: продать на "
                 f"{amount_text}."
+                f"{fee_text}"
+            )
+
+        if (
+            trade_amount == 0
+            and abs(delta_percent)
+            > rebalance_tolerance_percent
+        ):
+            return (
+                f"Операция пропущена: рассчитанная сумма "
+                f"ниже минимального лимита "
+                f"{min_trade_amount:,.2f} "
+                f"{currency.upper()}."
             )
 
         return (
-            f"Сохранить позицию около "
-            f"{target_percent:.2f}% без операции."
+            f"Отклонение {abs(delta_percent):.2f} п.п. "
+            f"находится в допустимом диапазоне "
+            f"{rebalance_tolerance_percent:.2f} п.п.; "
+            f"операция не требуется."
         )
 
     @staticmethod
@@ -500,6 +652,10 @@ class PortfolioEngine:
         capital: float | None,
         max_position_percent: float,
         current_allocations: Mapping[str, float] | None,
+        min_trade_amount: float,
+        trading_fee_percent: float,
+        rebalance_tolerance_percent: float,
+        trade_rounding_amount: float,
     ) -> None:
         if capital is not None and capital <= 0:
             raise ValueError(
@@ -509,6 +665,26 @@ class PortfolioEngine:
         if not 0 < max_position_percent <= 100:
             raise ValueError(
                 "Maximum position percent must be between 0 and 100."
+            )
+
+        if min_trade_amount < 0:
+            raise ValueError(
+                "Minimum trade amount cannot be negative."
+            )
+
+        if not 0 <= trading_fee_percent <= 5:
+            raise ValueError(
+                "Trading fee percent must be between 0 and 5."
+            )
+
+        if not 0 <= rebalance_tolerance_percent <= 20:
+            raise ValueError(
+                "Rebalance tolerance must be between 0 and 20."
+            )
+
+        if trade_rounding_amount <= 0:
+            raise ValueError(
+                "Trade rounding amount must be greater than zero."
             )
 
         if current_allocations is None:

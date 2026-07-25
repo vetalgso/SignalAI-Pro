@@ -41,6 +41,24 @@ class InvestorContext(BaseModel):
         gt=0,
         le=100,
     )
+    min_trade_amount: float = Field(
+        default=25,
+        ge=0,
+    )
+    trading_fee_percent: float = Field(
+        default=0.1,
+        ge=0,
+        le=5,
+    )
+    rebalance_tolerance_percent: float = Field(
+        default=0.5,
+        ge=0,
+        le=20,
+    )
+    trade_rounding_amount: float = Field(
+        default=1,
+        gt=0,
+    )
     leverage_allowed: bool = False
 
     @field_validator(

@@ -69,8 +69,20 @@ class TradingGPTOrchestrator:
             risk_level=context.risk_level,
             capital=capital,
             currency=context.currency,
-            max_position_percent=context.max_position_percent,
+            max_position_percent=(
+                context.max_position_percent
+            ),
             current_allocations=current_allocations,
+            min_trade_amount=context.min_trade_amount,
+            trading_fee_percent=(
+                context.trading_fee_percent
+            ),
+            rebalance_tolerance_percent=(
+                context.rebalance_tolerance_percent
+            ),
+            trade_rounding_amount=(
+                context.trade_rounding_amount
+            ),
         )
 
         portfolio = [
@@ -227,6 +239,24 @@ class TradingGPTOrchestrator:
                     engine_result.max_risk_per_trade_percent
                 ),
                 "warnings": engine_result.warnings,
+                "execution": {
+                    "min_trade_amount": (
+                        engine_result.min_trade_amount
+                    ),
+                    "trading_fee_percent": (
+                        engine_result.trading_fee_percent
+                    ),
+                    "rebalance_tolerance_percent": (
+                        engine_result
+                        .rebalance_tolerance_percent
+                    ),
+                    "trade_rounding_amount": (
+                        engine_result.trade_rounding_amount
+                    ),
+                    "estimated_total_fees": (
+                        engine_result.estimated_total_fees
+                    ),
+                },
                 "trade_plan": [
                     {
                         "asset": trade.asset,
@@ -251,6 +281,12 @@ class TradingGPTOrchestrator:
                         ),
                         "trade_amount": (
                             trade.trade_amount
+                        ),
+                        "estimated_fee": (
+                            trade.estimated_fee
+                        ),
+                        "net_cash_flow": (
+                            trade.net_cash_flow
                         ),
                         "currency": trade.currency,
                         "reason": trade.reason,
