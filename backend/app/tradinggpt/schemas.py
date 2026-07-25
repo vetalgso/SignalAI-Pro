@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 RiskLevel = Literal["low", "medium", "high"]
@@ -20,13 +20,136 @@ AssistantIntent = Literal[
 
 class InvestorContext(BaseModel):
     capital: float | None = Field(default=None, gt=0)
-    currency: str = Field(default="USD", min_length=3, max_length=10)
+    currency: str = Field(
+        default="USD",
+        min_length=3,
+        max_length=10,
+    )
     risk_level: RiskLevel = "medium"
     investment_horizon: InvestmentHorizon = "medium"
-    preferred_markets: list[str] = Field(default_factory=list)
-    existing_assets: list[str] = Field(default_factory=list)
-    max_position_percent: float = Field(default=25, gt=0, le=100)
+    preferred_markets: list[str] = Field(
+        default_factory=list
+    )
+    existing_assets: list[str] = Field(
+        default_factory=list
+    )
+    current_allocations: dict[str, float] = Field(
+        default_factory=dict
+    )
+    max_position_percent: float = Field(
+        default=25,
+        gt=0,
+        le=100,
+    )
     leverage_allowed: bool = False
+
+    @field_validator(
+        "existing_assets",
+        mode="before",
+    )
+    @classmethod
+    def normalize_existing_assets(
+        cls,
+        value: object,
+    ) -> object:
+        if value is None:
+            return []
+
+        if not isinstance(value, list):
+            return value
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+
+        for raw_asset in value:
+            asset = str(raw_asset).strip()
+
+            if not asset:
+                continue
+
+            key = asset.casefold()
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            normalized.append(asset)
+
+        return normalized
+
+    @field_validator(
+        "current_allocations",
+        mode="before",
+    )
+    @classmethod
+    def normalize_current_allocations(
+        cls,
+        value: object,
+    ) -> object:
+        if value is None:
+            return {}
+
+        if not isinstance(value, dict):
+            return value
+
+        normalized: dict[str, float] = {}
+
+        for raw_asset, raw_percent in value.items():
+            asset = str(raw_asset).strip()
+
+            if not asset:
+                raise ValueError(
+                    "Asset name cannot be empty"
+                )
+
+            normalized[asset] = raw_percent
+
+        return normalized
+
+    @field_validator("current_allocations")
+    @classmethod
+    def validate_current_allocations(
+        cls,
+        allocations: dict[str, float],
+    ) -> dict[str, float]:
+        for asset, percent in allocations.items():
+            if percent < 0:
+                raise ValueError(
+                    f"Allocation for {asset} cannot "
+                    "be negative"
+                )
+
+            if percent > 100:
+                raise ValueError(
+                    f"Allocation for {asset} cannot "
+                    "exceed 100 percent"
+                )
+
+        total = sum(allocations.values())
+
+        if total > 100.000001:
+            raise ValueError(
+                "Current allocations cannot exceed "
+                "100 percent in total"
+            )
+
+        return allocations
+
+    @model_validator(mode="after")
+    def synchronize_existing_assets(
+        self,
+    ) -> "InvestorContext":
+        known = {
+            asset.casefold()
+            for asset in self.existing_assets
+        }
+
+        for asset in self.current_allocations:
+            if asset.casefold() not in known:
+                self.existing_assets.append(asset)
+                known.add(asset.casefold())
+
+        return self
 
 
 class AssistantChatRequest(BaseModel):

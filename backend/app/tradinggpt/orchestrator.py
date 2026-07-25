@@ -56,10 +56,14 @@ class TradingGPTOrchestrator:
         context = request.context
         capital = context.capital
 
-        current_allocations = {
-            asset: 0.0
-            for asset in context.existing_assets
-        }
+        current_allocations = (
+            dict(context.current_allocations)
+            if context.current_allocations
+            else {
+                asset: 0.0
+                for asset in context.existing_assets
+            }
+        )
 
         engine_result = PortfolioEngine.build(
             risk_level=context.risk_level,
@@ -125,7 +129,9 @@ class TradingGPTOrchestrator:
 
         personalization_score = 75
 
-        if context.existing_assets:
+        if context.current_allocations:
+            personalization_score += 15
+        elif context.existing_assets:
             personalization_score += 10
 
         if capital:
@@ -175,15 +181,15 @@ class TradingGPTOrchestrator:
                     summary=(
                         "Распределение учитывает капитал, "
                         "риск-профиль, лимит позиции и "
-                        "указанные существующие активы."
+                        "текущие доли активов."
                     ),
                 ),
             ],
             portfolio=portfolio,
             follow_up_questions=[
                 (
-                    "Укажите текущие доли активов, чтобы рассчитать "
-                    "точную ребалансировку."
+                    "Подтвердите, готовы ли вы выполнить "
+                    "предложенную ребалансировку."
                 ),
                 (
                     "Какая максимальная просадка портфеля для вас "
