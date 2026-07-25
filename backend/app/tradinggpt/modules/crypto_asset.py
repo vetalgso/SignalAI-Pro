@@ -153,8 +153,60 @@ class CryptoAssetAnalysisModule:
         confidence = max(15, confidence - quality_penalty)
 
         market_view = self._market_view(weighted_score)
-        risk = self._risk_level(signal, forecast, request.context.risk_level)
-        recommendation = self._recommendation(weighted_score, confidence)
+        risk = self._risk_level(
+            signal,
+            forecast,
+            request.context.risk_level,
+        )
+        recommendation = self._recommendation(
+            weighted_score,
+            confidence,
+        )
+
+        trade_direction = ScoringEngine.trade_direction(
+            weighted_score
+        )
+
+        consensus_score = ScoringEngine.consensus_score(
+            combined_direction=trade_direction,
+            signal_score=signal_score,
+            forecast_score=forecast_score,
+            news_score=news_score,
+            signal_available=signal is not None,
+            forecast_available=forecast is not None,
+            news_available=news is not None,
+        )
+
+        opportunity_score = ScoringEngine.opportunity_score(
+            weighted_score,
+            confidence,
+            consensus_score,
+        )
+
+        timeframe_analysis = ScoringEngine.timeframe_analysis(
+            forecast,
+            trade_direction,
+        )
+
+        timeframe_consensus_score = float(
+            timeframe_analysis["timeframe_consensus_score"]
+        )
+
+        ranking_score = ScoringEngine.ranking_score(
+            opportunity_score,
+            consensus_score,
+            confidence,
+            timeframe_consensus_score,
+        )
+
+        reasons = ScoringEngine.explanation_reasons(
+            signal=signal,
+            news=news,
+            trade_direction=trade_direction,
+            consensus_score=consensus_score,
+            timeframe_analysis=timeframe_analysis,
+            risk=risk,
+        )
 
         factors: list[AnalysisFactor] = []
 
@@ -192,6 +244,16 @@ class CryptoAssetAnalysisModule:
                     summary="Прогнозы временно недоступны.",
                 )
             )
+
+        factors.append(
+            AnalysisFactor(
+                type="timeframe_alignment",
+                score=round(timeframe_consensus_score),
+                summary=self._timeframe_summary(
+                    timeframe_analysis
+                ),
+            )
+        )
 
         if news:
             factors.append(
@@ -232,6 +294,9 @@ class CryptoAssetAnalysisModule:
             forecast=forecast,
             news=news,
             available_sources=available_sources,
+            trade_direction=trade_direction,
+            timeframe_analysis=timeframe_analysis,
+            consensus_score=consensus_score,
         )
 
         return AssistantChatResponse(
@@ -250,7 +315,37 @@ class CryptoAssetAnalysisModule:
                 "asset": asset,
                 "symbol": symbol,
                 "recommendation": recommendation,
+                "trade_direction": trade_direction,
                 "combined_score": round(weighted_score, 2),
+                "opportunity_score": round(
+                    opportunity_score,
+                    2,
+                ),
+                "consensus_score": round(
+                    consensus_score,
+                    2,
+                ),
+                "timeframe_consensus_score": round(
+                    timeframe_consensus_score,
+                    2,
+                ),
+                "ranking_score": round(
+                    ranking_score,
+                    2,
+                ),
+                "timeframe_directions": timeframe_analysis[
+                    "directions"
+                ],
+                "timeframe_scores": timeframe_analysis[
+                    "scores"
+                ],
+                "trend_direction": timeframe_analysis[
+                    "trend_direction"
+                ],
+                "trade_style": timeframe_analysis[
+                    "trade_style"
+                ],
+                "reasons": reasons,
                 "sources_available": available_sources,
                 "quality_penalty": quality_penalty,
                 "quality_warnings": quality_warnings,
@@ -389,6 +484,49 @@ class CryptoAssetAnalysisModule:
         )
 
     @staticmethod
+    def _timeframe_summary(
+        timeframe_analysis: dict[str, Any],
+    ) -> str:
+        directions = timeframe_analysis.get(
+            "directions",
+            {},
+        )
+
+        if not directions:
+            return (
+                "Данные по нескольким временным горизонтам "
+                "недоступны."
+            )
+
+        direction_parts = [
+            f"{label}: {directions[label]}"
+            for label in ("15m", "1H", "4H", "1D")
+            if label in directions
+        ]
+
+        consensus = float(
+            timeframe_analysis.get(
+                "timeframe_consensus_score",
+                50.0,
+            )
+        )
+        trend = timeframe_analysis.get(
+            "trend_direction",
+            "NEUTRAL",
+        )
+        trade_style = timeframe_analysis.get(
+            "trade_style",
+            "NEUTRAL",
+        )
+
+        return (
+            f"Горизонты: {', '.join(direction_parts)}. "
+            f"Согласованность: {consensus:.0f}%. "
+            f"Основной тренд: {trend}. "
+            f"Тип сделки: {trade_style}."
+        )
+
+    @staticmethod
     def _news_summary(news: dict[str, Any]) -> str:
         articles = news.get("articles", [])
 
@@ -417,6 +555,9 @@ class CryptoAssetAnalysisModule:
         forecast: dict[str, Any] | None,
         news: dict[str, Any] | None,
         available_sources: int,
+        trade_direction: str,
+        timeframe_analysis: dict[str, Any],
+        consensus_score: float,
     ) -> str:
         recommendation_text = {
             "BUY": "покупка выглядит привлекательной",
@@ -431,8 +572,18 @@ class CryptoAssetAnalysisModule:
             f"Итоговый режим: {market_view}.",
             f"Уверенность анализа: {confidence}%.",
             f"Уровень риска: {risk}.",
+            f"Направление сделки: {trade_direction}.",
+            (
+                "Согласованность аналитических источников: "
+                f"{consensus_score:.0f}%."
+            ),
             f"Доступно аналитических источников: {available_sources} из 3.",
         ]
+
+        timeframe_summary = self._timeframe_summary(
+            timeframe_analysis
+        )
+        parts.append(timeframe_summary)
 
         if signal:
             decision = signal["decision"]
