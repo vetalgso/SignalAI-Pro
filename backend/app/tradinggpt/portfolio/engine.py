@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from app.tradinggpt.market_regime.models import MarketRegime
+from app.tradinggpt.market_regime.profiles import (
+    allocation_for_regime,
+)
 from app.tradinggpt.portfolio.models import (
     PortfolioAction,
     PortfolioPosition,
@@ -104,6 +108,7 @@ class PortfolioEngine:
         currency: str = "USD",
         max_position_percent: float = 25.0,
         current_allocations: Mapping[str, float] | None = None,
+        market_regime: MarketRegime | None = None,
         min_trade_amount: float = 25.0,
         trading_fee_percent: float = 0.1,
         rebalance_tolerance_percent: float = 0.5,
@@ -121,14 +126,25 @@ class PortfolioEngine:
             trade_rounding_amount=trade_rounding_amount,
         )
 
-        allocation = dict(
-            cls.BASE_ALLOCATIONS.get(
-                risk_level,
-                cls.BASE_ALLOCATIONS["medium"],
+        if market_regime is None:
+            allocation = dict(
+                cls.BASE_ALLOCATIONS.get(
+                    risk_level,
+                    cls.BASE_ALLOCATIONS["medium"],
+                )
             )
-        )
+        else:
+            allocation = allocation_for_regime(
+                market_regime
+            )
 
         warnings: list[str] = []
+
+        if market_regime is not None:
+            warnings.append(
+                "Целевая аллокация адаптирована под рыночный режим "
+                f"{market_regime}."
+            )
 
         overflow = cls._apply_position_limit(
             allocation,
