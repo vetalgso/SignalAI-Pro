@@ -1,5 +1,6 @@
-from app.tradinggpt.conviction.engine import ConvictionEngine
-from app.tradinggpt.conviction.models import (
+from .adapters import ConvictionAdapter
+from .engine import ConvictionEngine
+from .models import (
     ConvictionFactors,
     ConvictionLevel,
     ConvictionResult,
@@ -7,6 +8,7 @@ from app.tradinggpt.conviction.models import (
 )
 
 __all__ = [
+    "ConvictionAdapter",
     "ConvictionEngine",
     "ConvictionFactors",
     "ConvictionLevel",
