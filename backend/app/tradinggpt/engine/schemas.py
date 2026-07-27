@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.tradinggpt.execution import MarketExecutionContext
+from app.tradinggpt.orders import OrderRoutingContext
 from app.tradinggpt.market_regime.models import (
     AssetRegimeSignal,
     MarketRegimeResult,
@@ -209,6 +210,53 @@ class RiskLimitsRequest(BaseModel):
         return RiskLimits(**self.model_dump())
 
 
+class OrderRoutingContextRequest(BaseModel):
+    exchange: Literal[
+        "PAPER",
+        "BINANCE",
+        "BYBIT",
+        "OKX",
+    ] = "PAPER"
+
+    market_type: Literal[
+        "SPOT",
+        "FUTURES",
+    ] = "SPOT"
+
+    order_type: Literal[
+        "MARKET",
+        "LIMIT",
+    ] = "MARKET"
+
+    leverage: int = Field(
+        default=1,
+        ge=1,
+        le=125,
+    )
+
+    @model_validator(mode="after")
+    def validate_market_configuration(
+        self,
+    ) -> "OrderRoutingContextRequest":
+        if (
+            self.market_type == "SPOT"
+            and self.leverage != 1
+        ):
+            raise ValueError(
+                "Spot orders must use leverage=1."
+            )
+
+        return self
+
+    def to_domain(self) -> OrderRoutingContext:
+        return OrderRoutingContext(
+            exchange=self.exchange,
+            market_type=self.market_type,
+            order_type=self.order_type,
+            leverage=self.leverage,
+        )
+
+
 class TradingGPTAnalyzeRequest(BaseModel):
     scoring: ScoringResultRequest
     market_regime: MarketRegimeResultRequest
@@ -216,6 +264,7 @@ class TradingGPTAnalyzeRequest(BaseModel):
     execution: MarketExecutionContextRequest | None = None
     account_risk: AccountRiskContextRequest | None = None
     risk_limits: RiskLimitsRequest | None = None
+    order_routing: OrderRoutingContextRequest | None = None
 
 
 class TradingGPTAnalyzeResponse(BaseModel):
@@ -227,3 +276,4 @@ class TradingGPTAnalyzeResponse(BaseModel):
     execution_plan: dict[str, object] | None = None
     risk_decision: dict[str, object] | None = None
     decision: dict[str, object] | None = None
+    order_intent: dict[str, object] | None = None

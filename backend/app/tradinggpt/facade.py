@@ -12,6 +12,7 @@ from app.tradinggpt.modules.crypto_asset import (
 from app.tradinggpt.modules.market_scanner import (
     CryptoMarketScanner,
 )
+from app.tradinggpt.orders import OrderRoutingContext
 from app.tradinggpt.orchestrator import TradingGPTOrchestrator
 from app.tradinggpt.portfolio.models import PortfolioResult
 from app.tradinggpt.schemas import (
@@ -83,6 +84,7 @@ class TradingGPTFacade:
         execution_context: MarketExecutionContext | None = None,
         account_risk_context: AccountRiskContext | None = None,
         risk_limits: RiskLimits | None = None,
+        order_routing: OrderRoutingContext | None = None,
     ) -> TradingGPTAnalysisResult:
         return self._engine.analyze(
             scoring_result=scoring_result,
@@ -91,6 +93,7 @@ class TradingGPTFacade:
             execution_context=execution_context,
             account_risk_context=account_risk_context,
             risk_limits=risk_limits,
+            order_routing=order_routing,
         )
 
 

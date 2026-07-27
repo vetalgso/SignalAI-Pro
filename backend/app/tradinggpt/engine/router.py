@@ -42,6 +42,11 @@ def analyze(
             if request.risk_limits is not None
             else None
         ),
+        order_routing=(
+            request.order_routing.to_domain()
+            if request.order_routing is not None
+            else None
+        ),
     )
 
     return TradingGPTAnalyzeResponse.model_validate(

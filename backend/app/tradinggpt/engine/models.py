@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from app.tradinggpt.decision import FinalTradeDecision
 from app.tradinggpt.execution import ExecutionPlan
 from app.tradinggpt.explanation import TradingExplanation
+from app.tradinggpt.orders import OrderIntent
 from app.tradinggpt.pipeline import TradingPipelineResult
 from app.tradinggpt.risk import RiskDecision
 
@@ -16,6 +17,7 @@ class TradingGPTAnalysisResult:
     execution_plan: ExecutionPlan | None = None
     risk_decision: RiskDecision | None = None
     decision: FinalTradeDecision | None = None
+    order_intent: OrderIntent | None = None
 
     @property
     def scoring(self):
@@ -49,6 +51,11 @@ class TradingGPTAnalysisResult:
         payload["decision"] = (
             self.decision.to_dict()
             if self.decision is not None
+            else None
+        )
+        payload["order_intent"] = (
+            self.order_intent.to_dict()
+            if self.order_intent is not None
             else None
         )
         return payload

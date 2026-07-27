@@ -7,6 +7,10 @@ from app.tradinggpt.execution import (
 )
 from app.tradinggpt.explanation import TradingExplanationEngine
 from app.tradinggpt.market_regime.models import MarketRegimeResult
+from app.tradinggpt.orders import (
+    OrderIntentBuilder,
+    OrderRoutingContext,
+)
 from app.tradinggpt.pipeline import TradingPipeline
 from app.tradinggpt.portfolio.models import PortfolioResult
 from app.tradinggpt.scoring.models import ScoringResult
@@ -32,6 +36,7 @@ class TradingGPTEngine:
         execution_context: MarketExecutionContext | None = None,
         account_risk_context: AccountRiskContext | None = None,
         risk_limits: RiskLimits | None = None,
+        order_routing: OrderRoutingContext | None = None,
     ) -> TradingGPTAnalysisResult:
         pipeline = TradingPipeline.run(
             scoring_result=scoring_result,
@@ -69,10 +74,17 @@ class TradingGPTEngine:
             risk_decision=risk_decision,
         )
 
+        order_intent = OrderIntentBuilder.build(
+            decision=decision,
+            execution_plan=execution_plan,
+            routing=order_routing,
+        )
+
         return TradingGPTAnalysisResult(
             pipeline=pipeline,
             explanation=explanation,
             execution_plan=execution_plan,
             risk_decision=risk_decision,
             decision=decision,
+            order_intent=order_intent,
         )
