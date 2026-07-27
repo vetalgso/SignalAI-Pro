@@ -226,3 +226,4 @@ class TradingGPTAnalyzeResponse(BaseModel):
     explanation: dict[str, object]
     execution_plan: dict[str, object] | None = None
     risk_decision: dict[str, object] | None = None
+    decision: dict[str, object] | None = None

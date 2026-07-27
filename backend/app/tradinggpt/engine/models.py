@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.tradinggpt.decision import FinalTradeDecision
 from app.tradinggpt.execution import ExecutionPlan
 from app.tradinggpt.explanation import TradingExplanation
 from app.tradinggpt.pipeline import TradingPipelineResult
@@ -14,6 +15,7 @@ class TradingGPTAnalysisResult:
     explanation: TradingExplanation
     execution_plan: ExecutionPlan | None = None
     risk_decision: RiskDecision | None = None
+    decision: FinalTradeDecision | None = None
 
     @property
     def scoring(self):
@@ -42,6 +44,11 @@ class TradingGPTAnalysisResult:
         payload["risk_decision"] = (
             self.risk_decision.to_dict()
             if self.risk_decision is not None
+            else None
+        )
+        payload["decision"] = (
+            self.decision.to_dict()
+            if self.decision is not None
             else None
         )
         return payload

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.tradinggpt.decision import FinalTradeDecisionEngine
 from app.tradinggpt.execution import (
     ExecutionPlanner,
     MarketExecutionContext,
@@ -62,9 +63,16 @@ class TradingGPTEngine:
                 limits=risk_limits,
             )
 
+        decision = FinalTradeDecisionEngine.build(
+            conviction=pipeline.conviction,
+            execution_plan=execution_plan,
+            risk_decision=risk_decision,
+        )
+
         return TradingGPTAnalysisResult(
             pipeline=pipeline,
             explanation=explanation,
             execution_plan=execution_plan,
             risk_decision=risk_decision,
+            decision=decision,
         )
