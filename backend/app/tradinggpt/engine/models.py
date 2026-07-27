@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from app.tradinggpt.execution import ExecutionPlan
 from app.tradinggpt.explanation import TradingExplanation
 from app.tradinggpt.pipeline import TradingPipelineResult
+from app.tradinggpt.risk import RiskDecision
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,6 +13,7 @@ class TradingGPTAnalysisResult:
     pipeline: TradingPipelineResult
     explanation: TradingExplanation
     execution_plan: ExecutionPlan | None = None
+    risk_decision: RiskDecision | None = None
 
     @property
     def scoring(self):
@@ -35,6 +37,11 @@ class TradingGPTAnalysisResult:
         payload["execution_plan"] = (
             self.execution_plan.to_dict()
             if self.execution_plan is not None
+            else None
+        )
+        payload["risk_decision"] = (
+            self.risk_decision.to_dict()
+            if self.risk_decision is not None
             else None
         )
         return payload

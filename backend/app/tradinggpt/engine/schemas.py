@@ -15,6 +15,10 @@ from app.tradinggpt.portfolio.models import (
     RebalanceTrade,
 )
 from app.tradinggpt.scoring.models import ScoringResult
+from app.tradinggpt.risk import (
+    AccountRiskContext,
+    RiskLimits,
+)
 
 
 class ScoringResultRequest(BaseModel):
@@ -165,11 +169,53 @@ class MarketExecutionContextRequest(BaseModel):
         return MarketExecutionContext(**self.model_dump())
 
 
+class AccountRiskContextRequest(BaseModel):
+    equity: float = Field(gt=0)
+    peak_equity: float = Field(gt=0)
+    daily_pnl: float = 0.0
+    open_positions: int = Field(default=0, ge=0)
+    current_exposure_value: float = Field(default=0.0, ge=0)
+    correlated_exposure_value: float = Field(default=0.0, ge=0)
+
+    def to_domain(self) -> AccountRiskContext:
+        return AccountRiskContext(**self.model_dump())
+
+
+class RiskLimitsRequest(BaseModel):
+    max_daily_loss_percent: float = Field(
+        default=3.0,
+        gt=0,
+        le=100,
+    )
+    max_drawdown_percent: float = Field(
+        default=10.0,
+        gt=0,
+        le=100,
+    )
+    max_total_exposure_percent: float = Field(
+        default=80.0,
+        gt=0,
+        le=100,
+    )
+    max_correlated_exposure_percent: float = Field(
+        default=40.0,
+        gt=0,
+        le=100,
+    )
+    max_open_positions: int = Field(default=5, gt=0)
+    minimum_position_value: float = Field(default=25.0, ge=0)
+
+    def to_domain(self) -> RiskLimits:
+        return RiskLimits(**self.model_dump())
+
+
 class TradingGPTAnalyzeRequest(BaseModel):
     scoring: ScoringResultRequest
     market_regime: MarketRegimeResultRequest
     portfolio: PortfolioResultRequest
     execution: MarketExecutionContextRequest | None = None
+    account_risk: AccountRiskContextRequest | None = None
+    risk_limits: RiskLimitsRequest | None = None
 
 
 class TradingGPTAnalyzeResponse(BaseModel):
@@ -179,3 +225,4 @@ class TradingGPTAnalyzeResponse(BaseModel):
     conviction: dict[str, object]
     explanation: dict[str, object]
     execution_plan: dict[str, object] | None = None
+    risk_decision: dict[str, object] | None = None

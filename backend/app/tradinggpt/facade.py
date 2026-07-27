@@ -19,6 +19,10 @@ from app.tradinggpt.schemas import (
     AssistantChatResponse,
 )
 from app.tradinggpt.scoring.models import ScoringResult
+from app.tradinggpt.risk import (
+    AccountRiskContext,
+    RiskLimits,
+)
 
 
 class TradingGPTFacade:
@@ -77,12 +81,16 @@ class TradingGPTFacade:
         market_regime_result: MarketRegimeResult,
         portfolio_result: PortfolioResult,
         execution_context: MarketExecutionContext | None = None,
+        account_risk_context: AccountRiskContext | None = None,
+        risk_limits: RiskLimits | None = None,
     ) -> TradingGPTAnalysisResult:
         return self._engine.analyze(
             scoring_result=scoring_result,
             market_regime_result=market_regime_result,
             portfolio_result=portfolio_result,
             execution_context=execution_context,
+            account_risk_context=account_risk_context,
+            risk_limits=risk_limits,
         )
 
 

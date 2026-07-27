@@ -32,6 +32,16 @@ def analyze(
             if request.execution is not None
             else None
         ),
+        account_risk_context=(
+            request.account_risk.to_domain()
+            if request.account_risk is not None
+            else None
+        ),
+        risk_limits=(
+            request.risk_limits.to_domain()
+            if request.risk_limits is not None
+            else None
+        ),
     )
 
     return TradingGPTAnalyzeResponse.model_validate(
