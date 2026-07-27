@@ -1,5 +1,6 @@
 from app.tradinggpt.router import router as tradinggpt_router
 from app.tradinggpt.engine.router import router as tradinggpt_engine_router
+from app.tradinggpt.orders.router import router as tradinggpt_orders_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -52,3 +53,4 @@ app.include_router(settings_router, prefix="/api/v1")
 
 app.include_router(tradinggpt_router, prefix="/api/v3")
 app.include_router(tradinggpt_engine_router, prefix="/api/v3")
+app.include_router(tradinggpt_orders_router, prefix="/api/v3")

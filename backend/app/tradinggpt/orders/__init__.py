@@ -1,3 +1,17 @@
+from .adapters import (
+    BinanceClientProtocol,
+    BinanceOrderAdapter,
+    ExchangeOrderAdapter,
+    PaperOrderAdapter,
+)
+from .execution_models import (
+    OrderExecutionResult,
+    OrderExecutionStatus,
+)
+from .execution_service import (
+    OrderExecutionService,
+    UnsupportedExchangeError,
+)
 from .models import (
     ExchangeMarketType,
     ExchangeName,
@@ -9,11 +23,19 @@ from .models import (
 from .service import OrderIntentBuilder
 
 __all__ = [
+    "PaperOrderAdapter",
+    "ExchangeOrderAdapter",
+    "BinanceOrderAdapter",
+    "BinanceClientProtocol",
     "ExchangeMarketType",
     "ExchangeName",
+    "OrderExecutionResult",
+    "OrderExecutionService",
+    "OrderExecutionStatus",
     "OrderIntent",
     "OrderIntentBuilder",
     "OrderRoutingContext",
     "OrderSide",
     "OrderType",
+    "UnsupportedExchangeError",
 ]
