@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
-from .execution_service import (
-    OrderExecutionService,
-    UnsupportedExchangeError,
+from app.tradinggpt.exchanges import (
+    create_order_execution_service,
 )
+
+from .execution_service import UnsupportedExchangeError
 from .models import OrderIntent
 from .schemas import (
     OrderExecuteRequest,
@@ -18,7 +19,7 @@ router = APIRouter(
     tags=["TradingGPT Orders"],
 )
 
-order_execution_service = OrderExecutionService()
+order_execution_service = create_order_execution_service()
 
 
 @router.post(
