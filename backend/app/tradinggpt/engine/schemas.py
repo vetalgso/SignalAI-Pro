@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.tradinggpt.execution import MarketExecutionContext
 from app.tradinggpt.market_regime.models import (
     AssetRegimeSignal,
     MarketRegimeResult,
@@ -149,10 +150,26 @@ class PortfolioResultRequest(BaseModel):
         )
 
 
+class MarketExecutionContextRequest(BaseModel):
+    symbol: str = Field(min_length=1)
+    current_price: float = Field(gt=0)
+    atr: float = Field(gt=0)
+    quantity_step: float = Field(default=0.000001, gt=0)
+    price_tick: float = Field(default=0.01, gt=0)
+    stop_atr_multiplier: float = Field(default=1.5, gt=0)
+    take_profit_1_rr: float = Field(default=1.5, gt=0)
+    take_profit_2_rr: float = Field(default=2.5, gt=0)
+    minimum_stop_percent: float = Field(default=0.5, gt=0)
+
+    def to_domain(self) -> MarketExecutionContext:
+        return MarketExecutionContext(**self.model_dump())
+
+
 class TradingGPTAnalyzeRequest(BaseModel):
     scoring: ScoringResultRequest
     market_regime: MarketRegimeResultRequest
     portfolio: PortfolioResultRequest
+    execution: MarketExecutionContextRequest | None = None
 
 
 class TradingGPTAnalyzeResponse(BaseModel):
@@ -161,3 +178,4 @@ class TradingGPTAnalyzeResponse(BaseModel):
     portfolio: dict[str, object]
     conviction: dict[str, object]
     explanation: dict[str, object]
+    execution_plan: dict[str, object] | None = None

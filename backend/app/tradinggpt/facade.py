@@ -4,6 +4,7 @@ from app.tradinggpt.engine import (
     TradingGPTAnalysisResult,
     TradingGPTEngine,
 )
+from app.tradinggpt.execution import MarketExecutionContext
 from app.tradinggpt.market_regime.models import MarketRegimeResult
 from app.tradinggpt.modules.crypto_asset import (
     CryptoAssetAnalysisModule,
@@ -75,11 +76,13 @@ class TradingGPTFacade:
         scoring_result: ScoringResult,
         market_regime_result: MarketRegimeResult,
         portfolio_result: PortfolioResult,
+        execution_context: MarketExecutionContext | None = None,
     ) -> TradingGPTAnalysisResult:
         return self._engine.analyze(
             scoring_result=scoring_result,
             market_regime_result=market_regime_result,
             portfolio_result=portfolio_result,
+            execution_context=execution_context,
         )
 
 

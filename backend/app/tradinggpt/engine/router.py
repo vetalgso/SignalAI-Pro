@@ -27,6 +27,11 @@ def analyze(
         scoring_result=request.scoring.to_domain(),
         market_regime_result=request.market_regime.to_domain(),
         portfolio_result=request.portfolio.to_domain(),
+        execution_context=(
+            request.execution.to_domain()
+            if request.execution is not None
+            else None
+        ),
     )
 
     return TradingGPTAnalyzeResponse.model_validate(

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from app.tradinggpt.execution import (
+    ExecutionPlanner,
+    MarketExecutionContext,
+)
 from app.tradinggpt.explanation import TradingExplanationEngine
 from app.tradinggpt.market_regime.models import MarketRegimeResult
 from app.tradinggpt.pipeline import TradingPipeline
@@ -19,6 +23,7 @@ class TradingGPTEngine:
         scoring_result: ScoringResult,
         market_regime_result: MarketRegimeResult,
         portfolio_result: PortfolioResult,
+        execution_context: MarketExecutionContext | None = None,
     ) -> TradingGPTAnalysisResult:
         pipeline = TradingPipeline.run(
             scoring_result=scoring_result,
@@ -30,7 +35,17 @@ class TradingGPTEngine:
             pipeline
         )
 
+        execution_plan = None
+
+        if execution_context is not None:
+            execution_plan = ExecutionPlanner.build(
+                conviction=pipeline.conviction,
+                portfolio=pipeline.portfolio,
+                market=execution_context,
+            )
+
         return TradingGPTAnalysisResult(
             pipeline=pipeline,
             explanation=explanation,
+            execution_plan=execution_plan,
         )
