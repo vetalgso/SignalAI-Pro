@@ -65,6 +65,8 @@ class OrderExecuteResponse(BaseModel):
     status: Literal[
         "FILLED",
         "OPEN",
+        "PARTIALLY_FILLED",
+        "CANCELED",
         "REJECTED",
         "FAILED",
     ]
@@ -78,3 +80,11 @@ class OrderExecuteResponse(BaseModel):
 
     simulated: bool
     message: str
+
+
+class OrderStatusResponse(OrderExecuteResponse):
+    pass
+
+
+class OrderCancelResponse(OrderExecuteResponse):
+    pass

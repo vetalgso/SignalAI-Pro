@@ -13,18 +13,26 @@ class BinanceClientProtocol(Protocol):
     ) -> dict[str, Any]:
         """Submit a Binance spot order."""
 
+    def get_order(
+        self,
+        **params: Any,
+    ) -> dict[str, Any]:
+        """Fetch a Binance spot order."""
+
+    def cancel_order(
+        self,
+        **params: Any,
+    ) -> dict[str, Any]:
+        """Cancel a Binance spot order."""
+
+    def get_open_orders(
+        self,
+        **params: Any,
+    ) -> list[dict[str, Any]]:
+        """Fetch open Binance spot orders."""
+
 
 class BinanceOrderAdapter:
-    """
-    Binance Spot execution adapter.
-
-    The adapter is dependency-injected and is not registered in the
-    default execution service. This prevents accidental real execution.
-
-    For testnet usage, initialize python-binance Client with testnet=True
-    and pass it to this adapter.
-    """
-
     def __init__(
         self,
         *,
@@ -51,8 +59,12 @@ class BinanceOrderAdapter:
 
         if intent.market_type != "SPOT":
             return self._failed(
-                intent=intent,
+                symbol=intent.symbol,
+                side=intent.side,
+                order_type=intent.order_type,
                 client_order_id=client_order_id,
+                exchange_order_id=None,
+                requested_quantity=intent.quantity,
                 message=(
                     "Binance futures execution is not supported "
                     "by this adapter."
@@ -67,16 +79,126 @@ class BinanceOrderAdapter:
             response = self._client.create_order(**params)
         except Exception as exc:
             return self._failed(
-                intent=intent,
+                symbol=intent.symbol,
+                side=intent.side,
+                order_type=intent.order_type,
                 client_order_id=client_order_id,
+                exchange_order_id=None,
+                requested_quantity=intent.quantity,
                 message=f"Binance order failed: {exc}",
             )
 
         return self._map_response(
-            intent=intent,
-            client_order_id=client_order_id,
             response=response,
+            fallback_symbol=intent.symbol,
+            fallback_side=intent.side,
+            fallback_order_type=intent.order_type,
+            fallback_client_order_id=client_order_id,
+            fallback_quantity=intent.quantity,
+            message_prefix="Binance order status",
         )
+
+    def get_order(
+        self,
+        *,
+        symbol: str,
+        order_id: str,
+    ) -> OrderExecutionResult:
+        try:
+            response = self._client.get_order(
+                symbol=symbol,
+                orderId=order_id,
+            )
+        except Exception as exc:
+            return self._failed(
+                symbol=symbol,
+                side="BUY",
+                order_type="LIMIT",
+                client_order_id="",
+                exchange_order_id=order_id,
+                requested_quantity=0.0,
+                message=f"Binance get order failed: {exc}",
+            )
+
+        return self._map_response(
+            response=response,
+            fallback_symbol=symbol,
+            fallback_side="BUY",
+            fallback_order_type="LIMIT",
+            fallback_client_order_id="",
+            fallback_quantity=0.0,
+            message_prefix="Binance order status",
+        )
+
+    def cancel_order(
+        self,
+        *,
+        symbol: str,
+        order_id: str,
+    ) -> OrderExecutionResult:
+        try:
+            response = self._client.cancel_order(
+                symbol=symbol,
+                orderId=order_id,
+            )
+        except Exception as exc:
+            return self._failed(
+                symbol=symbol,
+                side="BUY",
+                order_type="LIMIT",
+                client_order_id="",
+                exchange_order_id=order_id,
+                requested_quantity=0.0,
+                message=f"Binance cancel order failed: {exc}",
+            )
+
+        return self._map_response(
+            response=response,
+            fallback_symbol=symbol,
+            fallback_side="BUY",
+            fallback_order_type="LIMIT",
+            fallback_client_order_id="",
+            fallback_quantity=0.0,
+            message_prefix="Binance cancel status",
+        )
+
+    def list_open_orders(
+        self,
+        *,
+        symbol: str | None = None,
+    ) -> list[OrderExecutionResult]:
+        params: dict[str, object] = {}
+
+        if symbol:
+            params["symbol"] = symbol
+
+        try:
+            responses = self._client.get_open_orders(**params)
+        except Exception as exc:
+            return [
+                self._failed(
+                    symbol=symbol or "",
+                    side="BUY",
+                    order_type="LIMIT",
+                    client_order_id="",
+                    exchange_order_id=None,
+                    requested_quantity=0.0,
+                    message=f"Binance open orders failed: {exc}",
+                )
+            ]
+
+        return [
+            self._map_response(
+                response=response,
+                fallback_symbol=symbol or "",
+                fallback_side="BUY",
+                fallback_order_type="LIMIT",
+                fallback_client_order_id="",
+                fallback_quantity=0.0,
+                message_prefix="Binance order status",
+            )
+            for response in responses
+        ]
 
     @staticmethod
     def _build_order_params(
@@ -111,9 +233,13 @@ class BinanceOrderAdapter:
     def _map_response(
         self,
         *,
-        intent: OrderIntent,
-        client_order_id: str,
         response: dict[str, Any],
+        fallback_symbol: str,
+        fallback_side: str,
+        fallback_order_type: str,
+        fallback_client_order_id: str,
+        fallback_quantity: float,
+        message_prefix: str,
     ) -> OrderExecutionResult:
         exchange_status = str(
             response.get("status", "UNKNOWN")
@@ -122,17 +248,18 @@ class BinanceOrderAdapter:
         status_map = {
             "FILLED": "FILLED",
             "NEW": "OPEN",
-            "PARTIALLY_FILLED": "OPEN",
+            "PARTIALLY_FILLED": "PARTIALLY_FILLED",
+            "CANCELED": "CANCELED",
             "REJECTED": "REJECTED",
             "EXPIRED": "REJECTED",
-            "CANCELED": "REJECTED",
+            "EXPIRED_IN_MATCH": "REJECTED",
         }
 
         status = status_map.get(exchange_status, "FAILED")
 
         requested_quantity = self._to_float(
             response.get("origQty"),
-            default=intent.quantity,
+            default=fallback_quantity,
         )
         filled_quantity = self._to_float(
             response.get("executedQty"),
@@ -146,18 +273,25 @@ class BinanceOrderAdapter:
 
         exchange_order_id = response.get("orderId")
 
+        client_order_id = (
+            response.get("clientOrderId")
+            or response.get("origClientOrderId")
+            or fallback_client_order_id
+        )
+
         return OrderExecutionResult(
             exchange="BINANCE",
-            symbol=intent.symbol,
-            side=intent.side,
-            order_type=intent.order_type,
-            status=status,
-            client_order_id=str(
-                response.get(
-                    "clientOrderId",
-                    client_order_id,
-                )
+            symbol=str(
+                response.get("symbol", fallback_symbol)
             ),
+            side=str(
+                response.get("side", fallback_side)
+            ).upper(),
+            order_type=str(
+                response.get("type", fallback_order_type)
+            ).upper(),
+            status=status,
+            client_order_id=str(client_order_id),
             exchange_order_id=(
                 str(exchange_order_id)
                 if exchange_order_id is not None
@@ -167,9 +301,7 @@ class BinanceOrderAdapter:
             filled_quantity=filled_quantity,
             average_price=average_price,
             simulated=self._testnet,
-            message=(
-                f"Binance order status: {exchange_status}."
-            ),
+            message=f"{message_prefix}: {exchange_status}.",
         )
 
     @staticmethod
@@ -216,19 +348,23 @@ class BinanceOrderAdapter:
     def _failed(
         self,
         *,
-        intent: OrderIntent,
+        symbol: str,
+        side: str,
+        order_type: str,
         client_order_id: str,
+        exchange_order_id: str | None,
+        requested_quantity: float,
         message: str,
     ) -> OrderExecutionResult:
         return OrderExecutionResult(
             exchange="BINANCE",
-            symbol=intent.symbol,
-            side=intent.side,
-            order_type=intent.order_type,
+            symbol=symbol,
+            side=side,
+            order_type=order_type,
             status="FAILED",
             client_order_id=client_order_id,
-            exchange_order_id=None,
-            requested_quantity=intent.quantity,
+            exchange_order_id=exchange_order_id,
+            requested_quantity=requested_quantity,
             filled_quantity=0.0,
             average_price=None,
             simulated=self._testnet,
