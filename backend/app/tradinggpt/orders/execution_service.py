@@ -3,12 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from uuid import uuid4
 
-from .adapters import (
-    ExchangeOrderAdapter,
-    PaperOrderAdapter,
-)
+from .adapters import ExchangeOrderAdapter, PaperOrderAdapter
 from .execution_models import OrderExecutionResult
 from .models import ExchangeName, OrderIntent
+from .validation_models import OrderPreviewResult, SymbolTradingRules
 
 
 class UnsupportedExchangeError(ValueError):
@@ -20,106 +18,46 @@ class UnsupportedOrderOperationError(ValueError):
 
 
 class OrderExecutionService:
-    def __init__(
-        self,
-        *,
-        adapters: list[ExchangeOrderAdapter] | None = None,
-        id_factory: Callable[[], str] | None = None,
-    ) -> None:
-        configured_adapters = adapters or [
-            PaperOrderAdapter(),
-        ]
-
-        self._adapters = {
-            adapter.exchange: adapter
-            for adapter in configured_adapters
-        }
+    def __init__(self, *, adapters: list[ExchangeOrderAdapter] | None = None, id_factory: Callable[[], str] | None = None) -> None:
+        configured_adapters = adapters or [PaperOrderAdapter()]
+        self._adapters = {adapter.exchange: adapter for adapter in configured_adapters}
         self._id_factory = id_factory or self._default_id
 
-    def execute(
-        self,
-        intent: OrderIntent,
-    ) -> OrderExecutionResult:
+    def execute(self, intent: OrderIntent) -> OrderExecutionResult:
         adapter = self._get_adapter(intent.exchange)
+        return adapter.execute(intent=intent, client_order_id=self._id_factory())
 
-        return adapter.execute(
-            intent=intent,
-            client_order_id=self._id_factory(),
-        )
+    def get_order(self, *, exchange: ExchangeName, symbol: str, order_id: str) -> OrderExecutionResult:
+        return self._call(exchange, "get_order", symbol=symbol, order_id=order_id)
 
-    def get_order(
-        self,
-        *,
-        exchange: ExchangeName,
-        symbol: str,
-        order_id: str,
-    ) -> OrderExecutionResult:
-        adapter = self._get_adapter(exchange)
-        operation = getattr(adapter, "get_order", None)
+    def cancel_order(self, *, exchange: ExchangeName, symbol: str, order_id: str) -> OrderExecutionResult:
+        return self._call(exchange, "cancel_order", symbol=symbol, order_id=order_id)
 
-        if operation is None:
-            raise UnsupportedOrderOperationError(
-                f"Order status is not supported for {exchange}."
-            )
+    def list_open_orders(self, *, exchange: ExchangeName, symbol: str | None = None) -> list[OrderExecutionResult]:
+        return self._call(exchange, "list_open_orders", symbol=symbol)
 
-        return operation(
-            symbol=symbol,
-            order_id=order_id,
-        )
+    def get_symbol_rules(self, *, exchange: ExchangeName, symbol: str) -> SymbolTradingRules:
+        return self._call(exchange, "get_symbol_rules", symbol=symbol)
 
-    def cancel_order(
-        self,
-        *,
-        exchange: ExchangeName,
-        symbol: str,
-        order_id: str,
-    ) -> OrderExecutionResult:
-        adapter = self._get_adapter(exchange)
-        operation = getattr(adapter, "cancel_order", None)
+    def preview(self, intent: OrderIntent) -> OrderPreviewResult:
+        return self._call(intent.exchange, "preview", intent=intent)
 
-        if operation is None:
-            raise UnsupportedOrderOperationError(
-                f"Order cancellation is not supported for {exchange}."
-            )
-
-        return operation(
-            symbol=symbol,
-            order_id=order_id,
-        )
-
-    def list_open_orders(
-        self,
-        *,
-        exchange: ExchangeName,
-        symbol: str | None = None,
-    ) -> list[OrderExecutionResult]:
-        adapter = self._get_adapter(exchange)
-        operation = getattr(adapter, "list_open_orders", None)
-
-        if operation is None:
-            raise UnsupportedOrderOperationError(
-                f"Open-order listing is not supported for {exchange}."
-            )
-
-        return operation(symbol=symbol)
-
-    def supports(
-        self,
-        exchange: ExchangeName,
-    ) -> bool:
+    def supports(self, exchange: ExchangeName) -> bool:
         return exchange in self._adapters
 
-    def _get_adapter(
-        self,
-        exchange: ExchangeName,
-    ) -> ExchangeOrderAdapter:
-        adapter = self._adapters.get(exchange)
-
-        if adapter is None:
-            raise UnsupportedExchangeError(
-                f"No adapter registered for {exchange}."
+    def _call(self, exchange: ExchangeName, operation_name: str, **kwargs: object):
+        adapter = self._get_adapter(exchange)
+        operation = getattr(adapter, operation_name, None)
+        if operation is None:
+            raise UnsupportedOrderOperationError(
+                f"{operation_name.replace('_', ' ').title()} is not supported for {exchange}."
             )
+        return operation(**kwargs)
 
+    def _get_adapter(self, exchange: ExchangeName) -> ExchangeOrderAdapter:
+        adapter = self._adapters.get(exchange)
+        if adapter is None:
+            raise UnsupportedExchangeError(f"No adapter registered for {exchange}.")
         return adapter
 
     @staticmethod
