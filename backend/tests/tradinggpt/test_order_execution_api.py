@@ -94,11 +94,11 @@ def test_order_endpoint_rejects_unregistered_exchange(
 ) -> None:
     response = client.post(
         "/api/v3/orders/execute",
-        json=build_payload(exchange="BINANCE"),
+        json=build_payload(exchange="BYBIT"),
     )
 
     assert response.status_code == 400
-    assert "BINANCE" in response.json()["detail"]
+    assert "BYBIT" in response.json()["detail"]
 
 
 def test_order_execution_route_is_registered(

@@ -31,6 +31,54 @@ class FakeBinanceClient:
 
         return self.response
 
+    def get_symbol_info(
+        self,
+        symbol: str,
+    ) -> dict[str, Any]:
+        return {
+            "symbol": symbol,
+            "status": "TRADING",
+            "baseAsset": "BTC",
+            "quoteAsset": "USDT",
+            "filters": [
+                {
+                    "filterType": "LOT_SIZE",
+                    "minQty": "0.00001",
+                    "maxQty": "9000",
+                    "stepSize": "0.00001",
+                },
+                {
+                    "filterType": "PRICE_FILTER",
+                    "minPrice": "0.01",
+                    "maxPrice": "1000000",
+                    "tickSize": "0.01",
+                },
+                {
+                    "filterType": "MIN_NOTIONAL",
+                    "minNotional": "5",
+                },
+            ],
+        }
+
+    def get_symbol_ticker(
+        self,
+        **params: Any,
+    ) -> dict[str, Any]:
+        return {
+            "symbol": params["symbol"],
+            "price": "100000",
+        }
+
+    def get_asset_balance(
+        self,
+        **params: Any,
+    ) -> dict[str, Any]:
+        return {
+            "asset": params["asset"],
+            "free": "1000000",
+            "locked": "0",
+        }
+
 
 def build_intent(
     *,
@@ -158,7 +206,7 @@ def test_binance_limit_order_without_price_fails() -> None:
 
     assert result.status == "FAILED"
     assert result.exchange_order_id is None
-    assert "Reference price" in result.message
+    assert "LIMIT order requires a price" in result.message
     assert client.calls == []
 
 
