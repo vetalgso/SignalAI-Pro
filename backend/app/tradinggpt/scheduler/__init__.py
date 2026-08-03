@@ -9,6 +9,10 @@ from .distributed_lock import (
 from .journal_service import (
     JournaledSchedulerCycleService,
 )
+from .metrics import (
+    PROMETHEUS_CONTENT_TYPE,
+    SchedulerMetricsService,
+)
 from .observability import (
     SchedulerObservabilityService,
 )
@@ -34,6 +38,8 @@ from .state_service import SchedulerStateService
 __all__ = [
     "JournaledSchedulerCycleService",
     "PostgresAdvisorySchedulerLock",
+    "SchedulerMetricsService",
+    "PROMETHEUS_CONTENT_TYPE",
     "SafeSchedulerCycleService",
     "SchedulerBackgroundLoop",
     "SchedulerBackgroundLoopStatus",

@@ -7,7 +7,10 @@ from fastapi import (
     Query,
     status,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import (
+    JSONResponse,
+    Response,
+)
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -48,6 +51,10 @@ from .state_repository import (
 from .state_service import SchedulerStateService
 from .payload_repository import (
     SchedulerPayloadRepository,
+)
+from .metrics import (
+    PROMETHEUS_CONTENT_TYPE,
+    SchedulerMetricsService,
 )
 from .observability import (
     SchedulerObservabilityService,
@@ -477,4 +484,56 @@ def get_scheduler_readiness(
     return JSONResponse(
         status_code=response_status,
         content=result.model_dump(mode="json"),
+    )
+
+
+@router.get(
+    "/metrics",
+    response_class=Response,
+    responses={
+        status.HTTP_200_OK: {
+            "description": (
+                "Prometheus scheduler metrics."
+            ),
+            "content": {
+                "text/plain": {
+                    "schema": {
+                        "type": "string",
+                    },
+                },
+            },
+        },
+    },
+)
+def get_scheduler_metrics(
+    db: Session = Depends(get_db),
+) -> Response:
+    observability = (
+        _create_observability_service(db).get()
+    )
+
+    readiness = SchedulerReadinessService(
+        observability_provider=lambda: (
+            observability
+        ),
+        background_loop_enabled=(
+            settings.scheduler_background_loop_enabled
+        ),
+    ).get()
+
+    metrics = SchedulerMetricsService(
+        observability_provider=lambda: (
+            observability
+        ),
+        readiness_provider=lambda: readiness,
+        cycle_counts_provider=(
+            SchedulerCycleRepository(
+                db
+            ).count_by_status
+        ),
+    ).render()
+
+    return Response(
+        content=metrics,
+        media_type=PROMETHEUS_CONTENT_TYPE,
     )

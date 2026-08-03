@@ -3,7 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import (
+    func,
+    select,
+)
 from sqlalchemy.orm import Session
 
 from app.models.scheduler_cycle import SchedulerCycle
@@ -89,3 +92,24 @@ class SchedulerCycleRepository:
         return list(
             self._session.scalars(statement)
         )
+
+    def count_by_status(
+        self,
+    ) -> dict[str, int]:
+        statement = (
+            select(
+                SchedulerCycle.status,
+                func.count(SchedulerCycle.id),
+            )
+            .group_by(SchedulerCycle.status)
+            .order_by(SchedulerCycle.status)
+        )
+
+        rows = self._session.execute(
+            statement
+        ).all()
+
+        return {
+            str(status).upper(): int(count)
+            for status, count in rows
+        }
