@@ -23,6 +23,9 @@ from .schemas import (
     SafeSchedulerCycleResponse,
     SchedulerStateResponse,
     SchedulerStateUpdateRequest,
+    SchedulerRunnerStatusResponse,
+    SchedulerRunnerTickRequest,
+    SchedulerRunnerTickResponse,
 )
 from .service import SafeSchedulerCycleService
 from .journal_service import (
@@ -33,6 +36,9 @@ from .state_repository import (
     SchedulerStateRepository,
 )
 from .state_service import SchedulerStateService
+from .runner_registry import (
+    create_scheduler_runner,
+)
 
 
 router = APIRouter(
@@ -246,4 +252,41 @@ def update_scheduler_state(
 
     return SchedulerStateResponse.model_validate(
         result
+    )
+
+
+@router.post(
+    "/runner/tick",
+    response_model=SchedulerRunnerTickResponse,
+)
+def run_scheduler_runner_tick(
+    request: SchedulerRunnerTickRequest,
+    db: Session = Depends(get_db),
+) -> SchedulerRunnerTickResponse:
+    runner = create_scheduler_runner(db)
+
+    result = runner.tick(
+        force=request.force
+    )
+
+    return (
+        SchedulerRunnerTickResponse
+        .model_validate(result)
+    )
+
+
+@router.get(
+    "/runner/status",
+    response_model=SchedulerRunnerStatusResponse,
+)
+def get_scheduler_runner_status(
+    db: Session = Depends(get_db),
+) -> SchedulerRunnerStatusResponse:
+    runner = create_scheduler_runner(db)
+
+    return (
+        SchedulerRunnerStatusResponse
+        .model_validate(
+            runner.status().to_dict()
+        )
     )

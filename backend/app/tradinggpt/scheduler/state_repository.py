@@ -120,3 +120,67 @@ class SchedulerStateRepository:
         self._session.refresh(state)
 
         return state
+
+    def record_runner_skip(
+        self,
+        *,
+        occurred_at: datetime,
+    ) -> SchedulerState:
+        state = self.get_or_create()
+
+        state.last_run_at = occurred_at
+
+        if state.enabled:
+            state.next_run_at = (
+                occurred_at
+                + timedelta(
+                    seconds=state.interval_seconds
+                )
+            )
+        else:
+            state.next_run_at = None
+
+        state.updated_at = datetime.now(
+            timezone.utc
+        )
+
+        self._session.add(state)
+        self._session.commit()
+        self._session.refresh(state)
+
+        return state
+
+    def record_runner_failure(
+        self,
+        *,
+        occurred_at: datetime,
+        disable_threshold: int,
+    ) -> SchedulerState:
+        state = self.get_or_create()
+
+        state.last_run_at = occurred_at
+        state.consecutive_failures += 1
+
+        if (
+            state.consecutive_failures
+            >= disable_threshold
+        ):
+            state.enabled = False
+            state.next_run_at = None
+        elif state.enabled:
+            state.next_run_at = (
+                occurred_at
+                + timedelta(
+                    seconds=state.interval_seconds
+                )
+            )
+
+        state.updated_at = datetime.now(
+            timezone.utc
+        )
+
+        self._session.add(state)
+        self._session.commit()
+        self._session.refresh(state)
+
+        return state

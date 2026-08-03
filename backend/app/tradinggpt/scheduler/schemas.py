@@ -116,3 +116,21 @@ class SchedulerStateResponse(BaseModel):
     last_cycle_id: int | None
     consecutive_failures: int
     updated_at: datetime
+
+
+class SchedulerRunnerTickRequest(BaseModel):
+    force: bool = False
+
+
+class SchedulerRunnerTickResponse(BaseModel):
+    action: str
+    reason: str | None
+    cycle: dict[str, Any] | None
+    state: dict[str, Any]
+
+
+class SchedulerRunnerStatusResponse(BaseModel):
+    running: bool
+    last_tick_at: datetime | None
+    last_action: str | None
+    last_error: str | None
