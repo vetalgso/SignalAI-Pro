@@ -1,6 +1,10 @@
 from .journal_service import (
     JournaledSchedulerCycleService,
 )
+from .payload_repository import (
+    SchedulerPayloadRepository,
+)
+from .payload_service import SchedulerPayloadService
 from .repository import SchedulerCycleRepository
 from .runner import SafeSchedulerRunner
 from .service import SafeSchedulerCycleService
@@ -14,6 +18,8 @@ __all__ = [
     "SafeSchedulerCycleService",
     "SafeSchedulerRunner",
     "SchedulerCycleRepository",
+    "SchedulerPayloadRepository",
+    "SchedulerPayloadService",
     "SchedulerStateRepository",
     "SchedulerStateService",
 ]

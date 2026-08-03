@@ -26,6 +26,8 @@ from .schemas import (
     SchedulerRunnerStatusResponse,
     SchedulerRunnerTickRequest,
     SchedulerRunnerTickResponse,
+    SchedulerPayloadResponse,
+    SchedulerPayloadUpsertRequest,
 )
 from .service import SafeSchedulerCycleService
 from .journal_service import (
@@ -36,6 +38,10 @@ from .state_repository import (
     SchedulerStateRepository,
 )
 from .state_service import SchedulerStateService
+from .payload_repository import (
+    SchedulerPayloadRepository,
+)
+from .payload_service import SchedulerPayloadService
 from .runner_registry import (
     create_scheduler_runner,
 )
@@ -289,4 +295,66 @@ def get_scheduler_runner_status(
         .model_validate(
             runner.status().to_dict()
         )
+    )
+
+
+@router.get(
+    "/payload",
+    response_model=SchedulerPayloadResponse,
+)
+def get_scheduler_payload(
+    db: Session = Depends(get_db),
+) -> SchedulerPayloadResponse:
+    service = SchedulerPayloadService(
+        SchedulerPayloadRepository(db)
+    )
+
+    return SchedulerPayloadResponse.model_validate(
+        service.get()
+    )
+
+
+@router.put(
+    "/payload",
+    response_model=SchedulerPayloadResponse,
+)
+def save_scheduler_payload(
+    request: SchedulerPayloadUpsertRequest,
+    db: Session = Depends(get_db),
+) -> SchedulerPayloadResponse:
+    service = SchedulerPayloadService(
+        SchedulerPayloadRepository(db)
+    )
+
+    result = service.save(
+        runtime_risk_payload=(
+            request.runtime_risk.model_dump(
+                mode="json"
+            )
+        ),
+        analysis_payload=(
+            request.analysis.model_dump(
+                mode="json"
+            )
+        ),
+    )
+
+    return SchedulerPayloadResponse.model_validate(
+        result
+    )
+
+
+@router.delete(
+    "/payload",
+    response_model=SchedulerPayloadResponse,
+)
+def clear_scheduler_payload(
+    db: Session = Depends(get_db),
+) -> SchedulerPayloadResponse:
+    service = SchedulerPayloadService(
+        SchedulerPayloadRepository(db)
+    )
+
+    return SchedulerPayloadResponse.model_validate(
+        service.clear()
     )

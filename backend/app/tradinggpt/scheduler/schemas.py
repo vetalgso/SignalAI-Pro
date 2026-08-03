@@ -134,3 +134,29 @@ class SchedulerRunnerStatusResponse(BaseModel):
     last_tick_at: datetime | None
     last_action: str | None
     last_error: str | None
+
+
+class SchedulerPayloadUpsertRequest(BaseModel):
+    runtime_risk: SchedulerRuntimeRiskRequest
+    analysis: TradingGPTAnalyzeAndExecuteRequest
+
+    @model_validator(mode="after")
+    def enforce_payload_dry_run(
+        self,
+    ) -> "SchedulerPayloadUpsertRequest":
+        if not self.analysis.dry_run:
+            raise ValueError(
+                "Persisted scheduler payload "
+                "requires analysis.dry_run=true."
+            )
+
+        return self
+
+
+class SchedulerPayloadResponse(BaseModel):
+    configured: bool
+    runtime_risk_payload: (
+        dict[str, Any] | None
+    )
+    analysis_payload: dict[str, Any] | None
+    updated_at: datetime
