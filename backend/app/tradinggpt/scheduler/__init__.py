@@ -2,6 +2,10 @@ from .background_loop import (
     SchedulerBackgroundLoop,
     SchedulerBackgroundLoopStatus,
 )
+from .distributed_lock import (
+    PostgresAdvisorySchedulerLock,
+    SchedulerDistributedLock,
+)
 from .journal_service import (
     JournaledSchedulerCycleService,
 )
@@ -19,11 +23,13 @@ from .state_service import SchedulerStateService
 
 __all__ = [
     "JournaledSchedulerCycleService",
+    "PostgresAdvisorySchedulerLock",
     "SafeSchedulerCycleService",
     "SchedulerBackgroundLoop",
     "SchedulerBackgroundLoopStatus",
     "SafeSchedulerRunner",
     "SchedulerCycleRepository",
+    "SchedulerDistributedLock",
     "SchedulerPayloadRepository",
     "SchedulerPayloadService",
     "SchedulerStateRepository",

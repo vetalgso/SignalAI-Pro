@@ -21,6 +21,25 @@ from app.tradinggpt.scheduler.state_repository import (
 )
 
 
+
+class FakeDistributedLock:
+    def __init__(
+        self,
+        *,
+        acquire_result: bool = True,
+    ) -> None:
+        self.acquire_result = acquire_result
+        self.acquire_calls = 0
+        self.release_calls = 0
+
+    def try_acquire(self) -> bool:
+        self.acquire_calls += 1
+        return self.acquire_result
+
+    def release(self) -> None:
+        self.release_calls += 1
+
+
 def build_session() -> Session:
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
@@ -308,3 +327,85 @@ def test_failed_cycle_is_reported_as_failed() -> None:
         assert result["state"][
             "consecutive_failures"
         ] == 1
+
+
+def test_distributed_lock_blocks_second_runner() -> None:
+    with build_session() as session:
+        repository = SchedulerStateRepository(
+            session
+        )
+        distributed_lock = FakeDistributedLock(
+            acquire_result=False
+        )
+        calls = 0
+
+        def callback():
+            nonlocal calls
+            calls += 1
+
+            return {
+                "status": "COMPLETED"
+            }
+
+        runner = SafeSchedulerRunner(
+            state_repository=repository,
+            cycle_callback=callback,
+            distributed_lock=distributed_lock,
+        )
+
+        result = runner.tick(force=True)
+
+        assert result["action"] == (
+            "SKIPPED_DISTRIBUTED_LOCK"
+        )
+        assert result["cycle"] is None
+        assert calls == 0
+        assert distributed_lock.acquire_calls == 1
+        assert distributed_lock.release_calls == 0
+
+
+def test_distributed_lock_released_after_success() -> None:
+    with build_session() as session:
+        repository = SchedulerStateRepository(
+            session
+        )
+        distributed_lock = FakeDistributedLock()
+
+        runner = SafeSchedulerRunner(
+            state_repository=repository,
+            cycle_callback=lambda: {
+                "status": "COMPLETED"
+            },
+            distributed_lock=distributed_lock,
+        )
+
+        result = runner.tick(force=True)
+
+        assert result["action"] == "EXECUTED"
+        assert distributed_lock.acquire_calls == 1
+        assert distributed_lock.release_calls == 1
+
+
+def test_distributed_lock_released_after_failure() -> None:
+    with build_session() as session:
+        repository = SchedulerStateRepository(
+            session
+        )
+        distributed_lock = FakeDistributedLock()
+
+        def callback():
+            raise RuntimeError(
+                "Synthetic distributed-lock test."
+            )
+
+        runner = SafeSchedulerRunner(
+            state_repository=repository,
+            cycle_callback=callback,
+            distributed_lock=distributed_lock,
+        )
+
+        result = runner.tick(force=True)
+
+        assert result["action"] == "FAILED"
+        assert distributed_lock.acquire_calls == 1
+        assert distributed_lock.release_calls == 1

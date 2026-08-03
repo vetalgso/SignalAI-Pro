@@ -17,6 +17,13 @@ class Settings(BaseSettings):
         le=3600,
     )
 
+    scheduler_distributed_lock_enabled: bool = True
+    scheduler_advisory_lock_key: int = Field(
+        default=2026080320,
+        ge=1,
+        le=9223372036854775807,
+    )
+
     database_url: str = "postgresql+psycopg2://signalai:signalai@db:5432/signalai"
     redis_url: str = "redis://redis:6379/0"
 

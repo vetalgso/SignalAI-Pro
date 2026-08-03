@@ -6,6 +6,9 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from .distributed_lock import (
+    SchedulerDistributedLock,
+)
 from .state_repository import (
     SchedulerStateRepository,
 )
@@ -26,8 +29,9 @@ class SafeSchedulerRunner:
     """
     Execute at most one scheduler tick at a time.
 
-    This class does not create its own infinite loop yet.
-    A tick must be triggered explicitly by the API or tests.
+    A process lock protects threads in one API process.
+    An optional distributed lock protects multiple
+    workers or API replicas.
     """
 
     FAILURE_DISABLE_THRESHOLD = 3
@@ -41,6 +45,9 @@ class SafeSchedulerRunner:
             dict[str, Any] | None,
         ],
         execution_lock: Any | None = None,
+        distributed_lock: (
+            SchedulerDistributedLock | None
+        ) = None,
     ) -> None:
         self._state_repository = state_repository
         self._cycle_callback = cycle_callback
@@ -49,6 +56,7 @@ class SafeSchedulerRunner:
             if execution_lock is not None
             else threading.Lock()
         )
+        self._distributed_lock = distributed_lock
         self._last_tick_at: datetime | None = None
         self._last_action: str | None = None
         self._last_error: str | None = None
@@ -79,7 +87,35 @@ class SafeSchedulerRunner:
                 "state": self._serialize_state(),
             }
 
+        distributed_lock_acquired = False
+
         try:
+            if self._distributed_lock is not None:
+                distributed_lock_acquired = (
+                    self._distributed_lock
+                    .try_acquire()
+                )
+
+                if not distributed_lock_acquired:
+                    self._last_action = (
+                        "SKIPPED_DISTRIBUTED_LOCK"
+                    )
+                    self._last_error = None
+
+                    return {
+                        "action": (
+                            "SKIPPED_DISTRIBUTED_LOCK"
+                        ),
+                        "reason": (
+                            "Another scheduler instance "
+                            "holds the distributed lock."
+                        ),
+                        "cycle": None,
+                        "state": (
+                            self._serialize_state()
+                        ),
+                    }
+
             state = (
                 self._state_repository
                 .get_or_create()
@@ -207,7 +243,15 @@ class SafeSchedulerRunner:
                 "state": self._serialize_state(),
             }
         finally:
-            self._lock.release()
+            try:
+                if (
+                    distributed_lock_acquired
+                    and self._distributed_lock
+                    is not None
+                ):
+                    self._distributed_lock.release()
+            finally:
+                self._lock.release()
 
     def status(self) -> SchedulerRunnerStatus:
         return SchedulerRunnerStatus(
