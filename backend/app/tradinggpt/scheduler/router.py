@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -17,6 +23,10 @@ from .schemas import (
     SafeSchedulerCycleResponse,
 )
 from .service import SafeSchedulerCycleService
+from .journal_service import (
+    JournaledSchedulerCycleService,
+)
+from .repository import SchedulerCycleRepository
 
 
 router = APIRouter(
@@ -95,8 +105,12 @@ def run_scheduler_cycle(
             mode="json"
         )
 
-    service = SafeSchedulerCycleService(
+    cycle_service = SafeSchedulerCycleService(
         execute_callback=execute_callback,
+    )
+    service = JournaledSchedulerCycleService(
+        cycle_service=cycle_service,
+        repository=SchedulerCycleRepository(db),
     )
 
     try:
@@ -111,4 +125,69 @@ def run_scheduler_cycle(
     return (
         SafeSchedulerCycleResponse
         .model_validate(result)
+    )
+
+
+@router.get(
+    "/cycles",
+    response_model=list[SafeSchedulerCycleResponse],
+)
+def list_scheduler_cycles(
+    cycle_status: str | None = Query(
+        default=None,
+        alias="status",
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=1000,
+    ),
+    db: Session = Depends(get_db),
+) -> list[SafeSchedulerCycleResponse]:
+    service = JournaledSchedulerCycleService(
+        cycle_service=SafeSchedulerCycleService(
+            execute_callback=lambda dry_run: {}
+        ),
+        repository=SchedulerCycleRepository(db),
+    )
+
+    return [
+        SafeSchedulerCycleResponse.model_validate(
+            item
+        )
+        for item in service.list_recent(
+            status=cycle_status,
+            limit=limit,
+        )
+    ]
+
+
+@router.get(
+    "/cycles/{cycle_id}",
+    response_model=SafeSchedulerCycleResponse,
+)
+def get_scheduler_cycle(
+    cycle_id: int,
+    db: Session = Depends(get_db),
+) -> SafeSchedulerCycleResponse:
+    service = JournaledSchedulerCycleService(
+        cycle_service=SafeSchedulerCycleService(
+            execute_callback=lambda dry_run: {}
+        ),
+        repository=SchedulerCycleRepository(db),
+    )
+
+    result = service.get(cycle_id)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "Scheduler cycle not found: "
+                f"{cycle_id}."
+            ),
+        )
+
+    return SafeSchedulerCycleResponse.model_validate(
+        result
     )

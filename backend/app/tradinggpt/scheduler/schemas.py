@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import (
@@ -77,3 +78,7 @@ class SafeSchedulerCycleResponse(BaseModel):
     risk: dict[str, Any]
     execution: dict[str, Any] | None
     reason: str | None
+    cycle_id: int | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error_message: str | None = None
