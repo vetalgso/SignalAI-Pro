@@ -9,6 +9,7 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.database.session import get_db
 from app.tradinggpt.engine.router import (
     analyze_and_execute,
@@ -32,6 +33,7 @@ from .schemas import (
     SchedulerPayloadResponse,
     SchedulerPayloadUpsertRequest,
     SchedulerBackgroundLoopStatusResponse,
+    SchedulerObservabilityResponse,
 )
 from .service import SafeSchedulerCycleService
 from .journal_service import (
@@ -44,6 +46,9 @@ from .state_repository import (
 from .state_service import SchedulerStateService
 from .payload_repository import (
     SchedulerPayloadRepository,
+)
+from .observability import (
+    SchedulerObservabilityService,
 )
 from .payload_service import SchedulerPayloadService
 from .runner_registry import (
@@ -379,4 +384,46 @@ def get_scheduler_background_status(
             .status()
             .to_dict()
         )
+    )
+
+
+@router.get(
+    "/observability",
+    response_model=SchedulerObservabilityResponse,
+)
+def get_scheduler_observability(
+    db: Session = Depends(get_db),
+) -> SchedulerObservabilityResponse:
+    service = SchedulerObservabilityService(
+        state_service=SchedulerStateService(
+            SchedulerStateRepository(db)
+        ),
+        payload_service=SchedulerPayloadService(
+            SchedulerPayloadRepository(db)
+        ),
+        cycle_repository=SchedulerCycleRepository(
+            db
+        ),
+        background_status_provider=lambda: (
+            scheduler_background_loop
+            .status()
+            .to_dict()
+        ),
+        background_loop_enabled=(
+            settings.scheduler_background_loop_enabled
+        ),
+        distributed_lock_enabled=(
+            settings
+            .scheduler_distributed_lock_enabled
+        ),
+        distributed_lock_backend=(
+            "postgresql_advisory"
+        ),
+        advisory_lock_key=(
+            settings.scheduler_advisory_lock_key
+        ),
+    )
+
+    return SchedulerObservabilityResponse.model_validate(
+        service.get()
     )

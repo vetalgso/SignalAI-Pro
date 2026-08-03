@@ -9,6 +9,9 @@ from .distributed_lock import (
 from .journal_service import (
     JournaledSchedulerCycleService,
 )
+from .observability import (
+    SchedulerObservabilityService,
+)
 from .payload_repository import (
     SchedulerPayloadRepository,
 )
@@ -34,6 +37,7 @@ __all__ = [
     "SafeSchedulerRunner",
     "SchedulerCycleRepository",
     "SchedulerDistributedLock",
+    "SchedulerObservabilityService",
     "SchedulerPayloadRepository",
     "SchedulerPayloadService",
     "SchedulerStateRepository",

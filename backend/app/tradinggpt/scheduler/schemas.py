@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -174,3 +174,61 @@ class SchedulerBackgroundLoopStatusResponse(BaseModel):
     last_tick_finished_at: datetime | None
     last_action: str | None
     last_error: str | None
+
+
+class SchedulerPayloadSummaryResponse(BaseModel):
+    configured: bool
+    dry_run: bool | None
+    exchange: str | None
+    market_type: str | None
+    symbol: str | None
+    idempotency_key: str | None
+    updated_at: datetime
+
+
+class SchedulerDistributedLockResponse(BaseModel):
+    enabled: bool
+    backend: str
+    lock_key: int | None
+
+
+class SchedulerLastCycleSummaryResponse(BaseModel):
+    cycle_id: int
+    status: str
+    dry_run: bool
+    started_at: datetime
+    finished_at: datetime | None
+    error_message: str | None
+    execution_action: str | None
+    idempotency_key: str | None
+    exchange: str | None
+    market_type: str | None
+    symbol: str | None
+    replayed: bool | None
+    simulated: bool | None
+
+
+class SchedulerObservabilityResponse(BaseModel):
+    generated_at: datetime
+    status: Literal[
+        "ACTIVE",
+        "STANDBY",
+        "DEGRADED",
+    ]
+    healthy: bool
+    execution_ready: bool
+    next_run_due: bool
+    seconds_until_next_run: int | None
+    blockers: list[str]
+    warnings: list[str]
+    state: SchedulerStateResponse
+    payload: SchedulerPayloadSummaryResponse
+    background: (
+        SchedulerBackgroundLoopStatusResponse
+    )
+    distributed_lock: (
+        SchedulerDistributedLockResponse
+    )
+    last_cycle: (
+        SchedulerLastCycleSummaryResponse | None
+    )
