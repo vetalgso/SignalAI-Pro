@@ -28,6 +28,7 @@ class TradingPosition(Base):
     journal_order_id: Mapped[int | None] = mapped_column(
         Integer,
         index=True,
+        unique=True,
         nullable=True,
     )
 

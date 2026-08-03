@@ -15,6 +15,9 @@ from app.tradinggpt.orders.journal_service import (
 from app.tradinggpt.orders.repository import (
     TradingOrderRepository,
 )
+from app.tradinggpt.positions.repository import (
+    TradingPositionRepository,
+)
 
 from .execution_service import (
     AnalyzeAndExecuteService,
@@ -103,6 +106,9 @@ def analyze_and_execute(
         execution_service=execution_service,
         portfolio_sync_service=(
             portfolio_sync_service
+        ),
+        position_repository=(
+            TradingPositionRepository(db)
         ),
     )
     pipeline_service = AnalyzeAndExecuteService(

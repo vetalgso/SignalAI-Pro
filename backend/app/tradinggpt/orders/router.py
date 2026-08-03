@@ -10,6 +10,10 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
+from app.tradinggpt.positions.repository import (
+    TradingPositionRepository,
+)
+
 from app.tradinggpt.exchanges import (
     create_order_execution_service,
     create_portfolio_sync_service,
@@ -64,6 +68,9 @@ def _journal_service(
         execution_service=order_execution_service,
         portfolio_sync_service=(
             portfolio_sync_service
+        ),
+        position_repository=(
+            TradingPositionRepository(db)
         ),
     )
 

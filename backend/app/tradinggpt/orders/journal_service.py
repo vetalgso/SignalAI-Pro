@@ -6,6 +6,9 @@ from app.models.trading_order import TradingOrder
 from app.tradinggpt.portfolio_sync.service import (
     PortfolioSyncService,
 )
+from app.tradinggpt.positions.repository import (
+    TradingPositionRepository,
+)
 
 from .execution_models import OrderExecutionResult
 from .execution_service import (
@@ -27,11 +30,17 @@ class JournaledOrderService:
         portfolio_sync_service: (
             PortfolioSyncService | None
         ) = None,
+        position_repository: (
+            TradingPositionRepository | None
+        ) = None,
     ) -> None:
         self._repository = repository
         self._execution_service = execution_service
         self._portfolio_sync_service = (
             portfolio_sync_service
+        )
+        self._position_repository = (
+            position_repository
         )
 
     def execute(
@@ -145,6 +154,13 @@ class JournaledOrderService:
             execution_status=result.status,
         )
 
+        self._attach_managed_position(
+            execution_payload=execution_payload,
+            order=order,
+            intent=normalized_intent,
+            result=result,
+        )
+
         self._repository.apply_execution(
             order,
             status=result.status,
@@ -170,6 +186,135 @@ class JournaledOrderService:
         self._repository._session.refresh(order)
 
         return self.serialize(order)
+
+    def _attach_managed_position(
+        self,
+        *,
+        execution_payload: dict[str, object],
+        order: TradingOrder,
+        intent: OrderIntent,
+        result: OrderExecutionResult,
+    ) -> None:
+        if result.status != "FILLED":
+            execution_payload["managed_position"] = {
+                "status": "SKIPPED",
+                "reason": (
+                    "Position is created only for "
+                    "fully filled orders."
+                ),
+            }
+            return
+
+        if intent.reduce_only:
+            execution_payload["managed_position"] = {
+                "status": "SKIPPED",
+                "reason": (
+                    "Reduce-only execution does not "
+                    "open a new position."
+                ),
+            }
+            return
+
+        if result.filled_quantity <= 0:
+            execution_payload["managed_position"] = {
+                "status": "SKIPPED",
+                "reason": "Filled quantity is zero.",
+            }
+            return
+
+        entry_price = (
+            result.average_price
+            if result.average_price is not None
+            else intent.reference_price
+        )
+
+        if entry_price is None or entry_price <= 0:
+            execution_payload["managed_position"] = {
+                "status": "SKIPPED",
+                "reason": (
+                    "A valid execution price is "
+                    "required to create a position."
+                ),
+            }
+            return
+
+        if self._position_repository is None:
+            execution_payload["managed_position"] = {
+                "status": "NOT_CONFIGURED",
+            }
+            return
+
+        existing = (
+            self._position_repository
+            .get_by_journal_order_id(order.id)
+        )
+
+        if existing is not None:
+            execution_payload["managed_position"] = {
+                "status": "EXISTS",
+                "position_id": existing.id,
+                "journal_order_id": order.id,
+            }
+            return
+
+        position = self._position_repository.create(
+            journal_order_id=order.id,
+            exchange=intent.exchange,
+            market_type=intent.market_type,
+            symbol=intent.symbol,
+            side=(
+                "LONG"
+                if intent.side == "BUY"
+                else "SHORT"
+            ),
+            quantity=result.filled_quantity,
+            entry_price=entry_price,
+            stop_loss=intent.stop_loss,
+            take_profit_1=intent.take_profit_1,
+            take_profit_2=intent.take_profit_2,
+            metadata_payload={
+                "created_from": (
+                    "journaled_order_execution"
+                ),
+                "client_order_id": (
+                    result.client_order_id
+                ),
+                "exchange_order_id": (
+                    result.exchange_order_id
+                ),
+                "simulated": result.simulated,
+            },
+        )
+
+        execution_payload["managed_position"] = {
+            "status": "CREATED",
+            "position_id": position.id,
+            "journal_order_id": order.id,
+            "side": position.side,
+            "quantity": float(
+                position.initial_quantity
+            ),
+            "entry_price": float(
+                position.entry_price
+            ),
+            "stop_loss": (
+                float(position.stop_loss)
+                if position.stop_loss is not None
+                else None
+            ),
+            "take_profit_1": (
+                float(position.take_profit_1)
+                if position.take_profit_1
+                is not None
+                else None
+            ),
+            "take_profit_2": (
+                float(position.take_profit_2)
+                if position.take_profit_2
+                is not None
+                else None
+            ),
+        }
 
     def _attach_portfolio_snapshot(
         self,

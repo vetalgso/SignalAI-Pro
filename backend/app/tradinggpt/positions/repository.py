@@ -81,6 +81,17 @@ class TradingPositionRepository:
             position_id,
         )
 
+    def get_by_journal_order_id(
+        self,
+        journal_order_id: int,
+    ) -> TradingPosition | None:
+        statement = select(TradingPosition).where(
+            TradingPosition.journal_order_id
+            == journal_order_id
+        )
+
+        return self._session.scalar(statement)
+
     def list_positions(
         self,
         *,
