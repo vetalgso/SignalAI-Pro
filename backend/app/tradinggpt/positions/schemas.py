@@ -192,3 +192,30 @@ class PositionResponse(BaseModel):
     actions: list[str] = Field(
         default_factory=list
     )
+
+
+class PositionMonitorRequest(BaseModel):
+    prices: dict[str, float] = Field(
+        min_length=1
+    )
+    exchange: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=24,
+    )
+
+
+class PositionMonitorResponse(BaseModel):
+    checked_positions: int
+    updated_positions: int
+    missing_symbols: list[str]
+    results: list[PositionResponse]
+
+
+class PositionEventResponse(BaseModel):
+    id: int
+    position_id: int
+    event_type: str
+    price: float | None
+    payload: dict[str, Any]
+    created_at: datetime

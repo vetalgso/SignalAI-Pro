@@ -11,12 +11,19 @@ from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 
+from .event_repository import (
+    PositionEventRepository,
+)
+from .monitor import PositionMonitorService
 from .repository import TradingPositionRepository
 from .schemas import (
     PositionCloseRequest,
     PositionCreateRequest,
     PositionPriceUpdateRequest,
     PositionResponse,
+    PositionMonitorRequest,
+    PositionMonitorResponse,
+    PositionEventResponse,
 )
 from .service import PositionService
 
@@ -176,3 +183,118 @@ def close_position(
         )
 
     return PositionResponse.model_validate(result)
+
+
+@router.post(
+    "/monitor",
+    response_model=PositionMonitorResponse,
+)
+def monitor_positions(
+    request: PositionMonitorRequest,
+    db: Session = Depends(get_db),
+) -> PositionMonitorResponse:
+    service = PositionMonitorService(
+        position_repository=(
+            TradingPositionRepository(db)
+        ),
+        event_repository=(
+            PositionEventRepository(db)
+        ),
+    )
+
+    try:
+        result = service.monitor(
+            prices=request.prices,
+            exchange=request.exchange,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    return PositionMonitorResponse.model_validate(
+        result
+    )
+
+
+@router.get(
+    "/events",
+    response_model=list[PositionEventResponse],
+)
+def list_position_events(
+    position_id: int | None = Query(
+        default=None,
+        ge=1,
+    ),
+    event_type: str | None = Query(
+        default=None,
+    ),
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=2000,
+    ),
+    db: Session = Depends(get_db),
+) -> list[PositionEventResponse]:
+    service = PositionMonitorService(
+        position_repository=(
+            TradingPositionRepository(db)
+        ),
+        event_repository=(
+            PositionEventRepository(db)
+        ),
+    )
+
+    results = service.list_events(
+        position_id=position_id,
+        event_type=event_type,
+        limit=limit,
+    )
+
+    return [
+        PositionEventResponse.model_validate(
+            result
+        )
+        for result in results
+    ]
+
+
+@router.get(
+    "/{position_id}/events",
+    response_model=list[PositionEventResponse],
+)
+def list_events_for_position(
+    position_id: int,
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=2000,
+    ),
+    db: Session = Depends(get_db),
+) -> list[PositionEventResponse]:
+    service = PositionMonitorService(
+        position_repository=(
+            TradingPositionRepository(db)
+        ),
+        event_repository=(
+            PositionEventRepository(db)
+        ),
+    )
+
+    results = service.list_events(
+        position_id=position_id,
+        event_type=None,
+        limit=limit,
+    )
+
+    return [
+        PositionEventResponse.model_validate(
+            result
+        )
+        for result in results
+    ]
