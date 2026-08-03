@@ -12,6 +12,10 @@ PositionStatus = Literal[
     "PARTIALLY_CLOSED",
     "CLOSED",
 ]
+PositionPriceSource = Literal[
+    "MANUAL",
+    "BINANCE_PUBLIC",
+]
 
 
 class PositionCreateRequest(BaseModel):
@@ -49,6 +53,12 @@ class PositionCreateRequest(BaseModel):
     journal_order_id: int | None = Field(
         default=None,
         ge=1,
+    )
+    price_source: PositionPriceSource = "MANUAL"
+    max_price_deviation_percent: float = Field(
+        default=25.0,
+        gt=0,
+        le=1000,
     )
     tp1_close_percent: float = Field(
         default=50.0,
@@ -162,6 +172,8 @@ class PositionResponse(BaseModel):
     symbol: str
     side: PositionSide
     status: PositionStatus
+    price_source: PositionPriceSource
+    max_price_deviation_percent: float
 
     initial_quantity: float
     remaining_quantity: float
@@ -235,3 +247,6 @@ class LivePositionMonitorResponse(
     requested_symbols: list[str]
     prices: dict[str, float]
     price_errors: dict[str, str]
+    rejected_positions: list[
+        dict[str, Any]
+    ]

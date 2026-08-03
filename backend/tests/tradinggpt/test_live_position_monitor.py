@@ -100,6 +100,8 @@ def create_long(
         stop_loss=90.0,
         take_profit_1=110.0,
         take_profit_2=120.0,
+        price_source="BINANCE_PUBLIC",
+        max_price_deviation_percent=1000.0,
     )
 
 

@@ -56,6 +56,19 @@ class TradingPosition(Base):
         nullable=False,
         default="OPEN",
     )
+    price_source: Mapped[str] = mapped_column(
+        String(32),
+        index=True,
+        nullable=False,
+        default="MANUAL",
+    )
+    max_price_deviation_percent: Mapped[
+        Decimal
+    ] = mapped_column(
+        Numeric(10, 4),
+        nullable=False,
+        default=Decimal("25"),
+    )
 
     initial_quantity: Mapped[Decimal] = mapped_column(
         Numeric(30, 12),

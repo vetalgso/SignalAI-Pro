@@ -30,6 +30,8 @@ class TradingPositionRepository:
         take_profit_2: float | None,
         journal_order_id: int | None = None,
         tp1_close_percent: float = 50.0,
+        price_source: str = "MANUAL",
+        max_price_deviation_percent: float = 25.0,
         metadata_payload: dict[str, Any] | None = None,
     ) -> TradingPosition:
         position = TradingPosition(
@@ -39,6 +41,10 @@ class TradingPositionRepository:
             symbol=symbol.upper(),
             side=side.upper(),
             status="OPEN",
+            price_source=price_source.upper(),
+            max_price_deviation_percent=Decimal(
+                str(max_price_deviation_percent)
+            ),
             initial_quantity=Decimal(str(quantity)),
             remaining_quantity=Decimal(str(quantity)),
             closed_quantity=Decimal("0"),
@@ -133,6 +139,7 @@ class TradingPositionRepository:
         *,
         exchange: str | None = None,
         symbol: str | None = None,
+        price_source: str | None = None,
     ) -> list[TradingPosition]:
         statement = select(TradingPosition).where(
             TradingPosition.status.in_(
@@ -150,6 +157,12 @@ class TradingPositionRepository:
             statement = statement.where(
                 TradingPosition.symbol
                 == symbol.upper()
+            )
+
+        if price_source is not None:
+            statement = statement.where(
+                TradingPosition.price_source
+                == price_source.upper()
             )
 
         statement = statement.order_by(

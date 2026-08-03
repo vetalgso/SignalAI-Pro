@@ -272,6 +272,8 @@ class JournaledOrderService:
             stop_loss=intent.stop_loss,
             take_profit_1=intent.take_profit_1,
             take_profit_2=intent.take_profit_2,
+            price_source="BINANCE_PUBLIC",
+            max_price_deviation_percent=25.0,
             metadata_payload={
                 "created_from": (
                     "journaled_order_execution"

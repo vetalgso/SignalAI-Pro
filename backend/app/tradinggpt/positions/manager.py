@@ -284,6 +284,10 @@ class PositionManager:
             "symbol": position.symbol,
             "side": position.side,
             "status": position.status,
+            "price_source": position.price_source,
+            "max_price_deviation_percent": float(
+                position.max_price_deviation_percent
+            ),
             "initial_quantity": float(
                 position.initial_quantity
             ),

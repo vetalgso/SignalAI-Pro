@@ -27,6 +27,7 @@ class PositionMonitorService:
         *,
         prices: Mapping[str, float],
         exchange: str | None = None,
+        price_source: str | None = None,
     ) -> dict[str, object]:
         normalized_prices = {
             symbol.upper(): float(price)
@@ -43,6 +44,7 @@ class PositionMonitorService:
         positions = (
             self._position_repository.list_active(
                 exchange=exchange,
+                price_source=price_source,
             )
         )
 

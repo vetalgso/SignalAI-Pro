@@ -36,6 +36,10 @@ class PositionService:
             tp1_close_percent=(
                 request.tp1_close_percent
             ),
+            price_source=request.price_source,
+            max_price_deviation_percent=(
+                request.max_price_deviation_percent
+            ),
             metadata_payload=(
                 request.metadata_payload
             ),
