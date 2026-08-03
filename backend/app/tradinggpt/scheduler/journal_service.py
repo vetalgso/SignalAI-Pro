@@ -4,6 +4,9 @@ from typing import Any
 
 from .repository import SchedulerCycleRepository
 from .service import SafeSchedulerCycleService
+from .state_repository import (
+    SchedulerStateRepository,
+)
 
 
 class JournaledSchedulerCycleService:
@@ -12,9 +15,13 @@ class JournaledSchedulerCycleService:
         *,
         cycle_service: SafeSchedulerCycleService,
         repository: SchedulerCycleRepository,
+        state_repository: (
+            SchedulerStateRepository | None
+        ) = None,
     ) -> None:
         self._cycle_service = cycle_service
         self._repository = repository
+        self._state_repository = state_repository
 
     def run(
         self,
@@ -45,6 +52,8 @@ class JournaledSchedulerCycleService:
                 ),
             )
 
+            self._record_runtime_state(stored)
+
             return {
                 **result,
                 "cycle_id": stored.id,
@@ -61,6 +70,8 @@ class JournaledSchedulerCycleService:
                 error_message=str(exc),
             )
 
+            self._record_runtime_state(stored)
+
             return {
                 "status": "FAILED",
                 "dry_run": True,
@@ -74,6 +85,19 @@ class JournaledSchedulerCycleService:
                 "finished_at": stored.finished_at,
                 "error_message": str(exc),
             }
+
+    def _record_runtime_state(
+        self,
+        cycle: object,
+    ) -> None:
+        if self._state_repository is None:
+            return
+
+        self._state_repository.record_cycle(
+            cycle_id=cycle.id,
+            cycle_status=cycle.status,
+            finished_at=cycle.finished_at,
+        )
 
     def get(
         self,

@@ -82,3 +82,37 @@ class SafeSchedulerCycleResponse(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error_message: str | None = None
+
+
+class SchedulerStateUpdateRequest(BaseModel):
+    enabled: bool | None = None
+    interval_seconds: int | None = Field(
+        default=None,
+        ge=60,
+        le=86400,
+    )
+
+    @model_validator(mode="after")
+    def require_change(
+        self,
+    ) -> "SchedulerStateUpdateRequest":
+        if (
+            self.enabled is None
+            and self.interval_seconds is None
+        ):
+            raise ValueError(
+                "At least one scheduler state "
+                "field must be provided."
+            )
+
+        return self
+
+
+class SchedulerStateResponse(BaseModel):
+    enabled: bool
+    interval_seconds: int
+    last_run_at: datetime | None
+    next_run_at: datetime | None
+    last_cycle_id: int | None
+    consecutive_failures: int
+    updated_at: datetime

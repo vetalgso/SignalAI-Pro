@@ -21,12 +21,18 @@ from app.tradinggpt.risk.models import (
 from .schemas import (
     SafeSchedulerCycleRequest,
     SafeSchedulerCycleResponse,
+    SchedulerStateResponse,
+    SchedulerStateUpdateRequest,
 )
 from .service import SafeSchedulerCycleService
 from .journal_service import (
     JournaledSchedulerCycleService,
 )
 from .repository import SchedulerCycleRepository
+from .state_repository import (
+    SchedulerStateRepository,
+)
+from .state_service import SchedulerStateService
 
 
 router = APIRouter(
@@ -111,6 +117,9 @@ def run_scheduler_cycle(
     service = JournaledSchedulerCycleService(
         cycle_service=cycle_service,
         repository=SchedulerCycleRepository(db),
+        state_repository=(
+            SchedulerStateRepository(db)
+        ),
     )
 
     try:
@@ -189,5 +198,52 @@ def get_scheduler_cycle(
         )
 
     return SafeSchedulerCycleResponse.model_validate(
+        result
+    )
+
+
+@router.get(
+    "/state",
+    response_model=SchedulerStateResponse,
+)
+def get_scheduler_state(
+    db: Session = Depends(get_db),
+) -> SchedulerStateResponse:
+    service = SchedulerStateService(
+        SchedulerStateRepository(db)
+    )
+
+    return SchedulerStateResponse.model_validate(
+        service.get()
+    )
+
+
+@router.patch(
+    "/state",
+    response_model=SchedulerStateResponse,
+)
+def update_scheduler_state(
+    request: SchedulerStateUpdateRequest,
+    db: Session = Depends(get_db),
+) -> SchedulerStateResponse:
+    service = SchedulerStateService(
+        SchedulerStateRepository(db)
+    )
+
+    try:
+        result = service.update(
+            enabled=request.enabled,
+            interval_seconds=(
+                request.interval_seconds
+            ),
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return SchedulerStateResponse.model_validate(
         result
     )
