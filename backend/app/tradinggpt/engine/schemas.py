@@ -277,3 +277,27 @@ class TradingGPTAnalyzeResponse(BaseModel):
     risk_decision: dict[str, object] | None = None
     decision: dict[str, object] | None = None
     order_intent: dict[str, object] | None = None
+
+
+class TradingGPTAnalyzeAndExecuteRequest(
+    TradingGPTAnalyzeRequest
+):
+    idempotency_key: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+    )
+    dry_run: bool = True
+
+
+class TradingGPTAnalyzeAndExecuteResponse(BaseModel):
+    action: Literal[
+        "SKIPPED",
+        "DRY_RUN",
+        "EXECUTED",
+        "REPLAYED",
+    ]
+    reason: str | None = None
+    analysis: TradingGPTAnalyzeResponse
+    journal: dict[str, object] | None = None
+
