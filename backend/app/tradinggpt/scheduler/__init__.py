@@ -1,3 +1,7 @@
+from .background_loop import (
+    SchedulerBackgroundLoop,
+    SchedulerBackgroundLoopStatus,
+)
 from .journal_service import (
     JournaledSchedulerCycleService,
 )
@@ -16,6 +20,8 @@ from .state_service import SchedulerStateService
 __all__ = [
     "JournaledSchedulerCycleService",
     "SafeSchedulerCycleService",
+    "SchedulerBackgroundLoop",
+    "SchedulerBackgroundLoopStatus",
     "SafeSchedulerRunner",
     "SchedulerCycleRepository",
     "SchedulerPayloadRepository",

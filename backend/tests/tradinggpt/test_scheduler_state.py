@@ -155,3 +155,30 @@ def test_failed_cycles_increment_counter() -> None:
 
         assert state.consecutive_failures == 2
         assert state.last_cycle_id == 2
+
+
+def test_three_failed_cycles_disable_scheduler() -> None:
+    with build_session() as session:
+        repository = SchedulerStateRepository(
+            session
+        )
+        repository.update(
+            enabled=True,
+            interval_seconds=60,
+        )
+
+        state = None
+
+        for cycle_id in range(1, 4):
+            state = repository.record_cycle(
+                cycle_id=cycle_id,
+                cycle_status="FAILED",
+                finished_at=datetime.now(
+                    timezone.utc
+                ),
+            )
+
+        assert state is not None
+        assert state.consecutive_failures == 3
+        assert state.enabled is False
+        assert state.next_run_at is None

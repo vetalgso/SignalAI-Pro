@@ -18,6 +18,9 @@ from app.tradinggpt.risk.models import (
     RiskLimits,
 )
 
+from .background_registry import (
+    scheduler_background_loop,
+)
 from .schemas import (
     SafeSchedulerCycleRequest,
     SafeSchedulerCycleResponse,
@@ -28,6 +31,7 @@ from .schemas import (
     SchedulerRunnerTickResponse,
     SchedulerPayloadResponse,
     SchedulerPayloadUpsertRequest,
+    SchedulerBackgroundLoopStatusResponse,
 )
 from .service import SafeSchedulerCycleService
 from .journal_service import (
@@ -357,4 +361,22 @@ def clear_scheduler_payload(
 
     return SchedulerPayloadResponse.model_validate(
         service.clear()
+    )
+
+
+@router.get(
+    "/runner/background/status",
+    response_model=(
+        SchedulerBackgroundLoopStatusResponse
+    ),
+)
+def get_scheduler_background_status(
+) -> SchedulerBackgroundLoopStatusResponse:
+    return (
+        SchedulerBackgroundLoopStatusResponse
+        .model_validate(
+            scheduler_background_loop
+            .status()
+            .to_dict()
+        )
     )

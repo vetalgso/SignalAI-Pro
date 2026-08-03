@@ -31,12 +31,14 @@ services:
       DATABASE_URL: postgresql+psycopg2://signalai:signalai@db:5432/signalai
       REDIS_URL: redis://redis:6379/0
       APP_VERSION: 2.0.0-rc.1
+      SCHEDULER_BACKGROUND_LOOP_ENABLED: "${SCHEDULER_BACKGROUND_LOOP_ENABLED:-true}"
+      SCHEDULER_BACKGROUND_POLL_SECONDS: "${SCHEDULER_BACKGROUND_POLL_SECONDS:-5}"
       ENABLE_BINANCE_EXECUTION: "${ENABLE_BINANCE_EXECUTION:-false}"
       BINANCE_TESTNET: "${BINANCE_TESTNET:-true}"
       ENABLE_REAL_TRADING: "${ENABLE_REAL_TRADING:-false}"
       BINANCE_TESTNET_API_KEY: "${BINANCE_TESTNET_API_KEY:-}"
       BINANCE_TESTNET_SECRET_KEY: "${BINANCE_TESTNET_SECRET_KEY:-}"
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     volumes: ["./backend:/app"]
     ports: ["8000:8000"]
     depends_on:

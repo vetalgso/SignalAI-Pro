@@ -40,10 +40,15 @@ class SafeSchedulerRunner:
             [],
             dict[str, Any] | None,
         ],
+        execution_lock: Any | None = None,
     ) -> None:
         self._state_repository = state_repository
         self._cycle_callback = cycle_callback
-        self._lock = threading.Lock()
+        self._lock = (
+            execution_lock
+            if execution_lock is not None
+            else threading.Lock()
+        )
         self._last_tick_at: datetime | None = None
         self._last_action: str | None = None
         self._last_error: str | None = None
@@ -170,6 +175,26 @@ class SafeSchedulerRunner:
                     "state": self._serialize_state(
                         updated
                     ),
+                }
+
+            if (
+                str(cycle.get("status", "")).upper()
+                == "FAILED"
+            ):
+                reason = (
+                    cycle.get("error_message")
+                    or cycle.get("reason")
+                    or "Scheduler cycle failed."
+                )
+
+                self._last_action = "FAILED"
+                self._last_error = str(reason)
+
+                return {
+                    "action": "FAILED",
+                    "reason": str(reason),
+                    "cycle": cycle,
+                    "state": self._serialize_state(),
                 }
 
             self._last_action = "EXECUTED"

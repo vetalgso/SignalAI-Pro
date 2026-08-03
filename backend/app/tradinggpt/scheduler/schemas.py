@@ -160,3 +160,17 @@ class SchedulerPayloadResponse(BaseModel):
     )
     analysis_payload: dict[str, Any] | None
     updated_at: datetime
+
+
+class SchedulerBackgroundLoopStatusResponse(BaseModel):
+    running: bool
+    stopping: bool
+    poll_interval_seconds: float
+    iterations: int
+    failed_ticks: int
+    started_at: datetime | None
+    stopped_at: datetime | None
+    last_tick_started_at: datetime | None
+    last_tick_finished_at: datetime | None
+    last_action: str | None
+    last_error: str | None

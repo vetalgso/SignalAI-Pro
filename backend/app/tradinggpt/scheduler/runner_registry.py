@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from sqlalchemy.orm import Session
 
 from .payload_executor import (
@@ -9,6 +11,10 @@ from .runner import SafeSchedulerRunner
 from .state_repository import (
     SchedulerStateRepository,
 )
+
+
+
+_scheduler_execution_lock = threading.Lock()
 
 
 def create_scheduler_runner(
@@ -22,5 +28,8 @@ def create_scheduler_runner(
             execute_persisted_scheduler_payload(
                 session
             )
+        ),
+        execution_lock=(
+            _scheduler_execution_lock
         ),
     )

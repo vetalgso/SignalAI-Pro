@@ -13,6 +13,7 @@ from app.models.scheduler_state import SchedulerState
 
 class SchedulerStateRepository:
     STATE_ID = 1
+    FAILURE_DISABLE_THRESHOLD = 3
 
     def __init__(
         self,
@@ -98,6 +99,12 @@ class SchedulerStateRepository:
 
         if cycle_status == "FAILED":
             state.consecutive_failures += 1
+
+            if (
+                state.consecutive_failures
+                >= self.FAILURE_DISABLE_THRESHOLD
+            ):
+                state.enabled = False
         else:
             state.consecutive_failures = 0
 

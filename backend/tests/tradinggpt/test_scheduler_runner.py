@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from datetime import (
     datetime,
     timedelta,
@@ -238,3 +240,71 @@ def test_status_tracks_last_tick() -> None:
         assert status.last_action == (
             "SKIPPED_DISABLED"
         )
+
+
+def test_shared_execution_lock_blocks_tick() -> None:
+    with build_session() as session:
+        repository = SchedulerStateRepository(
+            session
+        )
+        execution_lock = threading.Lock()
+        execution_lock.acquire()
+
+        runner = SafeSchedulerRunner(
+            state_repository=repository,
+            cycle_callback=lambda: {
+                "status": "COMPLETED"
+            },
+            execution_lock=execution_lock,
+        )
+
+        try:
+            result = runner.tick(force=True)
+        finally:
+            execution_lock.release()
+
+        assert result["action"] == "SKIPPED_BUSY"
+        assert result["cycle"] is None
+
+
+def test_failed_cycle_is_reported_as_failed() -> None:
+    with build_session() as session:
+        repository = SchedulerStateRepository(
+            session
+        )
+
+        def callback():
+            repository.record_cycle(
+                cycle_id=99,
+                cycle_status="FAILED",
+                finished_at=datetime.now(
+                    timezone.utc
+                ),
+            )
+
+            return {
+                "status": "FAILED",
+                "reason": (
+                    "Scheduler cycle failed."
+                ),
+                "error_message": (
+                    "Synthetic cycle failure."
+                ),
+            }
+
+        runner = SafeSchedulerRunner(
+            state_repository=repository,
+            cycle_callback=callback,
+        )
+
+        result = runner.tick(force=True)
+
+        assert result["action"] == "FAILED"
+        assert result["cycle"]["status"] == "FAILED"
+        assert (
+            result["reason"]
+            == "Synthetic cycle failure."
+        )
+        assert result["state"][
+            "consecutive_failures"
+        ] == 1

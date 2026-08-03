@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from app.tradinggpt.router import router as tradinggpt_router
 from app.tradinggpt.engine.router import router as tradinggpt_engine_router
 from app.tradinggpt.orders.router import router as tradinggpt_orders_router
@@ -5,6 +8,9 @@ from app.tradinggpt.portfolio_sync.router import router as tradinggpt_portfolio_
 from app.tradinggpt.positions.router import router as tradinggpt_positions_router
 from app.tradinggpt.risk.router import router as tradinggpt_risk_router
 from app.tradinggpt.scheduler.router import router as tradinggpt_scheduler_router
+from app.tradinggpt.scheduler.background_registry import (
+    scheduler_background_loop,
+)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,10 +32,32 @@ from app.api import (
 )
 from app.core.config import settings
 
+
+
+
+@asynccontextmanager
+async def lifespan(
+    _: FastAPI,
+) -> AsyncIterator[None]:
+    loop_started = False
+
+    if settings.scheduler_background_loop_enabled:
+        loop_started = await (
+            scheduler_background_loop.start()
+        )
+
+    try:
+        yield
+    finally:
+        if loop_started:
+            await scheduler_background_loop.stop()
+
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Backend API for SignalAI Pro.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
