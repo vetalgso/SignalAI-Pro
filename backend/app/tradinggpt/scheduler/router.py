@@ -7,6 +7,7 @@ from fastapi import (
     Query,
     status,
 )
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -34,6 +35,7 @@ from .schemas import (
     SchedulerPayloadUpsertRequest,
     SchedulerBackgroundLoopStatusResponse,
     SchedulerObservabilityResponse,
+    SchedulerReadinessResponse,
 )
 from .service import SafeSchedulerCycleService
 from .journal_service import (
@@ -50,6 +52,9 @@ from .payload_repository import (
 from .observability import (
     SchedulerObservabilityService,
 )
+from .readiness import (
+    SchedulerReadinessService,
+)
 from .payload_service import SchedulerPayloadService
 from .runner_registry import (
     create_scheduler_runner,
@@ -60,6 +65,40 @@ router = APIRouter(
     prefix="/scheduler",
     tags=["TradingGPT Scheduler"],
 )
+
+
+def _create_observability_service(
+    db: Session,
+) -> SchedulerObservabilityService:
+    return SchedulerObservabilityService(
+        state_service=SchedulerStateService(
+            SchedulerStateRepository(db)
+        ),
+        payload_service=SchedulerPayloadService(
+            SchedulerPayloadRepository(db)
+        ),
+        cycle_repository=SchedulerCycleRepository(
+            db
+        ),
+        background_status_provider=lambda: (
+            scheduler_background_loop
+            .status()
+            .to_dict()
+        ),
+        background_loop_enabled=(
+            settings.scheduler_background_loop_enabled
+        ),
+        distributed_lock_enabled=(
+            settings
+            .scheduler_distributed_lock_enabled
+        ),
+        distributed_lock_backend=(
+            "postgresql_advisory"
+        ),
+        advisory_lock_key=(
+            settings.scheduler_advisory_lock_key
+        ),
+    )
 
 
 @router.post(
@@ -394,36 +433,48 @@ def get_scheduler_background_status(
 def get_scheduler_observability(
     db: Session = Depends(get_db),
 ) -> SchedulerObservabilityResponse:
-    service = SchedulerObservabilityService(
-        state_service=SchedulerStateService(
-            SchedulerStateRepository(db)
-        ),
-        payload_service=SchedulerPayloadService(
-            SchedulerPayloadRepository(db)
-        ),
-        cycle_repository=SchedulerCycleRepository(
-            db
-        ),
-        background_status_provider=lambda: (
-            scheduler_background_loop
-            .status()
-            .to_dict()
+    service = _create_observability_service(db)
+
+    return SchedulerObservabilityResponse.model_validate(
+        service.get()
+    )
+
+
+@router.get(
+    "/readiness",
+    response_model=SchedulerReadinessResponse,
+    responses={
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "model": SchedulerReadinessResponse,
+            "description": (
+                "Scheduler runtime is not ready."
+            ),
+        },
+    },
+)
+def get_scheduler_readiness(
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    service = SchedulerReadinessService(
+        observability_provider=lambda: (
+            _create_observability_service(db).get()
         ),
         background_loop_enabled=(
             settings.scheduler_background_loop_enabled
         ),
-        distributed_lock_enabled=(
-            settings
-            .scheduler_distributed_lock_enabled
-        ),
-        distributed_lock_backend=(
-            "postgresql_advisory"
-        ),
-        advisory_lock_key=(
-            settings.scheduler_advisory_lock_key
-        ),
     )
 
-    return SchedulerObservabilityResponse.model_validate(
+    result = SchedulerReadinessResponse.model_validate(
         service.get()
+    )
+
+    response_status = (
+        status.HTTP_200_OK
+        if result.ready
+        else status.HTTP_503_SERVICE_UNAVAILABLE
+    )
+
+    return JSONResponse(
+        status_code=response_status,
+        content=result.model_dump(mode="json"),
     )

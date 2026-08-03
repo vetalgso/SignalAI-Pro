@@ -16,6 +16,9 @@ from .payload_repository import (
     SchedulerPayloadRepository,
 )
 from .payload_service import SchedulerPayloadService
+from .readiness import (
+    SchedulerReadinessService,
+)
 from .repository import SchedulerCycleRepository
 from .runner import SafeSchedulerRunner
 from .service import SafeSchedulerCycleService
@@ -40,6 +43,7 @@ __all__ = [
     "SchedulerObservabilityService",
     "SchedulerPayloadRepository",
     "SchedulerPayloadService",
+    "SchedulerReadinessService",
     "SchedulerStateRepository",
     "SchedulerStateService",
     "build_scheduler_slot_idempotency_key",

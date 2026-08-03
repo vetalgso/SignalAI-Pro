@@ -232,3 +232,33 @@ class SchedulerObservabilityResponse(BaseModel):
     last_cycle: (
         SchedulerLastCycleSummaryResponse | None
     )
+
+
+class SchedulerReadinessCheckResponse(BaseModel):
+    name: str
+    status: Literal[
+        "PASS",
+        "WARN",
+        "FAIL",
+    ]
+    code: str
+    message: str
+
+
+class SchedulerReadinessResponse(BaseModel):
+    generated_at: datetime
+    status: Literal[
+        "READY",
+        "NOT_READY",
+    ]
+    ready: bool
+    scheduler_status: Literal[
+        "ACTIVE",
+        "STANDBY",
+        "DEGRADED",
+    ]
+    reason_codes: list[str]
+    warning_codes: list[str]
+    checks: list[
+        SchedulerReadinessCheckResponse
+    ]
