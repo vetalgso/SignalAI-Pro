@@ -3,6 +3,7 @@ from app.tradinggpt.engine.router import router as tradinggpt_engine_router
 from app.tradinggpt.orders.router import router as tradinggpt_orders_router
 from app.tradinggpt.portfolio_sync.router import router as tradinggpt_portfolio_router
 from app.tradinggpt.positions.router import router as tradinggpt_positions_router
+from app.tradinggpt.risk.router import router as tradinggpt_risk_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -58,3 +59,4 @@ app.include_router(tradinggpt_engine_router, prefix="/api/v3")
 app.include_router(tradinggpt_orders_router, prefix="/api/v3")
 app.include_router(tradinggpt_portfolio_router, prefix="/api/v3")
 app.include_router(tradinggpt_positions_router, prefix="/api/v3")
+app.include_router(tradinggpt_risk_router, prefix="/api/v3")
