@@ -16,6 +16,10 @@ from .payload_service import SchedulerPayloadService
 from .repository import SchedulerCycleRepository
 from .runner import SafeSchedulerRunner
 from .service import SafeSchedulerCycleService
+from .slot_idempotency import (
+    build_scheduler_slot_idempotency_key,
+    resolve_due_scheduler_slot,
+)
 from .state_repository import (
     SchedulerStateRepository,
 )
@@ -34,4 +38,6 @@ __all__ = [
     "SchedulerPayloadService",
     "SchedulerStateRepository",
     "SchedulerStateService",
+    "build_scheduler_slot_idempotency_key",
+    "resolve_due_scheduler_slot",
 ]

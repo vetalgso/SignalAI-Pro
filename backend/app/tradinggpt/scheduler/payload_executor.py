@@ -19,6 +19,10 @@ from .payload_repository import (
 from .repository import SchedulerCycleRepository
 from .schemas import SafeSchedulerCycleRequest
 from .service import SafeSchedulerCycleService
+from .slot_idempotency import (
+    build_scheduler_slot_idempotency_key,
+    resolve_due_scheduler_slot,
+)
 from .state_repository import (
     SchedulerStateRepository,
 )
@@ -46,6 +50,24 @@ def execute_persisted_scheduler_payload(
             ),
             "analysis": stored.analysis_payload,
         }
+    )
+
+    state_repository = SchedulerStateRepository(
+        session
+    )
+    scheduler_state = (
+        state_repository.get_or_create()
+    )
+    scheduled_for = resolve_due_scheduler_slot(
+        next_run_at=scheduler_state.next_run_at
+    )
+    slot_idempotency_key = (
+        build_scheduler_slot_idempotency_key(
+            analysis_payload=(
+                stored.analysis_payload
+            ),
+            scheduled_for=scheduled_for,
+        )
     )
 
     risk = request.runtime_risk
@@ -88,7 +110,12 @@ def execute_persisted_scheduler_payload(
         dry_run: bool,
     ) -> dict[str, object]:
         safe_request = request.analysis.model_copy(
-            update={"dry_run": dry_run}
+            update={
+                "dry_run": dry_run,
+                "idempotency_key": (
+                    slot_idempotency_key
+                ),
+            }
         )
 
         response = analyze_and_execute(
@@ -105,9 +132,7 @@ def execute_persisted_scheduler_payload(
         repository=SchedulerCycleRepository(
             session
         ),
-        state_repository=(
-            SchedulerStateRepository(session)
-        ),
+        state_repository=state_repository,
     )
 
     return service.run(
