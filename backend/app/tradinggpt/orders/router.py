@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.tradinggpt.exchanges import (
     create_order_execution_service,
+    create_portfolio_sync_service,
 )
 
 from .execution_service import (
@@ -41,6 +42,9 @@ router = APIRouter(
 order_execution_service = (
     create_order_execution_service()
 )
+portfolio_sync_service = (
+    create_portfolio_sync_service()
+)
 
 
 def _bad_request(
@@ -58,6 +62,9 @@ def _journal_service(
     return JournaledOrderService(
         repository=TradingOrderRepository(db),
         execution_service=order_execution_service,
+        portfolio_sync_service=(
+            portfolio_sync_service
+        ),
     )
 
 

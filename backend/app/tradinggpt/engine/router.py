@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.tradinggpt.exchanges import (
     create_order_execution_service,
+    create_portfolio_sync_service,
 )
 from app.tradinggpt.facade import tradinggpt
 from app.tradinggpt.orders.journal_service import (
@@ -94,9 +95,15 @@ def analyze_and_execute(
     execution_service = (
         create_order_execution_service()
     )
+    portfolio_sync_service = (
+        create_portfolio_sync_service()
+    )
     journal_service = JournaledOrderService(
         repository=TradingOrderRepository(db),
         execution_service=execution_service,
+        portfolio_sync_service=(
+            portfolio_sync_service
+        ),
     )
     pipeline_service = AnalyzeAndExecuteService(
         journal_service=journal_service,

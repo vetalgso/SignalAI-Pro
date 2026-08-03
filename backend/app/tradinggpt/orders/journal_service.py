@@ -3,6 +3,9 @@ from __future__ import annotations
 from uuid import uuid4
 
 from app.models.trading_order import TradingOrder
+from app.tradinggpt.portfolio_sync.service import (
+    PortfolioSyncService,
+)
 
 from .execution_models import OrderExecutionResult
 from .execution_service import (
@@ -21,9 +24,15 @@ class JournaledOrderService:
         *,
         repository: TradingOrderRepository,
         execution_service: OrderExecutionService,
+        portfolio_sync_service: (
+            PortfolioSyncService | None
+        ) = None,
     ) -> None:
         self._repository = repository
         self._execution_service = execution_service
+        self._portfolio_sync_service = (
+            portfolio_sync_service
+        )
 
     def execute(
         self,
@@ -130,6 +139,12 @@ class JournaledOrderService:
 
         execution_payload = result.to_dict()
 
+        self._attach_portfolio_snapshot(
+            execution_payload=execution_payload,
+            source=intent.exchange,
+            execution_status=result.status,
+        )
+
         self._repository.apply_execution(
             order,
             status=result.status,
@@ -155,6 +170,48 @@ class JournaledOrderService:
         self._repository._session.refresh(order)
 
         return self.serialize(order)
+
+    def _attach_portfolio_snapshot(
+        self,
+        *,
+        execution_payload: dict[str, object],
+        source: str,
+        execution_status: str,
+    ) -> None:
+        if execution_status not in {
+            "FILLED",
+            "OPEN",
+            "PARTIALLY_FILLED",
+        }:
+            return
+
+        if self._portfolio_sync_service is None:
+            execution_payload["portfolio_sync"] = {
+                "status": "NOT_CONFIGURED",
+                "source": source,
+            }
+            return
+
+        try:
+            snapshot = (
+                self._portfolio_sync_service
+                .get_snapshot(source=source)
+            )
+        except Exception as exc:
+            execution_payload["portfolio_sync"] = {
+                "status": "FAILED",
+                "source": source,
+                "error": str(exc),
+            }
+            return
+
+        execution_payload["portfolio_sync"] = {
+            "status": "SYNCED",
+            "source": source,
+            "snapshot": snapshot.model_dump(
+                mode="json"
+            ),
+        }
 
     def list_history(
         self,
