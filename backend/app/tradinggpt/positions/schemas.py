@@ -219,3 +219,19 @@ class PositionEventResponse(BaseModel):
     price: float | None
     payload: dict[str, Any]
     created_at: datetime
+
+
+class LivePositionMonitorRequest(BaseModel):
+    exchange: str | None = Field(
+        default="PAPER",
+        min_length=1,
+        max_length=24,
+    )
+
+
+class LivePositionMonitorResponse(
+    PositionMonitorResponse
+):
+    requested_symbols: list[str]
+    prices: dict[str, float]
+    price_errors: dict[str, str]

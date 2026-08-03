@@ -15,6 +15,10 @@ from .event_repository import (
     PositionEventRepository,
 )
 from .monitor import PositionMonitorService
+from .live_monitor import (
+    BinanceLivePriceProvider,
+    LivePositionMonitorService,
+)
 from .repository import TradingPositionRepository
 from .schemas import (
     PositionCloseRequest,
@@ -24,6 +28,8 @@ from .schemas import (
     PositionMonitorRequest,
     PositionMonitorResponse,
     PositionEventResponse,
+    LivePositionMonitorRequest,
+    LivePositionMonitorResponse,
 )
 from .service import PositionService
 
@@ -298,3 +304,55 @@ def list_events_for_position(
         )
         for result in results
     ]
+
+
+@router.post(
+    "/monitor/live",
+    response_model=LivePositionMonitorResponse,
+)
+async def monitor_positions_live(
+    request: LivePositionMonitorRequest,
+    db: Session = Depends(get_db),
+) -> LivePositionMonitorResponse:
+    position_repository = (
+        TradingPositionRepository(db)
+    )
+    event_repository = (
+        PositionEventRepository(db)
+    )
+
+    monitor_service = PositionMonitorService(
+        position_repository=(
+            position_repository
+        ),
+        event_repository=event_repository,
+    )
+
+    service = LivePositionMonitorService(
+        position_repository=(
+            position_repository
+        ),
+        monitor_service=monitor_service,
+        price_provider=(
+            BinanceLivePriceProvider()
+        ),
+    )
+
+    try:
+        result = await service.monitor(
+            exchange=request.exchange,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    return (
+        LivePositionMonitorResponse
+        .model_validate(result)
+    )
