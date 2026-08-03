@@ -250,3 +250,27 @@ class LivePositionMonitorResponse(
     rejected_positions: list[
         dict[str, Any]
     ]
+
+
+class PositionPreviewResult(
+    PositionResponse
+):
+    preview_only: bool
+    original_status: PositionStatus
+    original_remaining_quantity: float
+    original_realized_pnl: float
+    original_unrealized_pnl: float
+
+
+class LivePositionPreviewResponse(BaseModel):
+    preview_only: bool
+    checked_positions: int
+    previewed_positions: int
+    missing_symbols: list[str]
+    requested_symbols: list[str]
+    prices: dict[str, float]
+    price_errors: dict[str, str]
+    rejected_positions: list[
+        dict[str, Any]
+    ]
+    results: list[PositionPreviewResult]
