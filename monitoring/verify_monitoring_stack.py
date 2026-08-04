@@ -125,7 +125,7 @@ dashboard = json.loads(
 assert dashboard["uid"] == "signalai-scheduler-ops"
 assert dashboard["title"] == "SignalAI Scheduler Operations"
 assert dashboard["refresh"] == "5s"
-assert len(dashboard["panels"]) == 39
+assert len(dashboard["panels"]) == 50
 
 expressions = {
     target["expr"]
@@ -154,7 +154,7 @@ print("Prometheus scrape configuration: OK")
 print("Scheduler Prometheus alert rules: 10")
 print("Grafana datasource provisioning: OK")
 print("Grafana dashboard provisioning: OK")
-print("Scheduler Operations dashboard panels: 39")
+print("Scheduler Operations dashboard panels: 50")
 
 # v3.27 Alertmanager checks
 
@@ -446,7 +446,7 @@ for metric in (
         for expression in expressions
     ), metric
 
-assert len(dashboard["panels"]) == 39
+assert len(dashboard["panels"]) == 50
 
 panel_ids = [
     panel["id"]
@@ -467,7 +467,7 @@ for value in (
 print("Alertmanager metrics scrape job: OK")
 print("Alertmanager Prometheus alert rules: 9")
 print("Alertmanager dashboard panels: 11")
-print("Total dashboard panels: 39")
+print("Total dashboard panels: 50")
 print("Dashboard panel IDs unique: OK")
 print("Alertmanager monitoring documentation: OK")
 
@@ -570,7 +570,7 @@ print("Monitoring E2E documentation: OK")
 for value in (
     "import fcntl",
     "SIGNALAI_E2E_LOCK_FILE",
-    "signalai-monitoring-e2e.lock",
+    "e2e-self-test.lock",
     "class SelfTestAlreadyRunning",
     "def exclusive_run_lock()",
     "fcntl.LOCK_EX",
@@ -653,7 +653,7 @@ for value in (
 
 for value in (
     "## E2E parallel execution and JSON reports",
-    "/tmp/signalai-monitoring-e2e.lock",
+    "e2e-self-test.lock",
     "SIGNALAI_E2E_LOCK_FILE",
     "monitoring/e2e-reports/latest.json",
     "monitoring/e2e-reports/history.json",
@@ -795,7 +795,7 @@ for metric in (
         for expression in expressions
     ), metric
 
-assert len(dashboard["panels"]) == 39
+assert len(dashboard["panels"]) == 50
 assert dashboard["version"] >= 3
 
 panel_ids = [
@@ -807,7 +807,7 @@ assert len(panel_ids) == len(set(panel_ids))
 
 print("Monitoring E2E Grafana panels: 9")
 print("Monitoring E2E dashboard metrics: OK")
-print("Total dashboard panels: 39")
+print("Total dashboard panels: 50")
 
 # v3.32 E2E Prometheus alerts
 
@@ -841,7 +841,7 @@ for alert_name in expected_e2e_alerts:
 
 assert (
     e2e_alerts.count("      - alert: ")
-    == 6
+    == 12
 )
 
 for value in (
@@ -880,7 +880,435 @@ for value in (
 ):
     assert value in readme, value
 
-print("Monitoring E2E Prometheus alerts: 6")
+print("Monitoring E2E base Prometheus alerts: 6")
 print("Monitoring E2E stale threshold: 24h")
 print("Monitoring E2E exporter documentation: OK")
 print("Monitoring E2E alert documentation: OK")
+
+# v3.33 periodic E2E runner core
+
+e2e_runner_path = (
+    ROOT
+    / "monitoring/e2e_runner.py"
+)
+
+e2e_runner_test_path = (
+    ROOT
+    / "monitoring/test_e2e_runner.py"
+)
+
+assert e2e_runner_path.is_file()
+assert e2e_runner_path.stat().st_size > 0
+assert e2e_runner_path.stat().st_mode & 0o111
+
+assert e2e_runner_test_path.is_file()
+assert e2e_runner_test_path.stat().st_size > 0
+
+e2e_runner = e2e_runner_path.read_text(
+    encoding="utf-8"
+)
+
+for value in (
+    "class RunnerSettings",
+    "LOCK_CONFLICT_EXIT_CODE = 75",
+    "PROCESS_TIMEOUT_EXIT_CODE = 124",
+    "def build_self_test_command(",
+    "def initial_state(",
+    "def execute_self_test(",
+    "def classify_result(",
+    "def result_delay(",
+    "def run_once(",
+    "def run_loop(",
+    '"runner_status": "STARTING"',
+    '"last_result": None',
+    '"runs_total": 0',
+    '"successes_total": 0',
+    '"failures_total": 0',
+    '"lock_conflicts_total": 0',
+    '"consecutive_failures": 0',
+    "E2E_RUNNER_STARTUP_DELAY_SECONDS",
+    "E2E_RUNNER_INTERVAL_SECONDS",
+    "E2E_RUNNER_RETRY_DELAY_SECONDS",
+    "E2E_RUNNER_PROCESS_TIMEOUT_SECONDS",
+    "SIGNALAI_E2E_RUNNER_STATE_FILE",
+    '"--startup-delay"',
+    '"--interval"',
+    '"--retry-delay"',
+    '"--once"',
+):
+    assert value in e2e_runner, value
+
+for value in (
+    "test_success_uses_interval",
+    "test_failure_uses_retry_delay",
+    "test_lock_conflict_is_not_failure",
+    "test_process_timeout_is_failure",
+):
+    assert value in (
+        e2e_runner_test_path.read_text(
+            encoding="utf-8"
+        )
+    ), value
+
+print("Periodic E2E runner core: OK")
+print("Periodic E2E startup delay: OK")
+print("Periodic E2E success interval: 24h")
+print("Periodic E2E failure retry: 15m")
+print("Periodic E2E lock conflict handling: OK")
+print("Periodic E2E runner state JSON: OK")
+print("Periodic E2E runner unit tests: 5")
+
+# v3.33 periodic E2E runner service
+
+for value in (
+    "SIGNALAI_E2E_PROMETHEUS_URL",
+    "SIGNALAI_E2E_ALERTMANAGER_URL",
+    "SIGNALAI_E2E_RUNTIME_RULE_FILE",
+    "DEFAULT_RUNTIME_RULE",
+    '"e2e-self-test.lock"',
+):
+    assert value in e2e_script, value
+
+for value in (
+    "  e2e-runner:",
+    "image: python:3.12-slim",
+    "http://prometheus:9090",
+    "http://alertmanager:9093",
+    "/rules/e2e-self-test.runtime.yml",
+    "/data/e2e-self-test.lock",
+    "/data/runner-state.json",
+    "./monitoring/e2e_runner.py:"
+    "/opt/signalai/e2e_runner.py:ro",
+    "./monitoring/e2e_self_test.py:"
+    "/opt/signalai/e2e_self_test.py:ro",
+    "./monitoring/e2e-reports:/data",
+    "./monitoring/prometheus/rules:/rules",
+    "E2E_RUNNER_STARTUP_DELAY_SECONDS",
+    "E2E_RUNNER_INTERVAL_SECONDS",
+    "E2E_RUNNER_RETRY_DELAY_SECONDS",
+    "E2E_RUNNER_PROCESS_TIMEOUT_SECONDS",
+):
+    assert value in compose, value
+
+for value in (
+    "## Periodic E2E runner",
+    "startup delay: 300 секунд",
+    "интервал после SUCCESS: 86400 секунд",
+    "retry после FAILURE",
+    "runner-state.json",
+    "http://prometheus:9090",
+    "http://alertmanager:9093",
+    "реальные firing и resolved",
+    "E2E_RUNNER_STARTUP_DELAY_SECONDS=3600",
+):
+    assert value in readme, value
+
+assert (
+    "monitoring/e2e-reports/"
+    "e2e-self-test.lock"
+    in readme
+)
+
+print("Periodic E2E Compose service: OK")
+print("Periodic E2E internal Prometheus URL: OK")
+print("Periodic E2E internal Alertmanager URL: OK")
+print("Periodic E2E writable rule mount: OK")
+print("Periodic E2E shared process lock: OK")
+print("Periodic E2E runner healthcheck: OK")
+print("Periodic E2E runner documentation: OK")
+
+# v3.33 periodic runner metrics
+
+runner_exporter_path = (
+    ROOT / "monitoring/e2e_exporter.py"
+)
+
+runner_exporter_tests_path = (
+    ROOT / "monitoring/test_e2e_exporter.py"
+)
+
+runner_exporter = (
+    runner_exporter_path.read_text(
+        encoding="utf-8"
+    )
+)
+
+runner_exporter_tests = (
+    runner_exporter_tests_path.read_text(
+        encoding="utf-8"
+    )
+)
+
+runner_exporter_ast = (
+    __import__("ast").parse(
+        runner_exporter
+    )
+)
+
+runner_exporter_literals = {
+    node.value
+    for node in __import__("ast").walk(
+        runner_exporter_ast
+    )
+    if (
+        isinstance(
+            node,
+            __import__("ast").Constant,
+        )
+        and isinstance(
+            node.value,
+            str,
+        )
+    )
+}
+
+
+def runner_exporter_contains(
+    value: str,
+) -> bool:
+    if (
+        value in runner_exporter
+        or value in runner_exporter_literals
+    ):
+        return True
+
+    for metric_prefix in (
+        "signalai_e2e_runner_config_",
+        "signalai_e2e_runner_",
+    ):
+        if not value.startswith(
+            metric_prefix
+        ):
+            continue
+
+        suffix = value[
+            len(metric_prefix):
+        ]
+
+        return (
+            metric_prefix
+            in runner_exporter_literals
+            and suffix
+            in runner_exporter_literals
+        )
+
+    return False
+
+
+for value in (
+    "DEFAULT_STATE_FILE",
+    "RUNNER_STATUSES",
+    "RUNNER_RESULTS",
+    '"--state-file"',
+    "signalai_e2e_runner_state_present",
+    "signalai_e2e_runner_state_valid",
+    "signalai_e2e_runner_status",
+    "signalai_e2e_runner_last_result",
+    (
+        "signalai_e2e_runner_"
+        "next_run_delay_seconds"
+    ),
+    "signalai_e2e_runner_runs_total",
+    "signalai_e2e_runner_successes_total",
+    "signalai_e2e_runner_failures_total",
+    (
+        "signalai_e2e_runner_"
+        "lock_conflicts_total"
+    ),
+    (
+        "signalai_e2e_runner_"
+        "consecutive_failures"
+    ),
+    (
+        "signalai_e2e_runner_config_"
+        "interval_seconds"
+    ),
+):
+    assert runner_exporter_contains(
+        value
+    ), value
+
+assert (
+    runner_exporter.count(
+        '"STARTING",'
+    )
+    == 1
+)
+
+assert (
+    runner_exporter.count(
+        '"WAITING",'
+    )
+    == 1
+)
+
+assert (
+    runner_exporter.count(
+        '"LOCKED",'
+    )
+    == 1
+)
+
+assert (
+    "test_runner_state_metrics"
+    in runner_exporter_tests
+)
+
+assert (
+    "      - --state-file\n"
+    "      - /data/runner-state.json"
+    in compose
+)
+
+for value in (
+    "signalai_e2e_runner_state_present;",
+    "signalai_e2e_runner_status;",
+    "signalai_e2e_runner_last_result;",
+    (
+        "signalai_e2e_runner_"
+        "next_run_delay_seconds;"
+    ),
+    (
+        "signalai_e2e_runner_"
+        "consecutive_failures;"
+    ),
+    "high-cardinality labels",
+):
+    assert value in readme, value
+
+print("Periodic E2E exporter state input: OK")
+print("Periodic E2E runner statuses: 5")
+print("Periodic E2E runner results: 4")
+print("Periodic E2E schedule metrics: OK")
+print("Periodic E2E counter metrics: OK")
+print("Periodic E2E bounded labels: OK")
+print("Periodic E2E exporter unit tests: 4")
+print("Periodic E2E metrics documentation: OK")
+
+# v3.33 periodic runner alerts and dashboard
+
+runner_rules_path = (
+    ROOT
+    / "monitoring/prometheus/rules/"
+    "e2e-alerts.yml"
+)
+
+runner_rules = runner_rules_path.read_text(
+    encoding="utf-8"
+)
+
+runner_alert_names = (
+    "SignalAIE2ERunnerStateMissing",
+    "SignalAIE2ERunnerStateInvalid",
+    "SignalAIE2ERunnerStopped",
+    "SignalAIE2ERunnerLastRunFailed",
+    "SignalAIE2ERunnerConsecutiveFailures",
+    "SignalAIE2ERunnerScheduleOverdue",
+)
+
+for alert_name in runner_alert_names:
+    assert (
+        f"      - alert: {alert_name}"
+        in runner_rules
+    ), alert_name
+
+assert (
+    runner_rules.count(
+        "      - alert: SignalAIE2E"
+    )
+    == 12
+)
+
+assert (
+    runner_rules.count(
+        "      - alert: SignalAIE2ERunner"
+    )
+    == 6
+)
+
+assert (
+    "signalai_e2e_runner_"
+    "consecutive_failures"
+    in runner_rules
+)
+
+assert (
+    "signalai_e2e_runner_"
+    "next_run_timestamp_seconds"
+    in runner_rules
+)
+
+assert "time()" in runner_rules
+assert ") > 900" in runner_rules
+
+runner_dashboard_path = (
+    ROOT
+    / "monitoring/grafana/dashboards/"
+    "signalai-scheduler-operations.json"
+)
+
+runner_dashboard = __import__("json").loads(
+    runner_dashboard_path.read_text(
+        encoding="utf-8"
+    )
+)
+
+runner_panels = runner_dashboard["panels"]
+
+runner_panel_ids = [
+    int(panel["id"])
+    for panel in runner_panels
+]
+
+assert len(runner_panels) == 50
+assert len(runner_panel_ids) == len(
+    set(runner_panel_ids)
+)
+
+runner_panel_titles = {
+    panel["title"]
+    for panel in runner_panels
+}
+
+for title in (
+    "Periodic E2E Runner",
+    "Runner Status",
+    "Runner Last Result",
+    "Next Run Delay",
+    "Runner Runs",
+    "Runner Successes",
+    "Runner Failures",
+    "Consecutive Failures",
+    "Runner Lock Conflicts",
+    "Runner State History",
+    "Runner Timing History",
+):
+    assert title in runner_panel_titles, title
+
+assert runner_dashboard["version"] >= 4
+
+for value in (
+    (
+        "### Periodic runner alerts "
+        "and dashboard"
+    ),
+    "SignalAIE2ERunnerStateMissing;",
+    "SignalAIE2ERunnerStateInvalid;",
+    "SignalAIE2ERunnerStopped;",
+    "SignalAIE2ERunnerLastRunFailed;",
+    (
+        "SignalAIE2ERunner"
+        "ConsecutiveFailures;"
+    ),
+    "SignalAIE2ERunnerScheduleOverdue.",
+    "Periodic E2E Runner",
+    "просрочено более чем на 15",
+):
+    assert value in readme, value
+
+print("Periodic E2E runner Prometheus alerts: 6")
+print("Total E2E Prometheus alerts: 12")
+print("Periodic E2E runner Grafana panels: 11")
+print("Total dashboard panels: 50")
+print("Periodic E2E runner dashboard IDs: unique")
+print("Periodic E2E runner observability docs: OK")

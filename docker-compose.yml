@@ -72,6 +72,60 @@ services:
     restart: unless-stopped
 
 
+  e2e-runner:
+    image: python:3.12-slim
+    profiles:
+      - monitoring
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      SIGNALAI_E2E_PROMETHEUS_URL: "http://prometheus:9090"
+      SIGNALAI_E2E_ALERTMANAGER_URL: "http://alertmanager:9093"
+      SIGNALAI_E2E_RUNTIME_RULE_FILE: "/rules/e2e-self-test.runtime.yml"
+      SIGNALAI_E2E_LOCK_FILE: "/data/e2e-self-test.lock"
+      E2E_RUNNER_STARTUP_DELAY_SECONDS: "${E2E_RUNNER_STARTUP_DELAY_SECONDS:-300}"
+      E2E_RUNNER_INTERVAL_SECONDS: "${E2E_RUNNER_INTERVAL_SECONDS:-86400}"
+      E2E_RUNNER_RETRY_DELAY_SECONDS: "${E2E_RUNNER_RETRY_DELAY_SECONDS:-900}"
+      E2E_RUNNER_SELF_TEST_TIMEOUT_SECONDS: "${E2E_RUNNER_SELF_TEST_TIMEOUT_SECONDS:-90}"
+      E2E_RUNNER_PROCESS_TIMEOUT_SECONDS: "${E2E_RUNNER_PROCESS_TIMEOUT_SECONDS:-600}"
+      E2E_RUNNER_HISTORY_LIMIT: "${E2E_RUNNER_HISTORY_LIMIT:-20}"
+    command:
+      - python
+      - /opt/signalai/e2e_runner.py
+      - --self-test
+      - /opt/signalai/e2e_self_test.py
+      - --report-file
+      - /data/latest.json
+      - --history-file
+      - /data/history.json
+      - --state-file
+      - /data/runner-state.json
+    volumes:
+      - ./monitoring/e2e_runner.py:/opt/signalai/e2e_runner.py:ro
+      - ./monitoring/e2e_self_test.py:/opt/signalai/e2e_self_test.py:ro
+      - ./monitoring/e2e-reports:/data
+      - ./monitoring/prometheus/rules:/rules
+    depends_on:
+      prometheus:
+        condition: service_started
+      alertmanager:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json;
+          from pathlib import Path;
+          data=json.loads(Path('/data/runner-state.json').read_text());
+          assert data['runner_status'] in
+          {'WAITING','RUNNING','COMPLETED'}
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
   e2e-exporter:
     image: python:3.12-slim
     profiles:
@@ -89,6 +143,8 @@ services:
       - /data/latest.json
       - --history-file
       - /data/history.json
+      - --state-file
+      - /data/runner-state.json
     volumes:
       - ./monitoring/e2e_exporter.py:/opt/signalai/e2e_exporter.py:ro
       - ./monitoring/e2e-reports:/data:ro

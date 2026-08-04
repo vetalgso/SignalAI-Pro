@@ -276,7 +276,7 @@ secrets должны находиться в локальном каталоге
 
 Для межпроцессной блокировки используется файл:
 
-    /tmp/signalai-monitoring-e2e.lock
+    monitoring/e2e-reports/e2e-self-test.lock
 
 Если другой self-test уже работает, новый запуск завершается с кодом:
 
@@ -336,6 +336,90 @@ Report file и history file должны быть разными файлами.
     monitoring/e2e-reports/.gitignore
 
 
+
+## Periodic E2E runner
+
+Compose service `e2e-runner` автоматически запускает monitoring E2E
+self-test по расписанию.
+
+По умолчанию используются значения:
+
+- startup delay: 300 секунд;
+- интервал после SUCCESS: 86400 секунд;
+- retry после FAILURE или занятого lock: 900 секунд;
+- timeout одной фазы self-test: 90 секунд;
+- timeout процесса: 600 секунд;
+- размер JSON history: 20 запусков.
+
+Настройка выполняется переменными:
+
+- E2E_RUNNER_STARTUP_DELAY_SECONDS;
+- E2E_RUNNER_INTERVAL_SECONDS;
+- E2E_RUNNER_RETRY_DELAY_SECONDS;
+- E2E_RUNNER_SELF_TEST_TIMEOUT_SECONDS;
+- E2E_RUNNER_PROCESS_TIMEOUT_SECONDS;
+- E2E_RUNNER_HISTORY_LIMIT.
+
+Состояние расписания записывается атомарно в:
+
+    monitoring/e2e-reports/runner-state.json
+
+State содержит:
+
+- статус STARTING, WAITING, RUNNING, COMPLETED или STOPPED;
+- время следующего запуска;
+- последний результат SUCCESS, FAILURE или LOCKED;
+- exit code и ошибку;
+- счётчики запусков, успехов, ошибок и конфликтов lock;
+- число последовательных ошибок;
+- текущую конфигурацию runner.
+
+Self-test внутри контейнера обращается к сервисам:
+
+    http://prometheus:9090
+    http://alertmanager:9093
+
+Временный rule записывается в общий каталог Prometheus rules. Runner и
+ручной host-запуск используют общий lock-файл в каталоге E2E reports.
+
+Периодический запуск отправляет реальные firing и resolved сообщения в
+Telegram. Для безопасной проверки сервиса без отправки сообщений можно
+временно увеличить startup delay:
+
+    E2E_RUNNER_STARTUP_DELAY_SECONDS=3600 \
+      docker compose --profile monitoring up -d e2e-runner
+
+
+### Periodic runner alerts and dashboard
+
+Prometheus контролирует состояние автоматического runner через alerts:
+
+- SignalAIE2ERunnerStateMissing;
+- SignalAIE2ERunnerStateInvalid;
+- SignalAIE2ERunnerStopped;
+- SignalAIE2ERunnerLastRunFailed;
+- SignalAIE2ERunnerConsecutiveFailures;
+- SignalAIE2ERunnerScheduleOverdue.
+
+`SignalAIE2ERunnerScheduleOverdue` срабатывает, если runner находится в
+WAITING, но запланированное время запуска просрочено более чем на 15
+минут.
+
+Grafana dashboard содержит отдельный раздел:
+
+    Periodic E2E Runner
+
+В разделе отображаются:
+
+- текущий статус runner;
+- последний результат;
+- время до следующего запуска;
+- общее число запусков, успехов и ошибок;
+- последовательные ошибки;
+- конфликты межпроцессной блокировки;
+- история статусов и результатов;
+- история delay, длительности и возраста state.
+
 ## E2E Prometheus exporter
 
 Monitoring E2E exporter преобразует runtime JSON-отчёты self-test в
@@ -380,6 +464,29 @@ Prometheus scrape job:
 - signalai_e2e_history_entries;
 - signalai_e2e_history_runs.
 
+
+Exporter также читает `runner-state.json` и публикует состояние
+периодического расписания без динамических high-cardinality labels.
+
+Runner metrics включают:
+
+- signalai_e2e_runner_state_present;
+- signalai_e2e_runner_state_valid;
+- signalai_e2e_runner_status;
+- signalai_e2e_runner_last_result;
+- signalai_e2e_runner_state_age_seconds;
+- signalai_e2e_runner_next_run_timestamp_seconds;
+- signalai_e2e_runner_next_run_delay_seconds;
+- signalai_e2e_runner_last_duration_seconds;
+- signalai_e2e_runner_last_exit_code;
+- signalai_e2e_runner_runs_total;
+- signalai_e2e_runner_successes_total;
+- signalai_e2e_runner_failures_total;
+- signalai_e2e_runner_lock_conflicts_total;
+- signalai_e2e_runner_consecutive_failures;
+- signalai_e2e_runner_config_interval_seconds;
+- signalai_e2e_runner_config_retry_delay_seconds.
+
 Grafana dashboard `signalai-scheduler-ops` содержит раздел:
 
     Monitoring E2E Operations
@@ -422,7 +529,7 @@ Warning alerts направляются через receiver:
 
 ## Остановка
 
-    docker compose --profile monitoring stop alertmanager prometheus grafana
+    docker compose --profile monitoring stop e2e-runner e2e-exporter alertmanager prometheus grafana
 
 Данные сохраняются в именованных Docker volumes:
 

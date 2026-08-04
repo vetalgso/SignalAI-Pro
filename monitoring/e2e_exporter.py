@@ -33,9 +33,31 @@ DEFAULT_HISTORY_FILE = Path(
     )
 )
 
+DEFAULT_STATE_FILE = Path(
+    os.environ.get(
+        "SIGNALAI_E2E_RUNNER_STATE_FILE",
+        "/data/runner-state.json",
+    )
+)
+
 RUN_STATUSES = (
     "SUCCESS",
     "FAILURE",
+)
+
+RUNNER_STATUSES = (
+    "STARTING",
+    "WAITING",
+    "RUNNING",
+    "COMPLETED",
+    "STOPPED",
+)
+
+RUNNER_RESULTS = (
+    "NONE",
+    "SUCCESS",
+    "FAILURE",
+    "LOCKED",
 )
 
 
@@ -175,6 +197,7 @@ def render_metrics(
     *,
     report_file: Path,
     history_file: Path,
+    state_file: Path = DEFAULT_STATE_FILE,
     now_timestamp: float | None = None,
 ) -> str:
     now = (
@@ -201,6 +224,15 @@ def render_metrics(
         list,
     )
 
+    (
+        state_present,
+        state_valid,
+        state,
+    ) = read_json(
+        state_file,
+        dict,
+    )
+
     report_data = (
         report
         if report_valid
@@ -211,6 +243,88 @@ def render_metrics(
         history
         if history_valid
         else []
+    )
+
+    runner_data = (
+        state
+        if state_valid
+        else {}
+    )
+
+    runner_status = str(
+        runner_data.get(
+            "runner_status",
+            "",
+        )
+    ).upper()
+
+    raw_last_result = (
+        runner_data.get("last_result")
+    )
+
+    runner_last_result = (
+        "NONE"
+        if raw_last_result is None
+        else str(raw_last_result).upper()
+    )
+
+    runner_updated_timestamp = (
+        parse_timestamp(
+            runner_data.get("updated_at")
+        )
+    )
+
+    runner_state_age_seconds = (
+        max(
+            0.0,
+            now - runner_updated_timestamp,
+        )
+        if runner_updated_timestamp > 0
+        else 0.0
+    )
+
+    runner_next_timestamp = (
+        parse_timestamp(
+            runner_data.get("next_run_at")
+        )
+    )
+
+    runner_next_delay_seconds = (
+        max(
+            0.0,
+            runner_next_timestamp - now,
+        )
+        if runner_next_timestamp > 0
+        else 0.0
+    )
+
+    runner_last_started_timestamp = (
+        parse_timestamp(
+            runner_data.get(
+                "last_run_started_at"
+            )
+        )
+    )
+
+    runner_last_finished_timestamp = (
+        parse_timestamp(
+            runner_data.get(
+                "last_run_finished_at"
+            )
+        )
+    )
+
+    runner_configuration = (
+        runner_data.get("configuration")
+    )
+
+    runner_config = (
+        runner_configuration
+        if isinstance(
+            runner_configuration,
+            dict,
+        )
+        else {}
     )
 
     status = str(
@@ -459,6 +573,287 @@ def render_metrics(
         ],
     )
 
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "state_present"
+        ),
+        help_text=(
+            "Whether the periodic E2E runner "
+            "state file exists."
+        ),
+        value=int(state_present),
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "state_valid"
+        ),
+        help_text=(
+            "Whether the periodic E2E runner "
+            "state file is valid."
+        ),
+        value=int(state_valid),
+    )
+
+    append_labeled_metric(
+        lines,
+        name="signalai_e2e_runner_status",
+        help_text=(
+            "Periodic E2E runner status as a "
+            "bounded one-hot gauge."
+        ),
+        samples=[
+            (
+                {"status": item},
+                int(
+                    state_valid
+                    and runner_status == item
+                ),
+            )
+            for item in RUNNER_STATUSES
+        ],
+    )
+
+    append_labeled_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "last_result"
+        ),
+        help_text=(
+            "Last periodic E2E runner result "
+            "as a bounded one-hot gauge."
+        ),
+        samples=[
+            (
+                {"result": item},
+                int(
+                    state_valid
+                    and runner_last_result
+                    == item
+                ),
+            )
+            for item in RUNNER_RESULTS
+        ],
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "updated_timestamp_seconds"
+        ),
+        help_text=(
+            "Unix timestamp of the latest "
+            "runner state update."
+        ),
+        value=runner_updated_timestamp,
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "state_age_seconds"
+        ),
+        help_text=(
+            "Seconds elapsed since the latest "
+            "runner state update."
+        ),
+        value=runner_state_age_seconds,
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "next_run_timestamp_seconds"
+        ),
+        help_text=(
+            "Unix timestamp of the next "
+            "scheduled periodic E2E run."
+        ),
+        value=runner_next_timestamp,
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "next_run_delay_seconds"
+        ),
+        help_text=(
+            "Seconds remaining until the next "
+            "scheduled periodic E2E run."
+        ),
+        value=runner_next_delay_seconds,
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "last_run_started_timestamp_seconds"
+        ),
+        help_text=(
+            "Unix timestamp when the latest "
+            "periodic E2E run started."
+        ),
+        value=runner_last_started_timestamp,
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "last_run_finished_timestamp_seconds"
+        ),
+        help_text=(
+            "Unix timestamp when the latest "
+            "periodic E2E run finished."
+        ),
+        value=runner_last_finished_timestamp,
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "last_duration_seconds"
+        ),
+        help_text=(
+            "Duration of the latest periodic "
+            "E2E runner invocation."
+        ),
+        value=safe_number(
+            runner_data.get(
+                "last_duration_seconds"
+            )
+        ),
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "last_exit_code"
+        ),
+        help_text=(
+            "Exit code of the latest periodic "
+            "E2E runner invocation."
+        ),
+        value=safe_number(
+            runner_data.get(
+                "last_exit_code"
+            )
+        ),
+    )
+
+    for suffix, key, help_text in (
+        (
+            "runs_total",
+            "runs_total",
+            "Total periodic E2E invocations.",
+        ),
+        (
+            "successes_total",
+            "successes_total",
+            "Successful periodic E2E runs.",
+        ),
+        (
+            "failures_total",
+            "failures_total",
+            "Failed periodic E2E runs.",
+        ),
+        (
+            "lock_conflicts_total",
+            "lock_conflicts_total",
+            "Periodic E2E lock conflicts.",
+        ),
+        (
+            "consecutive_failures",
+            "consecutive_failures",
+            (
+                "Current number of consecutive "
+                "periodic E2E failures."
+            ),
+        ),
+    ):
+        append_metric(
+            lines,
+            name=(
+                "signalai_e2e_runner_"
+                + suffix
+            ),
+            help_text=help_text,
+            value=safe_number(
+                runner_data.get(key)
+            ),
+        )
+
+    for suffix, key, help_text in (
+        (
+            "startup_delay_seconds",
+            "startup_delay_seconds",
+            "Configured runner startup delay.",
+        ),
+        (
+            "interval_seconds",
+            "interval_seconds",
+            (
+                "Configured delay after a "
+                "successful periodic run."
+            ),
+        ),
+        (
+            "retry_delay_seconds",
+            "retry_delay_seconds",
+            (
+                "Configured retry delay after "
+                "failure or lock conflict."
+            ),
+        ),
+        (
+            "self_test_timeout_seconds",
+            "self_test_timeout_seconds",
+            (
+                "Configured timeout for each "
+                "E2E self-test phase."
+            ),
+        ),
+        (
+            "process_timeout_seconds",
+            "process_timeout_seconds",
+            (
+                "Configured runner subprocess "
+                "timeout."
+            ),
+        ),
+        (
+            "history_limit",
+            "history_limit",
+            (
+                "Configured bounded E2E history "
+                "size."
+            ),
+        ),
+    ):
+        append_metric(
+            lines,
+            name=(
+                "signalai_e2e_runner_config_"
+                + suffix
+            ),
+            help_text=help_text,
+            value=safe_number(
+                runner_config.get(key)
+            ),
+        )
+
     return "\n".join(lines) + "\n"
 
 
@@ -466,6 +861,7 @@ def build_handler(
     *,
     report_file: Path,
     history_file: Path,
+    state_file: Path,
 ) -> type[BaseHTTPRequestHandler]:
     class MetricsHandler(
         BaseHTTPRequestHandler
@@ -475,6 +871,7 @@ def build_handler(
                 payload = render_metrics(
                     report_file=report_file,
                     history_file=history_file,
+                    state_file=state_file,
                 ).encode("utf-8")
 
                 self.send_response(200)
@@ -551,6 +948,12 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--state-file",
+        type=Path,
+        default=DEFAULT_STATE_FILE,
+    )
+
+    parser.add_argument(
         "--check",
         action="store_true",
         help=(
@@ -572,6 +975,7 @@ def main() -> None:
             render_metrics(
                 report_file=args.report_file,
                 history_file=args.history_file,
+                state_file=args.state_file,
             ),
             end="",
         )
@@ -580,6 +984,7 @@ def main() -> None:
     handler = build_handler(
         report_file=args.report_file,
         history_file=args.history_file,
+        state_file=args.state_file,
     )
 
     server = ThreadingHTTPServer(

@@ -85,3 +85,100 @@ groups:
         annotations:
           summary: SignalAI E2E runtime rule cleanup failed
           description: The latest E2E self-test report indicates that its temporary Prometheus rule was not removed.
+
+      - alert: SignalAIE2ERunnerStateMissing
+        expr: |
+          signalai_e2e_runner_state_present{
+            job="signalai-e2e"
+          } == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI periodic E2E runner state is missing
+          description: The E2E exporter has not found runner-state.json for at least five minutes.
+
+      - alert: SignalAIE2ERunnerStateInvalid
+        expr: |
+          signalai_e2e_runner_state_valid{
+            job="signalai-e2e"
+          } == 0
+          and on(job, instance)
+          signalai_e2e_runner_state_present{
+            job="signalai-e2e"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI periodic E2E runner state is invalid
+          description: runner-state.json exists but cannot be parsed or has an invalid structure.
+
+      - alert: SignalAIE2ERunnerStopped
+        expr: |
+          signalai_e2e_runner_status{
+            job="signalai-e2e",
+            status="STOPPED"
+          } == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI periodic E2E runner is stopped
+          description: The periodic E2E runner has remained in STOPPED state for at least five minutes.
+
+      - alert: SignalAIE2ERunnerLastRunFailed
+        expr: |
+          signalai_e2e_runner_last_result{
+            job="signalai-e2e",
+            result="FAILURE"
+          } == 1
+        for: 30s
+        labels:
+          severity: critical
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI periodic E2E runner failed
+          description: The latest periodic E2E runner invocation finished with FAILURE.
+
+      - alert: SignalAIE2ERunnerConsecutiveFailures
+        expr: |
+          signalai_e2e_runner_consecutive_failures{
+            job="signalai-e2e"
+          } >= 3
+        for: 30s
+        labels:
+          severity: critical
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI periodic E2E runner repeatedly fails
+          description: The periodic E2E runner has recorded at least three consecutive failures.
+
+      - alert: SignalAIE2ERunnerScheduleOverdue
+        expr: |
+          signalai_e2e_runner_status{
+            job="signalai-e2e",
+            status="WAITING"
+          } == 1
+          and on(job, instance)
+          signalai_e2e_runner_next_run_timestamp_seconds{
+            job="signalai-e2e"
+          } > 0
+          and on(job, instance)
+          (
+            time()
+            -
+            signalai_e2e_runner_next_run_timestamp_seconds{
+              job="signalai-e2e"
+            }
+          ) > 900
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI periodic E2E runner schedule is overdue
+          description: The next scheduled E2E run is overdue by more than fifteen minutes.

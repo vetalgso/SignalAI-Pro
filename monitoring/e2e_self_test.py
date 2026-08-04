@@ -19,16 +19,17 @@ from typing import Any, Callable, Iterator
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_RULE = (
+
+DEFAULT_RUNTIME_RULE = (
     ROOT
     / "monitoring/prometheus/rules/"
     "e2e-self-test.runtime.yml"
 )
 
-LOCK_FILE = Path(
+RUNTIME_RULE = Path(
     os.environ.get(
-        "SIGNALAI_E2E_LOCK_FILE",
-        "/tmp/signalai-monitoring-e2e.lock",
+        "SIGNALAI_E2E_RUNTIME_RULE_FILE",
+        str(DEFAULT_RUNTIME_RULE),
     )
 )
 
@@ -36,6 +37,16 @@ REPORT_DIR = Path(
     os.environ.get(
         "SIGNALAI_E2E_REPORT_DIR",
         str(ROOT / "monitoring/e2e-reports"),
+    )
+)
+
+LOCK_FILE = Path(
+    os.environ.get(
+        "SIGNALAI_E2E_LOCK_FILE",
+        str(
+            REPORT_DIR
+            / "e2e-self-test.lock"
+        ),
     )
 )
 
@@ -55,8 +66,15 @@ DEFAULT_HISTORY_FILE = Path(
 
 DEFAULT_HISTORY_LIMIT = 20
 
-PROMETHEUS_URL = "http://localhost:9090"
-ALERTMANAGER_URL = "http://localhost:9093"
+PROMETHEUS_URL = os.environ.get(
+    "SIGNALAI_E2E_PROMETHEUS_URL",
+    "http://localhost:9090",
+).rstrip("/")
+
+ALERTMANAGER_URL = os.environ.get(
+    "SIGNALAI_E2E_ALERTMANAGER_URL",
+    "http://localhost:9093",
+).rstrip("/")
 
 ALERT_NAME = "SignalAIMonitoringE2ESelfTest"
 
