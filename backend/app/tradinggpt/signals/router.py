@@ -17,6 +17,9 @@ from app.tradinggpt.facade import tradinggpt
 from .generator import (
     TradingSignalGenerator,
 )
+from .lifecycle import (
+    SignalLifecycleTracker,
+)
 from .repository import (
     TradingSignalRepository,
 )
@@ -24,6 +27,7 @@ from .schemas import (
     SignalCreateRequest,
     SignalEventResponse,
     SignalPageResponse,
+    SignalRefreshResponse,
     SignalResponse,
     SignalScanRequest,
     SignalScanResponse,
@@ -227,6 +231,28 @@ async def scan_and_create_signals(
         scanner_errors=(
             result["scanner_errors"]
         ),
+    )
+
+
+
+
+@router.post(
+    "/refresh",
+    response_model=SignalRefreshResponse,
+)
+async def refresh_signal_lifecycle(
+    db: Session = Depends(get_db),
+) -> SignalRefreshResponse:
+    try:
+        result = await SignalLifecycleTracker(
+            TradingSignalRepository(db)
+        ).refresh_all()
+    except Exception:
+        db.rollback()
+        raise
+
+    return SignalRefreshResponse.model_validate(
+        result
     )
 
 

@@ -9,6 +9,9 @@ from app.tradinggpt.positions.router import router as tradinggpt_positions_route
 from app.tradinggpt.risk.router import router as tradinggpt_risk_router
 from app.tradinggpt.scheduler.router import router as tradinggpt_scheduler_router
 from app.tradinggpt.signals.router import router as tradinggpt_signals_router
+from app.tradinggpt.signals.background import (
+    signal_lifecycle_background_loop,
+)
 from app.tradinggpt.scheduler.background_registry import (
     scheduler_background_loop,
 )
@@ -40,17 +43,34 @@ from app.core.config import settings
 async def lifespan(
     _: FastAPI,
 ) -> AsyncIterator[None]:
-    loop_started = False
+    scheduler_loop_started = False
+    signal_loop_started = False
 
     if settings.scheduler_background_loop_enabled:
-        loop_started = await (
+        scheduler_loop_started = await (
             scheduler_background_loop.start()
+        )
+
+    if getattr(
+        settings,
+        "signal_tracking_enabled",
+        False,
+    ):
+        signal_loop_started = await (
+            signal_lifecycle_background_loop
+            .start()
         )
 
     try:
         yield
     finally:
-        if loop_started:
+        if signal_loop_started:
+            await (
+                signal_lifecycle_background_loop
+                .stop()
+            )
+
+        if scheduler_loop_started:
             await scheduler_background_loop.stop()
 
 

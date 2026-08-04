@@ -418,3 +418,26 @@ class SignalScanResponse(BaseModel):
     duplicates: list[SignalScanDuplicate]
     skipped: list[SignalScanSkipped]
     scanner_errors: list[dict[str, str]]
+
+
+class SignalLifecycleChange(BaseModel):
+    signal_id: int
+    symbol: str
+    from_status: str
+    to_status: str
+    trigger_price: Decimal
+    triggered_at: datetime
+    candle_opened_at: datetime | None
+
+
+class SignalRefreshResponse(BaseModel):
+    checked_signals: int
+    updated_signals: int
+    transition_count: int
+    price_updates: int
+    changes: list[
+        SignalLifecycleChange
+    ] = Field(default_factory=list)
+    errors: list[
+        dict[str, str]
+    ] = Field(default_factory=list)

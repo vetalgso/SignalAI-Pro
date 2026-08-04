@@ -7,6 +7,7 @@ from decimal import (
     Decimal,
     ROUND_HALF_UP,
 )
+from typing import Any
 
 from app.models.trading_signal import (
     TradingSignal,
@@ -315,11 +316,33 @@ class TradingSignalService:
             )
         )
 
+    def update_market_price(
+        self,
+        *,
+        signal_id: int,
+        price: Decimal,
+        checked_at: datetime | None = None,
+    ) -> TradingSignal:
+        signal = self.get(signal_id)
+
+        signal.current_price = price
+        signal.updated_at = (
+            checked_at or utc_now()
+        )
+
+        self.repository.db.commit()
+        self.repository.db.refresh(signal)
+
+        return signal
+
     def transition(
         self,
         *,
         signal_id: int,
         request: SignalTransitionRequest,
+        event_type: str = "STATUS_CHANGED",
+        event_payload: dict[str, Any]
+        | None = None,
     ) -> TradingSignal:
         signal = self.get(signal_id)
 
@@ -365,11 +388,12 @@ class TradingSignalService:
 
         self.repository.add_event(
             signal_id=signal.id,
-            event_type="STATUS_CHANGED",
+            event_type=event_type,
             from_status=from_status,
             to_status=to_status,
             price=request.price,
             note=request.note,
+            payload=event_payload,
         )
 
         self.repository.db.commit()

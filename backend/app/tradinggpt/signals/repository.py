@@ -97,6 +97,36 @@ class TradingSignalRepository:
             ).all()
         )
 
+    def list_trackable(
+        self,
+        *,
+        limit: int = 500,
+    ) -> list[TradingSignal]:
+        statement = (
+            select(TradingSignal)
+            .where(
+                TradingSignal.status.in_(
+                    (
+                        "ACTIVE",
+                        "ENTRY_REACHED",
+                        "TP1_REACHED",
+                        "TP2_REACHED",
+                    )
+                )
+            )
+            .order_by(
+                TradingSignal.generated_at.asc(),
+                TradingSignal.id.asc(),
+            )
+            .limit(limit)
+        )
+
+        return list(
+            self.db.scalars(
+                statement
+            ).all()
+        )
+
     def list(
         self,
         *,
