@@ -259,3 +259,106 @@ print("Prometheus to Alertmanager routing: OK")
 print("Telegram receiver configuration: OK")
 print("Telegram firing/resolved template: OK")
 print("Telegram secret protection rules: OK")
+
+# v3.28 routing and silence checks
+
+silence_helper_path = (
+    ROOT
+    / "monitoring/alertmanager/silence.sh"
+)
+
+assert silence_helper_path.is_file()
+assert silence_helper_path.stat().st_size > 0
+assert silence_helper_path.stat().st_mode & 0o111
+
+assert (
+    alertmanager_config.count(
+        "telegram_configs:"
+    )
+    == 3
+)
+
+assert (
+    alertmanager_config.count(
+        "source_matchers:"
+    )
+    == 3
+)
+
+assert (
+    alertmanager_config.count(
+        "target_matchers:"
+    )
+    == 3
+)
+
+assert (
+    alertmanager_config.count(
+        "  - name: signalai-telegram-"
+    )
+    == 3
+)
+
+assert (
+    alertmanager_config.count(
+        "    - receiver: signalai-telegram-"
+    )
+    == 3
+)
+
+for value in (
+    "receiver: signalai-telegram-critical",
+    "receiver: signalai-telegram-warning",
+    "receiver: signalai-telegram-info",
+    'severity="critical"',
+    'severity="warning"',
+    'severity="info"',
+    "group_wait: 5s",
+    "group_wait: 30s",
+    "group_wait: 2m",
+    "repeat_interval: 1h",
+    "repeat_interval: 4h",
+    "repeat_interval: 12h",
+    "inhibit_rules:",
+    'alertname="SignalAISchedulerMetricsTargetDown"',
+    'alertname="SignalAISchedulerNotReady"',
+    'alertname="SignalAISchedulerConsecutiveFailures"',
+    'alertname=~"SignalAISchedulerLatestCycleFailed|'
+    'SignalAISchedulerNewFailedCycle"',
+):
+    assert value in alertmanager_config, value
+
+silence_helper = silence_helper_path.read_text(
+    encoding="utf-8"
+)
+
+for value in (
+    "silence.sh add <duration>",
+    "silence.sh list",
+    "silence.sh ids",
+    "silence.sh expire",
+    "amtool_cmd silence add",
+    "amtool_cmd silence query",
+    "amtool_cmd silence expire",
+    "SILENCE_AUTHOR",
+    "ALERTMANAGER_URL",
+):
+    assert value in silence_helper, value
+
+for value in (
+    "## Severity routing",
+    "## Inhibition rules",
+    "## Управление silences",
+    "signalai-telegram-critical",
+    "signalai-telegram-warning",
+    "signalai-telegram-info",
+    "monitoring/alertmanager/silence.sh",
+):
+    assert value in readme, value
+
+print("Severity routing configuration: OK")
+print("Critical/warning/info receivers: 3")
+print("Alert inhibition rules: 3")
+print("Silence management helper: OK")
+print("Silence helper executable mode: OK")
+print("Routing and silence documentation: OK")

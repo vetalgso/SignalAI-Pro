@@ -101,6 +101,79 @@ Telegram-шаблон:
 Alertmanager отправляет как сработавшие, так и восстановленные
 уведомления благодаря параметру send_resolved.
 
+
+## Severity routing
+
+Alertmanager направляет уведомления в Telegram с разными
+интервалами в зависимости от severity.
+
+Critical:
+
+- group wait: 5 секунд
+- group interval: 2 минуты
+- repeat interval: 1 час
+- receiver: signalai-telegram-critical
+
+Warning:
+
+- group wait: 30 секунд
+- group interval: 10 минут
+- repeat interval: 4 часа
+- receiver: signalai-telegram-warning
+
+Info и неизвестные значения severity:
+
+- group wait: 2 минуты
+- group interval: 30 минут
+- repeat interval: 12 часов
+- receiver: signalai-telegram-info
+
+## Inhibition rules
+
+Вторичные уведомления подавляются, когда активно более важное
+связанное событие.
+
+Настроены следующие правила:
+
+- недоступный metrics target подавляет warning/info scheduler alerts;
+- NOT_READY подавляет stopping и consecutive-failure alerts;
+- failed cycle подавляет consecutive-failure alert.
+
+Inhibition действует только при совпадении связанных labels,
+указанных в конфигурации Alertmanager.
+
+## Управление silences
+
+Helper для управления silences:
+
+    monitoring/alertmanager/silence.sh
+
+Создание silence на 30 минут:
+
+    ./monitoring/alertmanager/silence.sh add 30m       "Scheduler maintenance"       'alertname=~SignalAIScheduler.*'
+
+Просмотр активных scheduler silences:
+
+    ./monitoring/alertmanager/silence.sh list       component=scheduler
+
+Получение только Silence ID:
+
+    ./monitoring/alertmanager/silence.sh ids       component=scheduler
+
+Завершение silence:
+
+    ./monitoring/alertmanager/silence.sh expire       <silence-id>
+
+Автор по умолчанию:
+
+    SignalAI operator
+
+Его можно изменить переменной окружения:
+
+    SILENCE_AUTHOR="Vitalii"       ./monitoring/alertmanager/silence.sh add 30m       "Scheduler maintenance"       component=scheduler
+
+Alertmanager должен быть запущен до использования helper.
+
 ## Остановка
 
     docker compose --profile monitoring stop alertmanager prometheus grafana
