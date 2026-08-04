@@ -14,6 +14,7 @@ import {
   Star,
   TrendingUp,
 } from 'lucide-react';
+import { SignalCenter } from './features/signals/SignalCenter';
 import './styles.css';
 
 const API = '/api';
@@ -262,11 +263,11 @@ function App() {
           <div className="header-actions"><Bell /><select value={lang} onChange={(event) => { const value = event.target.value as Language; setLang(value); localStorage.setItem('lang', value); }}><option value="ru">Русский</option><option value="en">English</option></select></div>
         </header>
 
-        {(page === 'dashboard' || page === 'markets' || page === 'signals' || page === 'future' || page === 'news') && controls}
+        {(page === 'dashboard' || page === 'markets' || page === 'future' || page === 'news') && controls}
 
         {page === 'dashboard' && <><section className="grid">{marketPanel}{signalPanel}</section>{forecastPanel}{newsPanel}</>}
         {page === 'markets' && <><h2 className="section-heading">{t.marketOverview}</h2>{marketPanel}</>}
-        {page === 'signals' && <><h2 className="section-heading">{t.signalDetails}</h2><section className="single-column">{signalPanel}</section></>}
+        {page === 'signals' && <SignalCenter language={lang} />}
         {page === 'future' && <><h2 className="section-heading">{t.forecastDetails}</h2>{forecastPanel}</>}
         {page === 'news' && <><h2 className="section-heading">{t.newsMonitor}</h2>{newsPanel}</>}
         {page === 'analytics' && <section className="page-panel"><h2>{t.analyticsTitle}</h2><div className="stats-grid"><article><span>{t.activePair}</span><strong>{symbol}</strong></article><article><span>{t.activeTimeframe}</span><strong>{interval}</strong></article><article><span>{t.forecastsCount}</span><strong>{forecasts.length}</strong></article><article><span>{t.newsCount}</span><strong>{news.length}</strong></article></div></section>}
