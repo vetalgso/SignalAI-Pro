@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -357,3 +357,64 @@ class SignalPageResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+class SignalScanRequest(BaseModel):
+    assets: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+    risk_level: Literal[
+        "low",
+        "medium",
+        "high",
+    ] = "medium"
+    limit: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+    )
+    min_confidence: Decimal = Field(
+        default=Decimal("60"),
+        ge=0,
+        le=100,
+    )
+
+    @field_validator(
+        "risk_level",
+        mode="before",
+    )
+    @classmethod
+    def normalize_scan_risk(
+        cls,
+        value: object,
+    ) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
+
+        return value
+
+
+class SignalScanDuplicate(BaseModel):
+    symbol: str
+    existing_signal_id: int
+
+
+class SignalScanSkipped(BaseModel):
+    symbol: str
+    reason: str
+
+
+class SignalScanResponse(BaseModel):
+    scanned_assets: int
+    successful_assets: int
+    failed_assets: int
+    opportunities_found: int
+
+    created_count: int
+    duplicate_count: int
+    skipped_count: int
+
+    created: list[SignalResponse]
+    duplicates: list[SignalScanDuplicate]
+    skipped: list[SignalScanSkipped]
+    scanner_errors: list[dict[str, str]]

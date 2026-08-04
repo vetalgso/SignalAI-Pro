@@ -41,6 +41,9 @@ class ScannerResult:
     reasons: list[str]
     quality_penalty: int
     warnings: list[str]
+    market_price: float | None = None
+    signal_strategy: str | None = None
+    signal_levels: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -66,6 +69,9 @@ class ScannerResult:
             "reasons": self.reasons,
             "quality_penalty": self.quality_penalty,
             "warnings": self.warnings,
+            "market_price": self.market_price,
+            "signal_strategy": self.signal_strategy,
+            "signal_levels": self.signal_levels,
         }
 
 
@@ -251,10 +257,32 @@ class CryptoMarketScanner:
         )
 
         signal_action = None
+        market_price = None
+        signal_strategy = None
+        signal_levels = None
+
         if signal:
-            signal_action = (
-                signal.get("decision", {}).get("action")
+            decision = signal.get(
+                "decision",
+                {},
             )
+
+            signal_action = decision.get(
+                "action"
+            )
+            signal_strategy = decision.get(
+                "strategy"
+            )
+            market_price = signal.get(
+                "price"
+            )
+
+            raw_levels = decision.get(
+                "levels"
+            )
+
+            if isinstance(raw_levels, dict):
+                signal_levels = raw_levels
 
         forecast_direction = self._primary_forecast_direction(
             forecast
@@ -289,6 +317,9 @@ class CryptoMarketScanner:
             reasons=reasons,
             quality_penalty=quality_penalty,
             warnings=warnings,
+            market_price=market_price,
+            signal_strategy=signal_strategy,
+            signal_levels=signal_levels,
         )
 
     @staticmethod

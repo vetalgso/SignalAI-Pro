@@ -12,7 +12,11 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
+from app.tradinggpt.facade import tradinggpt
 
+from .generator import (
+    TradingSignalGenerator,
+)
 from .repository import (
     TradingSignalRepository,
 )
@@ -21,6 +25,8 @@ from .schemas import (
     SignalEventResponse,
     SignalPageResponse,
     SignalResponse,
+    SignalScanRequest,
+    SignalScanResponse,
     SignalTransitionRequest,
 )
 from .service import (
@@ -145,6 +151,82 @@ def list_signals(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+
+
+@router.post(
+    "/scan",
+    response_model=SignalScanResponse,
+)
+async def scan_and_create_signals(
+    request: SignalScanRequest,
+    db: Session = Depends(get_db),
+) -> SignalScanResponse:
+    try:
+        scan_result = await tradinggpt.scan_market(
+            assets=request.assets or None,
+            risk_level=request.risk_level,
+            limit=request.limit,
+        )
+
+        if not isinstance(
+            scan_result,
+            dict,
+        ):
+            raise TypeError(
+                "Market scanner returned "
+                "an invalid result."
+            )
+
+        result = TradingSignalGenerator(
+            _service(db)
+        ).persist_scan(
+            scan_result=scan_result,
+            min_confidence=(
+                request.min_confidence
+            ),
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+    return SignalScanResponse(
+        scanned_assets=(
+            result["scanned_assets"]
+        ),
+        successful_assets=(
+            result["successful_assets"]
+        ),
+        failed_assets=(
+            result["failed_assets"]
+        ),
+        opportunities_found=(
+            result[
+                "opportunities_found"
+            ]
+        ),
+        created_count=(
+            result["created_count"]
+        ),
+        duplicate_count=(
+            result["duplicate_count"]
+        ),
+        skipped_count=(
+            result["skipped_count"]
+        ),
+        created=[
+            SignalResponse.model_validate(
+                signal
+            )
+            for signal in result["created"]
+        ],
+        duplicates=result["duplicates"],
+        skipped=result["skipped"],
+        scanner_errors=(
+            result["scanner_errors"]
+        ),
     )
 
 

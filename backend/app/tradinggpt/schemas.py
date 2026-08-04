@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -223,6 +223,9 @@ class MarketScanAsset(BaseModel):
     recommendation: str
     trade_direction: Literal["LONG", "SHORT", "NEUTRAL"]
     signal_action: str | None = None
+    market_price: float | None = None
+    signal_strategy: str | None = None
+    signal_levels: dict[str, Any] | None = None
     forecast_direction: str | None = None
     timeframe_directions: dict[str, str] = Field(
         default_factory=dict
