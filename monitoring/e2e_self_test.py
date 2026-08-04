@@ -2,15 +2,20 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
+import os
 import random
+import socket
 import string
+import sys
 import time
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,10 +25,245 @@ RUNTIME_RULE = (
     "e2e-self-test.runtime.yml"
 )
 
+LOCK_FILE = Path(
+    os.environ.get(
+        "SIGNALAI_E2E_LOCK_FILE",
+        "/tmp/signalai-monitoring-e2e.lock",
+    )
+)
+
+REPORT_DIR = Path(
+    os.environ.get(
+        "SIGNALAI_E2E_REPORT_DIR",
+        str(ROOT / "monitoring/e2e-reports"),
+    )
+)
+
+DEFAULT_REPORT_FILE = Path(
+    os.environ.get(
+        "SIGNALAI_E2E_REPORT_FILE",
+        str(REPORT_DIR / "latest.json"),
+    )
+)
+
+DEFAULT_HISTORY_FILE = Path(
+    os.environ.get(
+        "SIGNALAI_E2E_HISTORY_FILE",
+        str(REPORT_DIR / "history.json"),
+    )
+)
+
+DEFAULT_HISTORY_LIMIT = 20
+
 PROMETHEUS_URL = "http://localhost:9090"
 ALERTMANAGER_URL = "http://localhost:9093"
 
 ALERT_NAME = "SignalAIMonitoringE2ESelfTest"
+
+
+class SelfTestAlreadyRunning(RuntimeError):
+    pass
+
+
+@contextmanager
+def exclusive_run_lock() -> Iterator[None]:
+    LOCK_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with LOCK_FILE.open(
+        "a+",
+        encoding="utf-8",
+    ) as lock_file:
+        try:
+            fcntl.flock(
+                lock_file.fileno(),
+                fcntl.LOCK_EX
+                | fcntl.LOCK_NB,
+            )
+        except BlockingIOError as error:
+            lock_file.seek(0)
+            owner = lock_file.read().strip()
+
+            owner_details = (
+                f" Owner: {owner}"
+                if owner
+                else ""
+            )
+
+            raise SelfTestAlreadyRunning(
+                "Another monitoring E2E "
+                "self-test is active."
+                f"{owner_details}"
+            ) from error
+
+        owner = {
+            "pid": os.getpid(),
+            "hostname": socket.gethostname(),
+            "started_at": datetime.now(
+                UTC
+            ).isoformat(),
+        }
+
+        lock_file.seek(0)
+        lock_file.truncate()
+        json.dump(
+            owner,
+            lock_file,
+            sort_keys=True,
+        )
+        lock_file.write("\n")
+        lock_file.flush()
+        os.fsync(lock_file.fileno())
+
+        try:
+            yield
+        finally:
+            lock_file.seek(0)
+            lock_file.truncate()
+            lock_file.flush()
+            os.fsync(lock_file.fileno())
+
+            fcntl.flock(
+                lock_file.fileno(),
+                fcntl.LOCK_UN,
+            )
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def atomic_write_json(
+    path: Path,
+    payload: Any,
+) -> None:
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    temporary_path = path.with_name(
+        f".{path.name}.{os.getpid()}.tmp"
+    )
+
+    temporary_path.write_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    os.replace(
+        temporary_path,
+        path,
+    )
+
+
+def persist_report(
+    report: dict[str, Any],
+    *,
+    report_file: Path,
+    history_file: Path,
+    history_limit: int,
+) -> None:
+    if history_limit <= 0:
+        raise ValueError(
+            "history_limit must be positive"
+        )
+
+    atomic_write_json(
+        report_file,
+        report,
+    )
+
+    if history_file.exists():
+        history = json.loads(
+            history_file.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        if not isinstance(history, list):
+            raise ValueError(
+                "E2E history must contain "
+                "a JSON array."
+            )
+    else:
+        history = []
+
+    history.append(report)
+    history = history[-history_limit:]
+
+    atomic_write_json(
+        history_file,
+        history,
+    )
+
+
+def optional_metric(
+    metric: Callable[[], float],
+) -> int | None:
+    try:
+        return int(metric())
+    except Exception:
+        return None
+
+
+def build_report(
+    *,
+    run_id: str,
+    status: str,
+    timeout: float,
+    started_at: datetime,
+    started_monotonic: float,
+    error: BaseException | None,
+) -> dict[str, Any]:
+    finished_at = utc_now()
+
+    return {
+        "schema_version": 1,
+        "status": status,
+        "run_id": run_id,
+        "started_at": started_at.isoformat(),
+        "finished_at": finished_at.isoformat(),
+        "duration_seconds": round(
+            time.monotonic()
+            - started_monotonic,
+            3,
+        ),
+        "timeout_seconds": timeout,
+        "hostname": socket.gethostname(),
+        "pid": os.getpid(),
+        "runtime_rule_removed": (
+            not RUNTIME_RULE.exists()
+        ),
+        "telegram": {
+            "notifications_total": (
+                optional_metric(
+                    telegram_notifications
+                )
+            ),
+            "failures_total": (
+                optional_metric(
+                    telegram_failures
+                )
+            ),
+        },
+        "error": (
+            None
+            if error is None
+            else {
+                "type": type(error).__name__,
+                "message": str(error),
+            }
+        ),
+    }
 
 
 def http_json(
@@ -259,8 +499,10 @@ def make_run_id() -> str:
     return f"{timestamp}-{suffix}"
 
 
-def execute(timeout: float) -> None:
-    run_id = make_run_id()
+def _execute_unlocked(
+    timeout: float,
+    run_id: str,
+) -> None:
     instance = f"e2e-{run_id}"
 
     print(f"Run ID: {run_id}")
@@ -432,6 +674,82 @@ def execute(timeout: float) -> None:
         )
 
 
+
+def run_with_report(
+    *,
+    timeout: float,
+    report_file: Path,
+    history_file: Path,
+    history_limit: int,
+) -> dict[str, Any]:
+    with exclusive_run_lock():
+        run_id = make_run_id()
+        started_at = utc_now()
+        started_monotonic = time.monotonic()
+
+        try:
+            _execute_unlocked(
+                timeout,
+                run_id,
+            )
+        except BaseException as error:
+            report = build_report(
+                run_id=run_id,
+                status="FAILURE",
+                timeout=timeout,
+                started_at=started_at,
+                started_monotonic=(
+                    started_monotonic
+                ),
+                error=error,
+            )
+
+            try:
+                persist_report(
+                    report,
+                    report_file=report_file,
+                    history_file=history_file,
+                    history_limit=history_limit,
+                )
+            except Exception as report_error:
+                error.add_note(
+                    "JSON report persistence "
+                    "failed: "
+                    f"{report_error}"
+                )
+
+            raise
+
+        report = build_report(
+            run_id=run_id,
+            status="SUCCESS",
+            timeout=timeout,
+            started_at=started_at,
+            started_monotonic=(
+                started_monotonic
+            ),
+            error=None,
+        )
+
+        persist_report(
+            report,
+            report_file=report_file,
+            history_file=history_file,
+            history_limit=history_limit,
+        )
+
+        print(
+            "JSON report:",
+            report_file,
+        )
+        print(
+            "JSON history:",
+            history_file,
+        )
+
+        return report
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -450,6 +768,34 @@ def main() -> None:
         ),
     )
 
+    parser.add_argument(
+        "--report-file",
+        type=Path,
+        default=DEFAULT_REPORT_FILE,
+        help=(
+            "Path for the latest JSON report."
+        ),
+    )
+
+    parser.add_argument(
+        "--history-file",
+        type=Path,
+        default=DEFAULT_HISTORY_FILE,
+        help=(
+            "Path for JSON execution history."
+        ),
+    )
+
+    parser.add_argument(
+        "--history-limit",
+        type=int,
+        default=DEFAULT_HISTORY_LIMIT,
+        help=(
+            "Maximum number of reports "
+            "stored in history."
+        ),
+    )
+
     args = parser.parse_args()
 
     if args.timeout <= 0:
@@ -457,7 +803,34 @@ def main() -> None:
             "--timeout must be positive"
         )
 
-    execute(args.timeout)
+    if args.history_limit <= 0:
+        parser.error(
+            "--history-limit must be positive"
+        )
+
+    if (
+        args.report_file.resolve()
+        == args.history_file.resolve()
+    ):
+        parser.error(
+            "--report-file and --history-file "
+            "must be different"
+        )
+
+    try:
+        run_with_report(
+            timeout=args.timeout,
+            report_file=args.report_file,
+            history_file=args.history_file,
+            history_limit=args.history_limit,
+        )
+    except SelfTestAlreadyRunning as error:
+        print(
+            "E2E self-test already running:",
+            error,
+            file=sys.stderr,
+        )
+        raise SystemExit(75) from error
 
 
 if __name__ == "__main__":

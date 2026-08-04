@@ -563,3 +563,110 @@ print("Monitoring E2E self-test script: OK")
 print("Monitoring E2E script executable mode: OK")
 print("Monitoring E2E runtime cleanup: OK")
 print("Monitoring E2E documentation: OK")
+
+# v3.31 E2E parallel-run protection
+
+for value in (
+    "import fcntl",
+    "SIGNALAI_E2E_LOCK_FILE",
+    "signalai-monitoring-e2e.lock",
+    "class SelfTestAlreadyRunning",
+    "def exclusive_run_lock()",
+    "fcntl.LOCK_EX",
+    "fcntl.LOCK_NB",
+    "with exclusive_run_lock():",
+    "raise SystemExit(75) from error",
+    "E2E self-test already running:",
+):
+    assert value in e2e_script, value
+
+assert e2e_script.count(
+    "def exclusive_run_lock()"
+) == 1
+
+assert e2e_script.count(
+    "with exclusive_run_lock():"
+) == 1
+
+print("Monitoring E2E exclusive lock: OK")
+print("Monitoring E2E parallel-run rejection: OK")
+print("Monitoring E2E lock exit code: 75")
+
+# v3.31 E2E JSON reporting
+
+report_ignore_path = (
+    ROOT
+    / "monitoring/e2e-reports/.gitignore"
+)
+
+assert report_ignore_path.is_file()
+
+report_ignore = report_ignore_path.read_text(
+    encoding="utf-8"
+)
+
+assert "*" in report_ignore.splitlines()
+assert "!.gitignore" in report_ignore.splitlines()
+
+for value in (
+    "SIGNALAI_E2E_REPORT_DIR",
+    "SIGNALAI_E2E_REPORT_FILE",
+    "SIGNALAI_E2E_HISTORY_FILE",
+    "DEFAULT_HISTORY_LIMIT = 20",
+    "def atomic_write_json(",
+    "def persist_report(",
+    "def build_report(",
+    '"schema_version": 1',
+    '"status": status',
+    '"runtime_rule_removed":',
+    '"notifications_total":',
+    '"failures_total":',
+    '"--report-file"',
+    '"--history-file"',
+    '"--history-limit"',
+    'status="SUCCESS"',
+    'status="FAILURE"',
+    "JSON report:",
+    "JSON history:",
+):
+    assert value in e2e_script, value
+
+assert e2e_script.count(
+    "with exclusive_run_lock():"
+) == 1
+
+print("Monitoring E2E JSON report: OK")
+print("Monitoring E2E bounded history: 20")
+print("Monitoring E2E report ignore rules: OK")
+print("Monitoring E2E success/failure schema: OK")
+
+# v3.31 E2E reports documentation
+
+for value in (
+    '"--report-file and --history-file "',
+    '"must be different"',
+    "args.report_file.resolve()",
+    "args.history_file.resolve()",
+):
+    assert value in e2e_script, value
+
+for value in (
+    "## E2E parallel execution and JSON reports",
+    "/tmp/signalai-monitoring-e2e.lock",
+    "SIGNALAI_E2E_LOCK_FILE",
+    "monitoring/e2e-reports/latest.json",
+    "monitoring/e2e-reports/history.json",
+    "--report-file",
+    "--history-file",
+    "--history-limit 20",
+    "SIGNALAI_E2E_REPORT_DIR",
+    "SIGNALAI_E2E_REPORT_FILE",
+    "SIGNALAI_E2E_HISTORY_FILE",
+    "SUCCESS или FAILURE",
+    "Report file и history file должны быть разными",
+):
+    assert value in readme, value
+
+print("Monitoring E2E report path validation: OK")
+print("Monitoring E2E JSON report documentation: OK")
+print("Monitoring E2E lock documentation: OK")

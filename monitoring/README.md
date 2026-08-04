@@ -269,6 +269,72 @@ Self-test отправляет реальные сообщения в настр
 Перед запуском должны работать Prometheus и Alertmanager, а Telegram
 secrets должны находиться в локальном каталоге Alertmanager secrets.
 
+
+## E2E parallel execution and JSON reports
+
+Одновременно может выполняться только один monitoring E2E self-test.
+
+Для межпроцессной блокировки используется файл:
+
+    /tmp/signalai-monitoring-e2e.lock
+
+Если другой self-test уже работает, новый запуск завершается с кодом:
+
+    75
+
+Сообщение об ошибке содержит metadata владельца lock:
+
+- PID;
+- hostname;
+- время начала запуска.
+
+Путь lock-файла можно переопределить переменной:
+
+    SIGNALAI_E2E_LOCK_FILE
+
+После каждого выполненного теста создаётся latest JSON report:
+
+    monitoring/e2e-reports/latest.json
+
+История запусков сохраняется в:
+
+    monitoring/e2e-reports/history.json
+
+По умолчанию сохраняются последние 20 результатов. Пути и лимит можно
+переопределить параметрами:
+
+    ./monitoring/e2e_self_test.py \
+      --timeout 90 \
+      --report-file monitoring/e2e-reports/latest.json \
+      --history-file monitoring/e2e-reports/history.json \
+      --history-limit 20
+
+Также поддерживаются переменные окружения:
+
+- SIGNALAI_E2E_REPORT_DIR;
+- SIGNALAI_E2E_REPORT_FILE;
+- SIGNALAI_E2E_HISTORY_FILE.
+
+Latest report и history записываются атомарно. JSON report содержит:
+
+- schema version;
+- SUCCESS или FAILURE;
+- уникальный run ID;
+- время начала и завершения;
+- продолжительность теста;
+- timeout;
+- PID и hostname;
+- состояние cleanup временного Prometheus rule;
+- Telegram notifications total;
+- Telegram failures total;
+- тип и сообщение ошибки при неуспешном запуске.
+
+Report file и history file должны быть разными файлами.
+
+Каталог runtime-отчётов исключён из Git. В репозитории хранится только:
+
+    monitoring/e2e-reports/.gitignore
+
 ## Остановка
 
     docker compose --profile monitoring stop alertmanager prometheus grafana
