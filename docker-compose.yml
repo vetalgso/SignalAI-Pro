@@ -54,6 +54,23 @@ services:
       api:
         condition: service_started
     restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.32.1
+    profiles:
+      - monitoring
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./monitoring/alertmanager/templates:/etc/alertmanager/templates:ro
+      - ./monitoring/alertmanager/secrets:/etc/alertmanager/secrets:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.13.1
     profiles:
@@ -71,6 +88,8 @@ services:
       - "${PROMETHEUS_PORT:-9090}:9090"
     depends_on:
       api:
+        condition: service_started
+      alertmanager:
         condition: service_started
     restart: unless-stopped
 
@@ -100,4 +119,5 @@ services:
 volumes:
   postgres_data:
   prometheus_data:
+  alertmanager_data:
   grafana_data:

@@ -1,0 +1,21 @@
+{{ define "telegram.signalai.message" -}}
+{{ if eq .Status "firing" -}}
+🚨 SIGNALAI ALERT
+{{ else -}}
+✅ SIGNALAI RESOLVED
+{{ end }}
+Status: {{ .Status | toUpper }}
+Alert: {{ .GroupLabels.alertname }}
+Severity: {{ .CommonLabels.severity }}
+Component: {{ .CommonLabels.component }}
+Count: {{ len .Alerts }}
+{{ range .Alerts }}
+---
+Name: {{ .Labels.alertname }}
+{{ with .Annotations.summary }}Summary: {{ . }}{{ end }}
+{{ with .Annotations.description }}Details: {{ . }}{{ end }}
+Started: {{ date "2006-01-02 15:04:05 MST" .StartsAt }}
+{{ if eq .Status "resolved" }}Resolved: {{ date "2006-01-02 15:04:05 MST" .EndsAt }}{{ end }}
+{{ with .GeneratorURL }}Source: {{ . }}{{ end }}
+{{ end -}}
+{{ end }}
