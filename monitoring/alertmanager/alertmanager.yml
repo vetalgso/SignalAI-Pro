@@ -17,6 +17,13 @@ route:
   routes:
     - receiver: signalai-telegram-critical
       matchers:
+        - 'self_test="true"'
+      group_wait: 1s
+      group_interval: 5s
+      repeat_interval: 1h
+
+    - receiver: signalai-telegram-critical
+      matchers:
         - 'severity="critical"'
       group_wait: 5s
       group_interval: 2m

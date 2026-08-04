@@ -219,6 +219,56 @@ UID dashboard:
 
     signalai-scheduler-ops
 
+
+## Monitoring E2E self-test
+
+Полный тест цепочки мониторинга запускается командой:
+
+    ./monitoring/e2e_self_test.py --timeout 90
+
+Тест проверяет цепочку:
+
+    Prometheus -> Alertmanager -> Telegram
+
+Во время запуска создаётся временный Prometheus alert rule:
+
+    e2e-self-test.runtime.yml
+
+Он генерирует уникальный critical alert с label:
+
+    self_test="true"
+
+Alertmanager направляет такой alert через ускоренный маршрут:
+
+- receiver: signalai-telegram-critical;
+- group wait: 1 секунда;
+- group interval: 5 секунд;
+- send resolved: enabled.
+
+Self-test автоматически проверяет:
+
+- загрузку временного Prometheus rule;
+- переход alert в firing;
+- получение alert в Alertmanager;
+- успешную Telegram firing notification;
+- переход alert в resolved;
+- успешную Telegram resolved notification;
+- отсутствие роста Telegram failure counter;
+- удаление временного rule после завершения.
+
+За один успешный запуск в Telegram приходят два сообщения:
+
+- SIGNALAI ALERT;
+- SIGNALAI RESOLVED.
+
+Runtime rule исключён из Git через:
+
+    monitoring/prometheus/rules/.gitignore
+
+Self-test отправляет реальные сообщения в настроенный Telegram-чат.
+Перед запуском должны работать Prometheus и Alertmanager, а Telegram
+secrets должны находиться в локальном каталоге Alertmanager secrets.
+
 ## Остановка
 
     docker compose --profile monitoring stop alertmanager prometheus grafana

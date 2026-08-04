@@ -304,7 +304,7 @@ assert (
     alertmanager_config.count(
         "    - receiver: signalai-telegram-"
     )
-    == 3
+    == 4
 )
 
 for value in (
@@ -469,3 +469,97 @@ print("Alertmanager dashboard panels: 11")
 print("Total dashboard panels: 30")
 print("Dashboard panel IDs unique: OK")
 print("Alertmanager monitoring documentation: OK")
+
+# v3.30 monitoring E2E route checks
+
+runtime_rule_ignore_path = (
+    ROOT
+    / "monitoring/prometheus/rules/.gitignore"
+)
+
+assert runtime_rule_ignore_path.is_file()
+
+runtime_rule_ignore = (
+    runtime_rule_ignore_path.read_text(
+        encoding="utf-8"
+    )
+)
+
+assert (
+    "e2e-self-test.runtime.yml"
+    in runtime_rule_ignore.splitlines()
+)
+
+for value in (
+    'self_test="true"',
+    "group_wait: 1s",
+    "group_interval: 5s",
+):
+    assert value in alertmanager_config, value
+
+assert (
+    alertmanager_config.count(
+        "    - receiver: signalai-telegram-"
+    )
+    == 4
+)
+
+print("Monitoring E2E self-test route: OK")
+print("Monitoring E2E runtime rule ignore: OK")
+
+# v3.30 monitoring E2E script checks
+
+e2e_script_path = (
+    ROOT
+    / "monitoring/e2e_self_test.py"
+)
+
+assert e2e_script_path.is_file()
+assert e2e_script_path.stat().st_size > 0
+assert e2e_script_path.stat().st_mode & 0o111
+
+e2e_script = e2e_script_path.read_text(
+    encoding="utf-8"
+)
+
+assert e2e_script.startswith(
+    "#!/usr/bin/env python3\n"
+)
+
+for value in (
+    "SignalAIMonitoringE2ESelfTest",
+    "e2e-self-test.runtime.yml",
+    "self_test: \"true\"",
+    "Telegram firing notification",
+    "Telegram resolved notification",
+    "Telegram notification delta",
+    "E2E result: SUCCESS",
+    "Runtime rule removed:",
+    "alertmanager_notifications_total",
+    "alertmanager_notifications_failed_total",
+):
+    assert value in e2e_script, value
+
+runtime_rule_path = (
+    ROOT
+    / "monitoring/prometheus/rules/"
+    "e2e-self-test.runtime.yml"
+)
+
+assert not runtime_rule_path.exists()
+
+for value in (
+    "## Monitoring E2E self-test",
+    "Prometheus -> Alertmanager -> Telegram",
+    "./monitoring/e2e_self_test.py --timeout 90",
+    'self_test="true"',
+    "SIGNALAI ALERT",
+    "SIGNALAI RESOLVED",
+    "e2e-self-test.runtime.yml",
+):
+    assert value in readme, value
+
+print("Monitoring E2E self-test script: OK")
+print("Monitoring E2E script executable mode: OK")
+print("Monitoring E2E runtime cleanup: OK")
+print("Monitoring E2E documentation: OK")
