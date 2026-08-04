@@ -18,6 +18,17 @@ scrape_configs:
       - targets:
           - localhost:9090
 
+
+  - job_name: signalai-alertmanager
+    metrics_path: /metrics
+    scrape_interval: 5s
+    static_configs:
+      - targets:
+          - alertmanager:9093
+        labels:
+          service: signalai-alertmanager
+          component: alerting
+
   - job_name: signalai-scheduler
     metrics_path: /api/v3/scheduler/metrics
     scrape_interval: 5s

@@ -10,6 +10,7 @@ required_files = (
     "monitoring/README.md",
     "monitoring/prometheus/prometheus.yml",
     "monitoring/prometheus/rules/scheduler-alerts.yml",
+    "monitoring/prometheus/rules/alertmanager-alerts.yml",
     "monitoring/grafana/provisioning/datasources/prometheus.yml",
     "monitoring/grafana/provisioning/dashboards/signalai.yml",
     "monitoring/grafana/dashboards/signalai-scheduler-operations.json",
@@ -123,7 +124,7 @@ dashboard = json.loads(
 assert dashboard["uid"] == "signalai-scheduler-ops"
 assert dashboard["title"] == "SignalAI Scheduler Operations"
 assert dashboard["refresh"] == "5s"
-assert len(dashboard["panels"]) == 19
+assert len(dashboard["panels"]) == 30
 
 expressions = {
     target["expr"]
@@ -149,10 +150,10 @@ for metric in (
 print("Monitoring files present: OK")
 print("Docker Compose services and volumes: OK")
 print("Prometheus scrape configuration: OK")
-print("Prometheus alert rules: 10")
+print("Scheduler Prometheus alert rules: 10")
 print("Grafana datasource provisioning: OK")
 print("Grafana dashboard provisioning: OK")
-print("Scheduler Operations dashboard panels: 19")
+print("Scheduler Operations dashboard panels: 30")
 
 # v3.27 Alertmanager checks
 
@@ -362,3 +363,109 @@ print("Alert inhibition rules: 3")
 print("Silence management helper: OK")
 print("Silence helper executable mode: OK")
 print("Routing and silence documentation: OK")
+
+# v3.29 Alertmanager observability checks
+
+alertmanager_rules_path = (
+    ROOT
+    / "monitoring/prometheus/rules/"
+    "alertmanager-alerts.yml"
+)
+
+alertmanager_rules = alertmanager_rules_path.read_text(
+    encoding="utf-8"
+)
+
+expected_alertmanager_alerts = (
+    "SignalAIAlertmanagerMetricsTargetDown",
+    "SignalAIAlertmanagerConfigReloadFailed",
+    "SignalAIAlertmanagerTelegramNotificationFailure",
+    "SignalAIAlertmanagerUnprocessedAlerts",
+    "SignalAIAlertmanagerInvalidAlertsReceived",
+    "SignalAIAlertmanagerAggregationGroupLimitReached",
+    "SignalAIAlertmanagerActiveSilences",
+    "SignalAIAlertmanagerSuppressedAlerts",
+    "SignalAIAlertmanagerUnexpectedClusterMembers",
+)
+
+for alert_name in expected_alertmanager_alerts:
+    assert (
+        f"alert: {alert_name}"
+        in alertmanager_rules
+    ), alert_name
+
+assert (
+    alertmanager_rules.count("      - alert: ")
+    == 9
+)
+
+for value in (
+    "job_name: signalai-alertmanager",
+    "metrics_path: /metrics",
+    "alertmanager:9093",
+    "service: signalai-alertmanager",
+    "component: alerting",
+):
+    assert value in prometheus, value
+
+alertmanager_dashboard_titles = {
+    "Alertmanager Operations",
+    "Alertmanager Target",
+    "Alertmanager Config Reload",
+    "Alertmanager Cluster Members",
+    "Active Alertmanager Silences",
+    "Active Alertmanager Alerts",
+    "Suppressed Alertmanager Alerts",
+    "Telegram Failures (24h)",
+    "Telegram Notification Pipeline",
+    "Alertmanager State History",
+    "Firing Alertmanager Alerts",
+}
+
+dashboard_titles = {
+    panel.get("title")
+    for panel in dashboard["panels"]
+}
+
+assert (
+    alertmanager_dashboard_titles
+    <= dashboard_titles
+)
+
+for metric in (
+    "alertmanager_config_last_reload_successful",
+    "alertmanager_cluster_members",
+    "alertmanager_alerts",
+    "alertmanager_silences",
+    "alertmanager_notifications_total",
+    "alertmanager_notifications_failed_total",
+):
+    assert any(
+        metric in expression
+        for expression in expressions
+    ), metric
+
+assert len(dashboard["panels"]) == 30
+
+panel_ids = [
+    panel["id"]
+    for panel in dashboard["panels"]
+]
+
+assert len(panel_ids) == len(set(panel_ids))
+
+for value in (
+    "## Мониторинг Alertmanager",
+    "signalai-alertmanager",
+    "alertmanager-alerts.yml",
+    "Alertmanager Operations",
+    "signalai-scheduler-ops",
+):
+    assert value in readme, value
+
+print("Alertmanager metrics scrape job: OK")
+print("Alertmanager Prometheus alert rules: 9")
+print("Alertmanager dashboard panels: 11")
+print("Total dashboard panels: 30")
+print("Dashboard panel IDs unique: OK")
+print("Alertmanager monitoring documentation: OK")

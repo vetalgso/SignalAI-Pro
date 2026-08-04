@@ -174,6 +174,51 @@ Helper для управления silences:
 
 Alertmanager должен быть запущен до использования helper.
 
+
+## Мониторинг Alertmanager
+
+Prometheus собирает внутренние метрики Alertmanager через job:
+
+    signalai-alertmanager
+
+Endpoint внутри Docker network:
+
+    http://alertmanager:9093/metrics
+
+Alertmanager Operations в Grafana показывает:
+
+- доступность Alertmanager metrics target;
+- успешность последней загрузки конфигурации;
+- количество участников Alertmanager cluster;
+- активные и подавленные alerts;
+- активные silences;
+- Telegram notifications и ошибки доставки;
+- firing alerts самого Alertmanager.
+
+Для Alertmanager настроены девять Prometheus alert rules:
+
+- недоступность metrics endpoint;
+- ошибка загрузки конфигурации;
+- ошибка Telegram notification;
+- наличие unprocessed alerts;
+- получение invalid alerts;
+- достижение лимита aggregation groups;
+- длительно активные silences;
+- длительно suppressed alerts;
+- неожиданное количество cluster members.
+
+Rules находятся в файле:
+
+    monitoring/prometheus/rules/alertmanager-alerts.yml
+
+Alertmanager dashboard является частью:
+
+    SignalAI Scheduler Operations
+
+UID dashboard:
+
+    signalai-scheduler-ops
+
 ## Остановка
 
     docker compose --profile monitoring stop alertmanager prometheus grafana
