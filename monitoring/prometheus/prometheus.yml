@@ -29,6 +29,17 @@ scrape_configs:
           service: signalai-alertmanager
           component: alerting
 
+
+  - job_name: signalai-e2e
+    metrics_path: /metrics
+    scrape_interval: 5s
+    static_configs:
+      - targets:
+          - e2e-exporter:9102
+        labels:
+          service: signalai-e2e-exporter
+          component: monitoring-e2e
+
   - job_name: signalai-scheduler
     metrics_path: /api/v3/scheduler/metrics
     scrape_interval: 5s

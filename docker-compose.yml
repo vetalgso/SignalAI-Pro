@@ -71,6 +71,31 @@ services:
       - "${ALERTMANAGER_PORT:-9093}:9093"
     restart: unless-stopped
 
+
+  e2e-exporter:
+    image: python:3.12-slim
+    profiles:
+      - monitoring
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    command:
+      - python
+      - /opt/signalai/e2e_exporter.py
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9102"
+      - --report-file
+      - /data/latest.json
+      - --history-file
+      - /data/history.json
+    volumes:
+      - ./monitoring/e2e_exporter.py:/opt/signalai/e2e_exporter.py:ro
+      - ./monitoring/e2e-reports:/data:ro
+    ports:
+      - "${E2E_EXPORTER_PORT:-9102}:9102"
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.13.1
     profiles:
@@ -90,6 +115,8 @@ services:
       api:
         condition: service_started
       alertmanager:
+        condition: service_started
+      e2e-exporter:
         condition: service_started
     restart: unless-stopped
 

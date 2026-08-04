@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -124,7 +125,7 @@ dashboard = json.loads(
 assert dashboard["uid"] == "signalai-scheduler-ops"
 assert dashboard["title"] == "SignalAI Scheduler Operations"
 assert dashboard["refresh"] == "5s"
-assert len(dashboard["panels"]) == 30
+assert len(dashboard["panels"]) == 39
 
 expressions = {
     target["expr"]
@@ -153,7 +154,7 @@ print("Prometheus scrape configuration: OK")
 print("Scheduler Prometheus alert rules: 10")
 print("Grafana datasource provisioning: OK")
 print("Grafana dashboard provisioning: OK")
-print("Scheduler Operations dashboard panels: 30")
+print("Scheduler Operations dashboard panels: 39")
 
 # v3.27 Alertmanager checks
 
@@ -445,7 +446,7 @@ for metric in (
         for expression in expressions
     ), metric
 
-assert len(dashboard["panels"]) == 30
+assert len(dashboard["panels"]) == 39
 
 panel_ids = [
     panel["id"]
@@ -466,7 +467,7 @@ for value in (
 print("Alertmanager metrics scrape job: OK")
 print("Alertmanager Prometheus alert rules: 9")
 print("Alertmanager dashboard panels: 11")
-print("Total dashboard panels: 30")
+print("Total dashboard panels: 39")
 print("Dashboard panel IDs unique: OK")
 print("Alertmanager monitoring documentation: OK")
 
@@ -670,3 +671,216 @@ for value in (
 print("Monitoring E2E report path validation: OK")
 print("Monitoring E2E JSON report documentation: OK")
 print("Monitoring E2E lock documentation: OK")
+
+# v3.32 E2E Prometheus exporter
+
+e2e_exporter_path = (
+    ROOT
+    / "monitoring/e2e_exporter.py"
+)
+
+e2e_exporter_test_path = (
+    ROOT
+    / "monitoring/test_e2e_exporter.py"
+)
+
+assert e2e_exporter_path.is_file()
+assert e2e_exporter_path.stat().st_size > 0
+assert e2e_exporter_path.stat().st_mode & 0o111
+
+assert e2e_exporter_test_path.is_file()
+assert e2e_exporter_test_path.stat().st_size > 0
+
+e2e_exporter = e2e_exporter_path.read_text(
+    encoding="utf-8"
+)
+
+e2e_exporter_tree = ast.parse(
+    e2e_exporter
+)
+
+e2e_exporter_string_literals = "\n".join(
+    node.value
+    for node in ast.walk(
+        e2e_exporter_tree
+    )
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+    )
+)
+
+e2e_exporter_search_text = (
+    e2e_exporter
+    + "\n"
+    + e2e_exporter_string_literals
+)
+
+for value in (
+    "PROMETHEUS_CONTENT_TYPE",
+    "def render_metrics(",
+    "ThreadingHTTPServer",
+    'self.path == "/metrics"',
+    'self.path == "/-/ready"',
+    "signalai_e2e_exporter_ready",
+    "signalai_e2e_report_present",
+    "signalai_e2e_report_valid",
+    "signalai_e2e_last_run_status",
+    "signalai_e2e_last_run_age_seconds",
+    "signalai_e2e_last_run_duration_seconds",
+    "signalai_e2e_last_run_runtime_rule_removed",
+    "signalai_e2e_last_run_telegram_notifications",
+    "signalai_e2e_last_run_telegram_failures",
+    "signalai_e2e_history_entries",
+    "signalai_e2e_history_runs",
+):
+    assert value in e2e_exporter_search_text, value
+
+for value in (
+    "  e2e-exporter:",
+    "image: python:3.12-slim",
+    "${E2E_EXPORTER_PORT:-9102}:9102",
+    "./monitoring/e2e_exporter.py:"
+    "/opt/signalai/e2e_exporter.py:ro",
+    "./monitoring/e2e-reports:/data:ro",
+):
+    assert value in compose, value
+
+for value in (
+    "job_name: signalai-e2e",
+    "metrics_path: /metrics",
+    "e2e-exporter:9102",
+    "service: signalai-e2e-exporter",
+    "component: monitoring-e2e",
+):
+    assert value in prometheus, value
+
+print("Monitoring E2E exporter script: OK")
+print("Monitoring E2E exporter executable mode: OK")
+print("Monitoring E2E exporter tests: OK")
+print("Monitoring E2E exporter Compose service: OK")
+print("Monitoring E2E Prometheus scrape job: OK")
+
+# v3.32 E2E Grafana dashboard
+
+e2e_dashboard_titles = {
+    "Monitoring E2E Operations",
+    "E2E Metrics Target",
+    "Latest E2E Result",
+    "Latest E2E Age",
+    "Latest E2E Duration",
+    "Runtime Rule Cleanup",
+    "Telegram Failures at Last Run",
+    "E2E Status History",
+    "E2E Timing History",
+}
+
+assert (
+    e2e_dashboard_titles
+    <= dashboard_titles
+)
+
+for metric in (
+    "signalai_e2e_last_run_status",
+    "signalai_e2e_last_run_age_seconds",
+    "signalai_e2e_last_run_duration_seconds",
+    "signalai_e2e_last_run_runtime_rule_removed",
+    "signalai_e2e_last_run_telegram_failures",
+    "signalai_e2e_history_runs",
+    "signalai_e2e_history_entries",
+    "signalai_e2e_last_run_timeout_seconds",
+):
+    assert any(
+        metric in expression
+        for expression in expressions
+    ), metric
+
+assert len(dashboard["panels"]) == 39
+assert dashboard["version"] >= 3
+
+panel_ids = [
+    panel["id"]
+    for panel in dashboard["panels"]
+]
+
+assert len(panel_ids) == len(set(panel_ids))
+
+print("Monitoring E2E Grafana panels: 9")
+print("Monitoring E2E dashboard metrics: OK")
+print("Total dashboard panels: 39")
+
+# v3.32 E2E Prometheus alerts
+
+e2e_alerts_path = (
+    ROOT
+    / "monitoring/prometheus/rules/"
+    "e2e-alerts.yml"
+)
+
+assert e2e_alerts_path.is_file()
+assert e2e_alerts_path.stat().st_size > 0
+
+e2e_alerts = e2e_alerts_path.read_text(
+    encoding="utf-8"
+)
+
+expected_e2e_alerts = (
+    "SignalAIE2EMetricsTargetDown",
+    "SignalAIE2ELatestReportMissing",
+    "SignalAIE2ELatestReportInvalid",
+    "SignalAIE2ELastRunFailed",
+    "SignalAIE2ELastRunStale",
+    "SignalAIE2ERuntimeRuleCleanupFailed",
+)
+
+for alert_name in expected_e2e_alerts:
+    assert (
+        f"alert: {alert_name}"
+        in e2e_alerts
+    ), alert_name
+
+assert (
+    e2e_alerts.count("      - alert: ")
+    == 6
+)
+
+for value in (
+    'up{job="signalai-e2e"} == 0',
+    "signalai_e2e_report_present",
+    "signalai_e2e_report_valid",
+    "signalai_e2e_last_run_status",
+    'status="FAILURE"',
+    "signalai_e2e_last_run_age_seconds",
+    "> 86400",
+    (
+        "signalai_e2e_last_run_"
+        "runtime_rule_removed"
+    ),
+    "severity: critical",
+    "severity: warning",
+    "component: monitoring-e2e",
+):
+    assert value in e2e_alerts, value
+
+for value in (
+    "## E2E Prometheus exporter",
+    "http://localhost:9102/-/ready",
+    "http://localhost:9102/metrics",
+    "signalai-e2e",
+    "Monitoring E2E Operations",
+    "## E2E Prometheus alerts",
+    "monitoring/prometheus/rules/e2e-alerts.yml",
+    "SignalAIE2EMetricsTargetDown",
+    "SignalAIE2ELatestReportMissing",
+    "SignalAIE2ELatestReportInvalid",
+    "SignalAIE2ELastRunFailed",
+    "SignalAIE2ELastRunStale",
+    "SignalAIE2ERuntimeRuleCleanupFailed",
+    "старше 24 часов",
+):
+    assert value in readme, value
+
+print("Monitoring E2E Prometheus alerts: 6")
+print("Monitoring E2E stale threshold: 24h")
+print("Monitoring E2E exporter documentation: OK")
+print("Monitoring E2E alert documentation: OK")

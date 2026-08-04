@@ -1,0 +1,87 @@
+groups:
+  - name: signalai-monitoring-e2e
+    interval: 5s
+    rules:
+      - alert: SignalAIE2EMetricsTargetDown
+        expr: up{job="signalai-e2e"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI E2E metrics exporter is unavailable
+          description: Prometheus cannot scrape the SignalAI E2E metrics exporter.
+
+      - alert: SignalAIE2ELatestReportMissing
+        expr: |
+          signalai_e2e_report_present{
+            job="signalai-e2e"
+          } == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI E2E latest report is missing
+          description: The E2E exporter has not found the latest JSON report for at least five minutes.
+
+      - alert: SignalAIE2ELatestReportInvalid
+        expr: |
+          signalai_e2e_report_valid{
+            job="signalai-e2e"
+          } == 0
+          and on(job, instance)
+          signalai_e2e_report_present{
+            job="signalai-e2e"
+          } == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI E2E latest report is invalid
+          description: The latest E2E JSON report exists but cannot be parsed or has an invalid structure.
+
+      - alert: SignalAIE2ELastRunFailed
+        expr: |
+          signalai_e2e_last_run_status{
+            job="signalai-e2e",
+            status="FAILURE"
+          } == 1
+        for: 30s
+        labels:
+          severity: critical
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI monitoring E2E self-test failed
+          description: The latest Prometheus to Alertmanager to Telegram E2E self-test finished with FAILURE.
+
+      - alert: SignalAIE2ELastRunStale
+        expr: |
+          signalai_e2e_last_run_age_seconds{
+            job="signalai-e2e"
+          } > 86400
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI monitoring E2E self-test is stale
+          description: No successful or failed E2E self-test result has been recorded during the last 24 hours.
+
+      - alert: SignalAIE2ERuntimeRuleCleanupFailed
+        expr: |
+          signalai_e2e_last_run_runtime_rule_removed{
+            job="signalai-e2e"
+          } == 0
+          and on(job, instance)
+          signalai_e2e_report_valid{
+            job="signalai-e2e"
+          } == 1
+        for: 30s
+        labels:
+          severity: critical
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI E2E runtime rule cleanup failed
+          description: The latest E2E self-test report indicates that its temporary Prometheus rule was not removed.

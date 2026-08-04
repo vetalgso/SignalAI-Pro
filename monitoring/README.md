@@ -335,6 +335,91 @@ Report file и history file должны быть разными файлами.
 
     monitoring/e2e-reports/.gitignore
 
+
+## E2E Prometheus exporter
+
+Monitoring E2E exporter преобразует runtime JSON-отчёты self-test в
+Prometheus metrics.
+
+Compose service:
+
+    e2e-exporter
+
+Локальные endpoints:
+
+    http://localhost:9102/-/ready
+    http://localhost:9102/metrics
+
+Порт можно изменить переменной окружения:
+
+    E2E_EXPORTER_PORT
+
+Exporter читает файлы:
+
+    monitoring/e2e-reports/latest.json
+    monitoring/e2e-reports/history.json
+
+Каталог подключается в контейнер только для чтения.
+
+Prometheus scrape job:
+
+    signalai-e2e
+
+Основные метрики:
+
+- signalai_e2e_exporter_ready;
+- signalai_e2e_report_present;
+- signalai_e2e_report_valid;
+- signalai_e2e_last_run_status;
+- signalai_e2e_last_run_age_seconds;
+- signalai_e2e_last_run_duration_seconds;
+- signalai_e2e_last_run_timeout_seconds;
+- signalai_e2e_last_run_runtime_rule_removed;
+- signalai_e2e_last_run_telegram_notifications;
+- signalai_e2e_last_run_telegram_failures;
+- signalai_e2e_history_entries;
+- signalai_e2e_history_runs.
+
+Grafana dashboard `signalai-scheduler-ops` содержит раздел:
+
+    Monitoring E2E Operations
+
+В разделе отображаются:
+
+- доступность exporter;
+- последний SUCCESS или FAILURE;
+- возраст последней проверки;
+- длительность проверки;
+- результат cleanup временного rule;
+- Telegram failures;
+- история результатов и времени выполнения.
+
+## E2E Prometheus alerts
+
+Файл правил:
+
+    monitoring/prometheus/rules/e2e-alerts.yml
+
+Доступны alerts:
+
+- SignalAIE2EMetricsTargetDown;
+- SignalAIE2ELatestReportMissing;
+- SignalAIE2ELatestReportInvalid;
+- SignalAIE2ELastRunFailed;
+- SignalAIE2ELastRunStale;
+- SignalAIE2ERuntimeRuleCleanupFailed.
+
+Alert `SignalAIE2ELastRunStale` срабатывает, если последний E2E-результат
+старше 24 часов.
+
+Critical alerts направляются через receiver:
+
+    signalai-telegram-critical
+
+Warning alerts направляются через receiver:
+
+    signalai-telegram-warning
+
 ## Остановка
 
     docker compose --profile monitoring stop alertmanager prometheus grafana
