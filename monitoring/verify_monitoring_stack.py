@@ -125,7 +125,7 @@ dashboard = json.loads(
 assert dashboard["uid"] == "signalai-scheduler-ops"
 assert dashboard["title"] == "SignalAI Scheduler Operations"
 assert dashboard["refresh"] == "5s"
-assert len(dashboard["panels"]) == 50
+assert len(dashboard["panels"]) == 56
 
 expressions = {
     target["expr"]
@@ -154,7 +154,7 @@ print("Prometheus scrape configuration: OK")
 print("Scheduler Prometheus alert rules: 10")
 print("Grafana datasource provisioning: OK")
 print("Grafana dashboard provisioning: OK")
-print("Scheduler Operations dashboard panels: 50")
+print("Scheduler Operations dashboard panels: 56")
 
 # v3.27 Alertmanager checks
 
@@ -446,7 +446,7 @@ for metric in (
         for expression in expressions
     ), metric
 
-assert len(dashboard["panels"]) == 50
+assert len(dashboard["panels"]) == 56
 
 panel_ids = [
     panel["id"]
@@ -467,7 +467,7 @@ for value in (
 print("Alertmanager metrics scrape job: OK")
 print("Alertmanager Prometheus alert rules: 9")
 print("Alertmanager dashboard panels: 11")
-print("Total dashboard panels: 50")
+print("Total dashboard panels: 56")
 print("Dashboard panel IDs unique: OK")
 print("Alertmanager monitoring documentation: OK")
 
@@ -795,7 +795,7 @@ for metric in (
         for expression in expressions
     ), metric
 
-assert len(dashboard["panels"]) == 50
+assert len(dashboard["panels"]) == 56
 assert dashboard["version"] >= 3
 
 panel_ids = [
@@ -807,7 +807,7 @@ assert len(panel_ids) == len(set(panel_ids))
 
 print("Monitoring E2E Grafana panels: 9")
 print("Monitoring E2E dashboard metrics: OK")
-print("Total dashboard panels: 50")
+print("Total dashboard panels: 56")
 
 # v3.32 E2E Prometheus alerts
 
@@ -841,7 +841,7 @@ for alert_name in expected_e2e_alerts:
 
 assert (
     e2e_alerts.count("      - alert: ")
-    == 12
+    == 14
 )
 
 for value in (
@@ -1216,14 +1216,14 @@ assert (
     runner_rules.count(
         "      - alert: SignalAIE2E"
     )
-    == 12
+    == 14
 )
 
 assert (
     runner_rules.count(
         "      - alert: SignalAIE2ERunner"
     )
-    == 6
+    == 8
 )
 
 assert (
@@ -1260,7 +1260,7 @@ runner_panel_ids = [
     for panel in runner_panels
 ]
 
-assert len(runner_panels) == 50
+assert len(runner_panels) == 56
 assert len(runner_panel_ids) == len(
     set(runner_panel_ids)
 )
@@ -1306,9 +1306,208 @@ for value in (
 ):
     assert value in readme, value
 
-print("Periodic E2E runner Prometheus alerts: 6")
-print("Total E2E Prometheus alerts: 12")
+print("Periodic E2E runner Prometheus alerts: 8")
+print("Total E2E Prometheus alerts: 14")
 print("Periodic E2E runner Grafana panels: 11")
-print("Total dashboard panels: 50")
+print("Total dashboard panels: 56")
 print("Periodic E2E runner dashboard IDs: unique")
 print("Periodic E2E runner observability docs: OK")
+
+# v3.34 periodic runner state recovery
+
+recovery_runner_source = (
+    ROOT / "monitoring/e2e_runner.py"
+).read_text(encoding="utf-8")
+
+recovery_runner_tests = (
+    ROOT / "monitoring/test_e2e_runner.py"
+).read_text(encoding="utf-8")
+
+recovery_exporter_source = (
+    ROOT / "monitoring/e2e_exporter.py"
+).read_text(encoding="utf-8")
+
+recovery_exporter_tree = ast.parse(
+    recovery_exporter_source
+)
+
+recovery_exporter_literals = "\n".join(
+    node.value
+    for node in ast.walk(
+        recovery_exporter_tree
+    )
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+    )
+)
+
+recovery_exporter_search_text = (
+    recovery_exporter_source
+    + "\n"
+    + recovery_exporter_literals
+)
+
+recovery_exporter_tests = (
+    ROOT / "monitoring/test_e2e_exporter.py"
+).read_text(encoding="utf-8")
+
+for value in (
+    "INTERRUPTED_RUN_EXIT_CODE = 125",
+    "def validate_existing_state(",
+    "def load_existing_state(",
+    "def prepare_startup_state(",
+    '"RESUMED_SCHEDULE"',
+    '"OVERDUE_SCHEDULE"',
+    '"INTERRUPTED_RUN"',
+    '"INVALID_STATE_RESET"',
+    '"restart_count"',
+    '"recovered_from_status"',
+):
+    assert value in recovery_runner_source, value
+
+for value in (
+    "test_future_waiting_state_resumes_schedule",
+    "test_overdue_waiting_state_runs_immediately",
+    "test_interrupted_run_becomes_failure",
+    "test_invalid_state_is_reset",
+):
+    assert value in recovery_runner_tests, value
+
+for value in (
+    "RECOVERY_REASONS",
+    "signalai_e2e_runner_recovered",
+    "signalai_e2e_runner_restart_count",
+    "signalai_e2e_runner_recovery_reason",
+    (
+        "signalai_e2e_runner_"
+        "process_started_timestamp_seconds"
+    ),
+    (
+        "signalai_e2e_runner_"
+        "recovered_timestamp_seconds"
+    ),
+    (
+        "signalai_e2e_runner_"
+        "interrupted_last_run"
+    ),
+):
+    assert value in recovery_exporter_search_text, value
+
+assert (
+    "signalai_e2e_runner_recovered 1"
+    in recovery_exporter_tests
+)
+
+for value in (
+    "### Periodic runner restart recovery",
+    "exit code `125`",
+    "signalai_e2e_runner_recovered",
+    "signalai_e2e_runner_restart_count",
+    "signalai_e2e_runner_recovery_reason",
+    "high-cardinality series",
+):
+    assert value in readme, value
+
+print("Periodic runner persistent state recovery: OK")
+print("Periodic runner interrupted exit code: 125")
+print("Periodic runner recovery unit tests: 4")
+print("Periodic runner recovery reasons: bounded")
+print("Periodic runner recovery metrics: 6")
+print("Periodic runner recovery documentation: OK")
+
+# v3.34 recovery alerts and dashboard
+
+recovery_alerts_source = (
+    ROOT
+    / "monitoring/prometheus/rules/"
+    "e2e-alerts.yml"
+).read_text(encoding="utf-8")
+
+for alert_name in (
+    "SignalAIE2ERunnerInterruptedRun",
+    "SignalAIE2ERunnerRestartLoop",
+):
+    assert (
+        f"      - alert: {alert_name}"
+        in recovery_alerts_source
+    ), alert_name
+
+assert (
+    "signalai_e2e_runner_"
+    "interrupted_last_run"
+    in recovery_alerts_source
+)
+
+assert (
+    "changes("
+    in recovery_alerts_source
+)
+
+assert (
+    "signalai_e2e_runner_"
+    "restart_count"
+    in recovery_alerts_source
+)
+
+assert "[15m]" in recovery_alerts_source
+assert ") >= 3" in recovery_alerts_source
+
+recovery_dashboard = __import__(
+    "json"
+).loads(
+    (
+        ROOT
+        / "monitoring/grafana/dashboards/"
+        "signalai-scheduler-operations.json"
+    ).read_text(encoding="utf-8")
+)
+
+recovery_panels = recovery_dashboard[
+    "panels"
+]
+
+assert len(recovery_panels) == 56
+
+recovery_panel_ids = [
+    int(panel["id"])
+    for panel in recovery_panels
+]
+
+assert len(recovery_panel_ids) == len(
+    set(recovery_panel_ids)
+)
+
+recovery_titles = {
+    panel["title"]
+    for panel in recovery_panels
+}
+
+for title in (
+    "Periodic E2E Recovery",
+    "Recovered State",
+    "Recovery Reason",
+    "Runner Restart Count",
+    "Interrupted Last Run",
+    "Recovery Lifecycle History",
+):
+    assert title in recovery_titles, title
+
+assert recovery_dashboard["version"] >= 5
+
+for value in (
+    "SignalAIE2ERunnerInterruptedRun",
+    "SignalAIE2ERunnerRestartLoop",
+    "Periodic E2E Recovery",
+    "restart counter за 15 минут",
+    "историю recovery lifecycle",
+):
+    assert value in readme, value
+
+print("Periodic runner recovery Prometheus alerts: 2")
+print("Total E2E Prometheus alerts: 14")
+print("Total runner Prometheus alerts: 8")
+print("Periodic runner recovery Grafana panels: 6")
+print("Total dashboard panels: 56")
+print("Recovery dashboard IDs: unique")
+print("Recovery observability documentation: OK")

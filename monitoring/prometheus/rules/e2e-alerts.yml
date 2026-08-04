@@ -182,3 +182,31 @@ groups:
         annotations:
           summary: SignalAI periodic E2E runner schedule is overdue
           description: The next scheduled E2E run is overdue by more than fifteen minutes.
+
+      - alert: SignalAIE2ERunnerInterruptedRun
+        expr: |
+          signalai_e2e_runner_interrupted_last_run{
+            job="signalai-e2e"
+          } == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI periodic E2E run was interrupted
+          description: The runner recovered a previous RUNNING state as an interrupted and failed E2E run.
+
+      - alert: SignalAIE2ERunnerRestartLoop
+        expr: |
+          changes(
+            signalai_e2e_runner_restart_count{
+              job="signalai-e2e"
+            }[15m]
+          ) >= 3
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring-e2e
+        annotations:
+          summary: SignalAI periodic E2E runner repeatedly restarts
+          description: The periodic E2E runner restarted at least three times during the last fifteen minutes.

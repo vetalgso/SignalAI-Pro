@@ -19,6 +19,21 @@ STATE_SCHEMA_VERSION = 1
 LOCK_CONFLICT_EXIT_CODE = 75
 PROCESS_TIMEOUT_EXIT_CODE = 124
 PROCESS_START_ERROR_EXIT_CODE = 127
+INTERRUPTED_RUN_EXIT_CODE = 125
+
+RUNNER_STATUSES = (
+    "STARTING",
+    "WAITING",
+    "RUNNING",
+    "COMPLETED",
+    "STOPPED",
+)
+
+RUN_RESULTS = (
+    "SUCCESS",
+    "FAILURE",
+    "LOCKED",
+)
 
 DEFAULT_SELF_TEST = (
     Path(__file__).resolve().parent
@@ -179,8 +194,14 @@ def initial_state(
         "runner_status": "STARTING",
         "last_result": None,
         "started_at": now.isoformat(),
+        "process_started_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "next_run_at": None,
+        "restart_count": 0,
+        "recovered": False,
+        "recovered_at": None,
+        "recovered_from_status": None,
+        "recovery_reason": "FRESH_START",
         "last_run_started_at": None,
         "last_run_finished_at": None,
         "last_duration_seconds": None,
@@ -195,6 +216,366 @@ def initial_state(
             settings
         ),
     }
+
+
+def parse_state_timestamp(
+    value: object,
+) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+
+    normalized = (
+        value[:-1] + "+00:00"
+        if value.endswith("Z")
+        else value
+    )
+
+    try:
+        parsed = datetime.fromisoformat(
+            normalized
+        )
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(
+            tzinfo=UTC
+        )
+
+    return parsed.astimezone(UTC)
+
+
+def valid_nonnegative_integer(
+    value: object,
+) -> bool:
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and value >= 0
+    )
+
+
+def validate_existing_state(
+    payload: object,
+) -> bool:
+    if not isinstance(payload, dict):
+        return False
+
+    if (
+        payload.get("schema_version")
+        != STATE_SCHEMA_VERSION
+    ):
+        return False
+
+    if (
+        payload.get("runner_status")
+        not in RUNNER_STATUSES
+    ):
+        return False
+
+    last_result = payload.get(
+        "last_result"
+    )
+
+    if (
+        last_result is not None
+        and last_result not in RUN_RESULTS
+    ):
+        return False
+
+    for key in (
+        "runs_total",
+        "successes_total",
+        "failures_total",
+        "lock_conflicts_total",
+        "consecutive_failures",
+    ):
+        if not valid_nonnegative_integer(
+            payload.get(key)
+        ):
+            return False
+
+    restart_count = payload.get(
+        "restart_count",
+        0,
+    )
+
+    if not valid_nonnegative_integer(
+        restart_count
+    ):
+        return False
+
+    for key in (
+        "started_at",
+        "updated_at",
+        "next_run_at",
+        "last_run_started_at",
+        "last_run_finished_at",
+    ):
+        value = payload.get(key)
+
+        if (
+            value is not None
+            and parse_state_timestamp(
+                value
+            )
+            is None
+        ):
+            return False
+
+    return True
+
+
+def load_existing_state(
+    path: Path,
+) -> tuple[str, dict[str, Any] | None]:
+    if not path.exists():
+        return "MISSING", None
+
+    try:
+        payload = json.loads(
+            path.read_text(
+                encoding="utf-8"
+            )
+        )
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+    ):
+        return "INVALID", None
+
+    if not validate_existing_state(
+        payload
+    ):
+        return "INVALID", None
+
+    return "VALID", payload
+
+
+def prepare_startup_state(
+    settings: RunnerSettings,
+    *,
+    now: datetime,
+) -> tuple[dict[str, Any], float]:
+    load_result, previous = (
+        load_existing_state(
+            settings.state_file
+        )
+    )
+
+    if previous is None:
+        state = initial_state(
+            settings,
+            now=now,
+        )
+
+        if load_result == "INVALID":
+            state["recovery_reason"] = (
+                "INVALID_STATE_RESET"
+            )
+
+        first_run_at = (
+            now
+            + timedelta(
+                seconds=(
+                    settings
+                    .startup_delay_seconds
+                )
+            )
+        )
+    else:
+        state = dict(previous)
+
+        previous_status = str(
+            state["runner_status"]
+        )
+
+        state.setdefault(
+            "started_at",
+            now.isoformat(),
+        )
+
+        state.update(
+            {
+                "process_started_at": (
+                    now.isoformat()
+                ),
+                "updated_at": (
+                    now.isoformat()
+                ),
+                "restart_count": (
+                    int(
+                        state.get(
+                            "restart_count",
+                            0,
+                        )
+                    )
+                    + 1
+                ),
+                "recovered": True,
+                "recovered_at": (
+                    now.isoformat()
+                ),
+                "recovered_from_status": (
+                    previous_status
+                ),
+                "configuration": (
+                    settings_snapshot(
+                        settings
+                    )
+                ),
+            }
+        )
+
+        if previous_status == "RUNNING":
+            state["runs_total"] = (
+                int(state["runs_total"])
+                + 1
+            )
+            state["failures_total"] = (
+                int(
+                    state[
+                        "failures_total"
+                    ]
+                )
+                + 1
+            )
+            state[
+                "consecutive_failures"
+            ] = (
+                int(
+                    state[
+                        "consecutive_failures"
+                    ]
+                )
+                + 1
+            )
+
+            state.update(
+                {
+                    "last_result": (
+                        "FAILURE"
+                    ),
+                    "last_run_finished_at": (
+                        now.isoformat()
+                    ),
+                    "last_duration_seconds": (
+                        None
+                    ),
+                    "last_exit_code": (
+                        INTERRUPTED_RUN_EXIT_CODE
+                    ),
+                    "last_error": {
+                        "type": (
+                            "InterruptedRun"
+                        ),
+                        "message": (
+                            "The previous periodic "
+                            "E2E run was interrupted "
+                            "before completion."
+                        ),
+                    },
+                    "recovery_reason": (
+                        "INTERRUPTED_RUN"
+                    ),
+                }
+            )
+
+        if settings.once:
+            first_run_at = (
+                now
+                + timedelta(
+                    seconds=(
+                        settings
+                        .startup_delay_seconds
+                    )
+                )
+            )
+
+            if previous_status != "RUNNING":
+                state["recovery_reason"] = (
+                    "ONE_SHOT_RESTART"
+                )
+
+        elif previous_status == "WAITING":
+            scheduled_at = (
+                parse_state_timestamp(
+                    state.get(
+                        "next_run_at"
+                    )
+                )
+            )
+
+            if (
+                scheduled_at is not None
+                and scheduled_at > now
+            ):
+                first_run_at = (
+                    scheduled_at
+                )
+                state[
+                    "recovery_reason"
+                ] = "RESUMED_SCHEDULE"
+            else:
+                first_run_at = now
+                state[
+                    "recovery_reason"
+                ] = "OVERDUE_SCHEDULE"
+
+        elif previous_status == "RUNNING":
+            first_run_at = (
+                now
+                + timedelta(
+                    seconds=(
+                        settings
+                        .retry_delay_seconds
+                    )
+                )
+            )
+
+        else:
+            first_run_at = (
+                now
+                + timedelta(
+                    seconds=(
+                        settings
+                        .startup_delay_seconds
+                    )
+                )
+            )
+            state["recovery_reason"] = (
+                "RESTARTED"
+            )
+
+    first_delay = max(
+        0.0,
+        (
+            first_run_at - now
+        ).total_seconds(),
+    )
+
+    state.update(
+        {
+            "runner_status": "WAITING",
+            "updated_at": now.isoformat(),
+            "next_run_at": (
+                first_run_at.isoformat()
+            ),
+            "configuration": (
+                settings_snapshot(
+                    settings
+                )
+            ),
+        }
+    )
+
+    atomic_write_json(
+        settings.state_file,
+        state,
+    )
+
+    return state, first_delay
 
 
 def execute_self_test(
@@ -452,36 +833,11 @@ def run_loop(
 ) -> int:
     started_at = now_provider()
 
-    state = initial_state(
-        settings,
-        now=started_at,
-    )
-
-    first_run_at = (
-        started_at
-        + timedelta(
-            seconds=(
-                settings
-                .startup_delay_seconds
-            )
+    state, first_delay = (
+        prepare_startup_state(
+            settings,
+            now=started_at,
         )
-    )
-
-    state.update(
-        {
-            "runner_status": "WAITING",
-            "updated_at": (
-                started_at.isoformat()
-            ),
-            "next_run_at": (
-                first_run_at.isoformat()
-            ),
-        }
-    )
-
-    atomic_write_json(
-        settings.state_file,
-        state,
     )
 
     print(
@@ -495,7 +851,7 @@ def run_loop(
     )
 
     if stop_event.wait(
-        settings.startup_delay_seconds
+        first_delay
     ):
         mark_stopped(
             settings,

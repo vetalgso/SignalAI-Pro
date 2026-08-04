@@ -4,15 +4,21 @@ import json
 import subprocess
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from datetime import (
+    UTC,
+    datetime,
+    timedelta,
+)
 from pathlib import Path
 
 from monitoring.e2e_runner import (
+    INTERRUPTED_RUN_EXIT_CODE,
     LOCK_CONFLICT_EXIT_CODE,
     PROCESS_TIMEOUT_EXIT_CODE,
     RunnerSettings,
     build_self_test_command,
     initial_state,
+    prepare_startup_state,
     run_once,
 )
 
@@ -396,6 +402,351 @@ class E2ERunnerTests(unittest.TestCase):
         )
         self.assertIsNone(
             persisted["next_run_at"]
+        )
+
+
+    def test_future_waiting_state_resumes_schedule(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = self.make_settings(
+                root
+            )
+
+            previous_start = datetime(
+                2026,
+                8,
+                4,
+                10,
+                0,
+                tzinfo=UTC,
+            )
+
+            now = datetime(
+                2026,
+                8,
+                4,
+                12,
+                0,
+                tzinfo=UTC,
+            )
+
+            next_run = (
+                now
+                + timedelta(
+                    minutes=10
+                )
+            )
+
+            previous = initial_state(
+                settings,
+                now=previous_start,
+            )
+
+            previous.update(
+                {
+                    "runner_status": (
+                        "WAITING"
+                    ),
+                    "last_result": (
+                        "SUCCESS"
+                    ),
+                    "updated_at": (
+                        previous_start
+                        .isoformat()
+                    ),
+                    "next_run_at": (
+                        next_run.isoformat()
+                    ),
+                    "runs_total": 7,
+                    "successes_total": 6,
+                    "failures_total": 1,
+                }
+            )
+
+            settings.state_file.write_text(
+                json.dumps(previous),
+                encoding="utf-8",
+            )
+
+            state, delay = (
+                prepare_startup_state(
+                    settings,
+                    now=now,
+                )
+            )
+
+        self.assertEqual(delay, 600)
+        self.assertEqual(
+            state["runner_status"],
+            "WAITING",
+        )
+        self.assertEqual(
+            state["next_run_at"],
+            next_run.isoformat(),
+        )
+        self.assertEqual(
+            state["runs_total"],
+            7,
+        )
+        self.assertEqual(
+            state["successes_total"],
+            6,
+        )
+        self.assertEqual(
+            state["restart_count"],
+            1,
+        )
+        self.assertTrue(
+            state["recovered"]
+        )
+        self.assertEqual(
+            state[
+                "recovered_from_status"
+            ],
+            "WAITING",
+        )
+        self.assertEqual(
+            state["recovery_reason"],
+            "RESUMED_SCHEDULE",
+        )
+
+    def test_overdue_waiting_state_runs_immediately(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = self.make_settings(
+                root
+            )
+
+            now = datetime(
+                2026,
+                8,
+                4,
+                12,
+                0,
+                tzinfo=UTC,
+            )
+
+            previous = initial_state(
+                settings,
+                now=(
+                    now
+                    - timedelta(
+                        hours=2
+                    )
+                ),
+            )
+
+            previous.update(
+                {
+                    "runner_status": (
+                        "WAITING"
+                    ),
+                    "next_run_at": (
+                        now
+                        - timedelta(
+                            minutes=20
+                        )
+                    ).isoformat(),
+                    "runs_total": 3,
+                    "successes_total": 3,
+                }
+            )
+
+            settings.state_file.write_text(
+                json.dumps(previous),
+                encoding="utf-8",
+            )
+
+            state, delay = (
+                prepare_startup_state(
+                    settings,
+                    now=now,
+                )
+            )
+
+        self.assertEqual(delay, 0)
+        self.assertEqual(
+            state["next_run_at"],
+            now.isoformat(),
+        )
+        self.assertEqual(
+            state["recovery_reason"],
+            "OVERDUE_SCHEDULE",
+        )
+        self.assertEqual(
+            state["runs_total"],
+            3,
+        )
+
+    def test_interrupted_run_becomes_failure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = self.make_settings(
+                root
+            )
+
+            now = datetime(
+                2026,
+                8,
+                4,
+                12,
+                0,
+                tzinfo=UTC,
+            )
+
+            previous = initial_state(
+                settings,
+                now=(
+                    now
+                    - timedelta(
+                        hours=1
+                    )
+                ),
+            )
+
+            previous.update(
+                {
+                    "runner_status": (
+                        "RUNNING"
+                    ),
+                    "next_run_at": None,
+                    "runs_total": 4,
+                    "successes_total": 2,
+                    "failures_total": 2,
+                    "consecutive_failures": 2,
+                    "last_run_started_at": (
+                        now
+                        - timedelta(
+                            minutes=5
+                        )
+                    ).isoformat(),
+                }
+            )
+
+            settings.state_file.write_text(
+                json.dumps(previous),
+                encoding="utf-8",
+            )
+
+            state, delay = (
+                prepare_startup_state(
+                    settings,
+                    now=now,
+                )
+            )
+
+        self.assertEqual(delay, 900)
+        self.assertEqual(
+            state["runner_status"],
+            "WAITING",
+        )
+        self.assertEqual(
+            state["last_result"],
+            "FAILURE",
+        )
+        self.assertEqual(
+            state["last_exit_code"],
+            INTERRUPTED_RUN_EXIT_CODE,
+        )
+        self.assertEqual(
+            state["runs_total"],
+            5,
+        )
+        self.assertEqual(
+            state["failures_total"],
+            3,
+        )
+        self.assertEqual(
+            state[
+                "consecutive_failures"
+            ],
+            3,
+        )
+        self.assertEqual(
+            state["last_error"]["type"],
+            "InterruptedRun",
+        )
+        self.assertEqual(
+            state["recovery_reason"],
+            "INTERRUPTED_RUN",
+        )
+        self.assertEqual(
+            state["next_run_at"],
+            (
+                now
+                + timedelta(
+                    seconds=900
+                )
+            ).isoformat(),
+        )
+
+    def test_invalid_state_is_reset(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = self.make_settings(
+                root
+            )
+
+            settings.state_file.write_text(
+                "{invalid",
+                encoding="utf-8",
+            )
+
+            now = datetime(
+                2026,
+                8,
+                4,
+                12,
+                0,
+                tzinfo=UTC,
+            )
+
+            state, delay = (
+                prepare_startup_state(
+                    settings,
+                    now=now,
+                )
+            )
+
+            persisted = json.loads(
+                settings.state_file.read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual(delay, 5)
+        self.assertEqual(
+            state["runner_status"],
+            "WAITING",
+        )
+        self.assertEqual(
+            state["runs_total"],
+            0,
+        )
+        self.assertEqual(
+            state["restart_count"],
+            0,
+        )
+        self.assertFalse(
+            state["recovered"]
+        )
+        self.assertEqual(
+            state["recovery_reason"],
+            "INVALID_STATE_RESET",
+        )
+        self.assertEqual(
+            persisted[
+                "recovery_reason"
+            ],
+            "INVALID_STATE_RESET",
         )
 
 

@@ -60,6 +60,16 @@ RUNNER_RESULTS = (
     "LOCKED",
 )
 
+RECOVERY_REASONS = (
+    "FRESH_START",
+    "INVALID_STATE_RESET",
+    "RESUMED_SCHEDULE",
+    "OVERDUE_SCHEDULE",
+    "INTERRUPTED_RUN",
+    "RESTARTED",
+    "ONE_SHOT_RESTART",
+)
+
 
 def format_number(value: float | int) -> str:
     number = float(value)
@@ -325,6 +335,56 @@ def render_metrics(
             dict,
         )
         else {}
+    )
+
+    runner_recovery_reason = str(
+        runner_data.get(
+            "recovery_reason",
+            "",
+        )
+    ).upper()
+
+    runner_process_started_timestamp = (
+        parse_timestamp(
+            runner_data.get(
+                "process_started_at"
+            )
+        )
+    )
+
+    runner_recovered_timestamp = (
+        parse_timestamp(
+            runner_data.get(
+                "recovered_at"
+            )
+        )
+    )
+
+    runner_last_error = (
+        runner_data.get("last_error")
+    )
+
+    runner_last_error_data = (
+        runner_last_error
+        if isinstance(
+            runner_last_error,
+            dict,
+        )
+        else {}
+    )
+
+    runner_interrupted_last_run = int(
+        state_valid
+        and safe_number(
+            runner_data.get(
+                "last_exit_code"
+            )
+        )
+        == 125
+        and runner_last_error_data.get(
+            "type"
+        )
+        == "InterruptedRun"
     )
 
     status = str(
@@ -853,6 +913,103 @@ def render_metrics(
                 runner_config.get(key)
             ),
         )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_recovered"
+        ),
+        help_text=(
+            "Whether the current runner process "
+            "recovered an existing state file."
+        ),
+        value=int(
+            state_valid
+            and runner_data.get(
+                "recovered"
+            )
+            is True
+        ),
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_restart_count"
+        ),
+        help_text=(
+            "Number of runner process restarts "
+            "recorded in the persistent state."
+        ),
+        value=safe_number(
+            runner_data.get(
+                "restart_count"
+            )
+        ),
+    )
+
+    append_labeled_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_recovery_reason"
+        ),
+        help_text=(
+            "Latest runner startup recovery "
+            "reason as a bounded one-hot gauge."
+        ),
+        samples=[
+            (
+                {"reason": reason},
+                int(
+                    state_valid
+                    and runner_recovery_reason
+                    == reason
+                ),
+            )
+            for reason in RECOVERY_REASONS
+        ],
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "process_started_timestamp_seconds"
+        ),
+        help_text=(
+            "Unix timestamp when the current "
+            "runner process started."
+        ),
+        value=(
+            runner_process_started_timestamp
+        ),
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "recovered_timestamp_seconds"
+        ),
+        help_text=(
+            "Unix timestamp when persistent "
+            "runner state was recovered."
+        ),
+        value=runner_recovered_timestamp,
+    )
+
+    append_metric(
+        lines,
+        name=(
+            "signalai_e2e_runner_"
+            "interrupted_last_run"
+        ),
+        help_text=(
+            "Whether the latest recorded run "
+            "was recovered as interrupted."
+        ),
+        value=runner_interrupted_last_run,
+    )
 
     return "\n".join(lines) + "\n"
 

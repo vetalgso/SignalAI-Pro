@@ -180,6 +180,18 @@ class E2EExporterTests(unittest.TestCase):
                 "schema_version": 1,
                 "runner_status": "WAITING",
                 "last_result": "SUCCESS",
+                "recovered": True,
+                "restart_count": 2,
+                "recovery_reason": (
+                    "RESUMED_SCHEDULE"
+                ),
+                "process_started_at": (
+                    now.isoformat()
+                ),
+                "recovered_at": (
+                    now.isoformat()
+                ),
+                "last_error": None,
                 "updated_at": (
                     now.isoformat()
                 ),
@@ -299,6 +311,32 @@ class E2EExporterTests(unittest.TestCase):
         self.assertIn(
             "signalai_e2e_runner_config_"
             "retry_delay_seconds 900",
+            metrics,
+        )
+        self.assertIn(
+            "signalai_e2e_runner_recovered 1",
+            metrics,
+        )
+        self.assertIn(
+            "signalai_e2e_runner_"
+            "restart_count 2",
+            metrics,
+        )
+        self.assertIn(
+            "signalai_e2e_runner_"
+            "recovery_reason"
+            '{reason="RESUMED_SCHEDULE"} 1',
+            metrics,
+        )
+        self.assertIn(
+            "signalai_e2e_runner_"
+            "recovery_reason"
+            '{reason="INTERRUPTED_RUN"} 0',
+            metrics,
+        )
+        self.assertIn(
+            "signalai_e2e_runner_"
+            "interrupted_last_run 0",
             metrics,
         )
 

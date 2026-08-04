@@ -390,6 +390,50 @@ Telegram. Для безопасной проверки сервиса без о�
       docker compose --profile monitoring up -d e2e-runner
 
 
+
+### Periodic runner restart recovery
+
+При старте periodic runner читает существующий `runner-state.json`.
+
+Поведение после перезапуска:
+
+- будущее время запуска в состоянии `WAITING` сохраняется;
+- просроченное расписание выполняется без дополнительной задержки;
+- счётчики запусков, успехов, ошибок и lock conflicts сохраняются;
+- состояние `RUNNING` считается прерванным запуском;
+- прерванный запуск получает exit code `125` и результат `FAILURE`;
+- после прерванного запуска применяется обычный retry delay;
+- повреждённый или несовместимый state безопасно сбрасывается.
+
+Exporter публикует recovery-метрики:
+
+- `signalai_e2e_runner_recovered`;
+- `signalai_e2e_runner_restart_count`;
+- `signalai_e2e_runner_recovery_reason`;
+- `signalai_e2e_runner_process_started_timestamp_seconds`;
+- `signalai_e2e_runner_recovered_timestamp_seconds`;
+- `signalai_e2e_runner_interrupted_last_run`.
+
+`signalai_e2e_runner_recovery_reason` использует только фиксированный
+набор labels и не создаёт high-cardinality series.
+
+
+Recovery observability включает дополнительные alerts:
+
+- `SignalAIE2ERunnerInterruptedRun`;
+- `SignalAIE2ERunnerRestartLoop`.
+
+Первый alert обнаруживает восстановленный прерванный запуск. Второй
+обнаруживает не менее трёх изменений restart counter за 15 минут.
+
+Grafana-раздел `Periodic E2E Recovery` показывает:
+
+- факт восстановления persistent state;
+- причину восстановления;
+- накопительный restart count;
+- признак последнего прерванного запуска;
+- историю recovery lifecycle.
+
 ### Periodic runner alerts and dashboard
 
 Prometheus контролирует состояние автоматического runner через alerts:

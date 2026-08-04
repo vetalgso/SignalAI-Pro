@@ -2990,6 +2990,303 @@
       ],
       "title": "Runner Timing History",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 82
+      },
+      "id": 51,
+      "panels": [],
+      "title": "Periodic E2E Recovery",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "signalai-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 83
+      },
+      "id": 52,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "signalai_e2e_runner_recovered",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Recovered State",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "signalai-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 83
+      },
+      "id": 53,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "name",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "signalai_e2e_runner_recovery_reason == 1",
+          "instant": true,
+          "range": false,
+          "refId": "A",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "title": "Recovery Reason",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "signalai-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 83
+      },
+      "id": 54,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "signalai_e2e_runner_restart_count",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Runner Restart Count",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "signalai-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 83
+      },
+      "id": 55,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "signalai_e2e_runner_interrupted_last_run",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Interrupted Last Run",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "signalai-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 87
+      },
+      "id": 56,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "signalai_e2e_runner_restart_count",
+          "instant": false,
+          "range": true,
+          "refId": "A",
+          "legendFormat": "restart count"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "signalai_e2e_runner_recovered",
+          "instant": false,
+          "range": true,
+          "refId": "B",
+          "legendFormat": "recovered"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "signalai_e2e_runner_interrupted_last_run",
+          "instant": false,
+          "range": true,
+          "refId": "C",
+          "legendFormat": "interrupted last run"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "signalai_e2e_runner_recovery_reason",
+          "instant": false,
+          "range": true,
+          "refId": "D",
+          "legendFormat": "reason {{reason}}"
+        }
+      ],
+      "title": "Recovery Lifecycle History",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -3010,6 +3307,6 @@
   "timezone": "browser",
   "title": "SignalAI Scheduler Operations",
   "uid": "signalai-scheduler-ops",
-  "version": 4,
+  "version": 5,
   "weekStart": ""
 }
