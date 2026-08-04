@@ -21,6 +21,9 @@ import {
   fetchSignals,
   scanSignals,
 } from './api';
+import {
+  SignalChart,
+} from './SignalChart';
 import type {
   SignalFilters,
   SignalScanResult,
@@ -875,7 +878,7 @@ export function SignalCenter({
           }
         >
           <section
-            className="signal-modal"
+            className="signal-modal signal-modal--chart"
             role="dialog"
             aria-modal="true"
             aria-label={
@@ -921,6 +924,11 @@ export function SignalCenter({
                 <X size={21} />
               </button>
             </div>
+
+            <SignalChart
+              signal={selectedSignal}
+              language={language}
+            />
 
             <div className="signal-modal__stats">
               <article>

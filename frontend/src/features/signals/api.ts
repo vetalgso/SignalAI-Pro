@@ -97,3 +97,27 @@ export async function scanSignals(): Promise<
     response,
   );
 }
+
+export async function fetchSignalCandles(
+  symbol: string,
+  timeframe: string,
+  limit = 240,
+): Promise<import('./types').MarketKlinesResponse> {
+  const interval = timeframe
+    .trim()
+    .toLowerCase();
+
+  const query = new URLSearchParams({
+    symbol: symbol.toUpperCase(),
+    interval,
+    limit: String(limit),
+  });
+
+  const response = await fetch(
+    `/api/v1/market/klines?${query.toString()}`,
+  );
+
+  return readJson<
+    import('./types').MarketKlinesResponse
+  >(response);
+}

@@ -692,3 +692,111 @@ aside button{cursor:pointer}.section-heading{font-size:18px;margin:20px 0 14px}.
     padding: 10px;
   }
 }
+
+/* Signal detail trading chart */
+
+.signal-modal--chart {
+  width: min(1120px, 100%);
+}
+
+.signal-chart {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #173048;
+  border-radius: 12px;
+  background: #07111c;
+}
+
+.signal-chart__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #173048;
+  padding: 13px 15px;
+}
+
+.signal-chart__header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.signal-chart__header h3 svg {
+  color: #27a8ff;
+}
+
+.signal-chart__header p {
+  margin: 5px 0 0;
+  color: #6f8aa0;
+  font-size: 10px;
+}
+
+.signal-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 560px;
+}
+
+.signal-chart__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #1b3448;
+  border-radius: 20px;
+  background: #0b1926;
+  padding: 4px 7px;
+  color: #9eb2c1;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+
+.signal-chart__legend i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.signal-chart__canvas {
+  width: 100%;
+  min-height: 410px;
+}
+
+.signal-chart__canvas--hidden {
+  display: none;
+}
+
+.signal-chart__state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 260px;
+  color: #7890a3;
+  font-size: 13px;
+}
+
+.signal-chart__state--error {
+  color: #ff8c93;
+}
+
+@media (max-width: 800px) {
+  .signal-chart__header {
+    flex-direction: column;
+  }
+
+  .signal-chart__legend {
+    justify-content: flex-start;
+    max-width: none;
+  }
+
+  .signal-chart__canvas {
+    min-height: 340px;
+  }
+}

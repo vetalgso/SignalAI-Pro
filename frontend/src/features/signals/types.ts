@@ -91,3 +91,19 @@ export interface SignalFilters {
   riskLevel: string;
   minConfidence: number;
 }
+
+export interface MarketCandle {
+  open_time: number;
+  close_time?: number;
+  open: string | number;
+  high: string | number;
+  low: string | number;
+  close: string | number;
+  volume?: string | number;
+}
+
+export interface MarketKlinesResponse {
+  symbol?: string;
+  interval?: string;
+  candles: MarketCandle[];
+}
