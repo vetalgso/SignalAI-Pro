@@ -1,3 +1,4 @@
+from app.models.exchange_account import ExchangeAccount
 from app.models.trading_signal import TradingSignal, TradingSignalEvent
 from app.models.scheduler_payload import SchedulerPayload
 from app.models.scheduler_state import SchedulerState
@@ -10,6 +11,7 @@ from app.models.signal import Signal
 from app.models.user import User
 
 __all__ = [
+    "ExchangeAccount",
     "TradingSignal",
     "TradingSignalEvent",
     "SchedulerPayload",

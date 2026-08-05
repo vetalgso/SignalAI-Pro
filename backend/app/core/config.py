@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg2://signalai:signalai@db:5432/signalai"
     redis_url: str = "redis://redis:6379/0"
+    exchange_credentials_encryption_key: str = ""
 
     binance_api_key: str = ""
     binance_api_secret: str = ""

@@ -21,6 +21,39 @@ def _default_client_constructor() -> Callable[..., object]:
     return Client
 
 
+def create_binance_client_from_credentials(
+    *,
+    api_key: str,
+    secret_key: str,
+    testnet: bool,
+    client_constructor: BinanceClientConstructor | None = None,
+) -> object:
+    normalized_api_key = api_key.strip()
+    normalized_secret_key = secret_key.strip()
+
+    if not normalized_api_key:
+        raise ValueError(
+            "Binance API key is required."
+        )
+
+    if not normalized_secret_key:
+        raise ValueError(
+            "Binance secret key is required."
+        )
+
+    constructor = (
+        client_constructor
+        if client_constructor is not None
+        else _default_client_constructor()
+    )
+
+    return constructor(
+        normalized_api_key,
+        normalized_secret_key,
+        testnet=testnet,
+    )
+
+
 def create_binance_client(
     *,
     settings: ExchangeExecutionSettings,
@@ -39,14 +72,9 @@ def create_binance_client(
             "Validated Binance credentials are unavailable."
         )
 
-    constructor = (
-        client_constructor
-        if client_constructor is not None
-        else _default_client_constructor()
-    )
-
-    return constructor(
-        api_key,
-        secret_key,
+    return create_binance_client_from_credentials(
+        api_key=api_key,
+        secret_key=secret_key,
         testnet=settings.binance_testnet,
+        client_constructor=client_constructor,
     )
