@@ -800,3 +800,653 @@ aside button{cursor:pointer}.section-heading{font-size:18px;margin:20px 0 14px}.
     min-height: 340px;
   }
 }
+
+/* Binance exchange accounts and portfolio */
+
+.exchange-center {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.exchange-page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.exchange-page-heading > div:first-child > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #2fb2ff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.exchange-page-heading h2 {
+  margin: 5px 0 3px;
+  font-size: 25px;
+}
+
+.exchange-page-heading p {
+  margin: 0;
+  color: #7890a3;
+  font-size: 12px;
+}
+
+.exchange-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #19364d;
+  border-radius: 11px;
+  background: #0a1825;
+  padding: 9px 10px 9px 13px;
+}
+
+.exchange-user > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exchange-user span {
+  color: #698297;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.exchange-user strong {
+  font-size: 12px;
+}
+
+.exchange-user button,
+.exchange-section-title button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #244158;
+  border-radius: 8px;
+  background: #102333;
+  padding: 7px 10px;
+  color: #a8bbc9;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.exchange-auth-layout,
+.exchange-connect-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.45fr)
+    minmax(260px, .75fr);
+  gap: 16px;
+}
+
+.exchange-auth-card,
+.exchange-connect-card,
+.exchange-security-card,
+.exchange-accounts-section,
+.exchange-portfolio,
+.exchange-data-card {
+  border: 1px solid #173248;
+  border-radius: 13px;
+  background: #091723;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, .16);
+}
+
+.exchange-auth-card {
+  width: min(460px, 100%);
+  justify-self: center;
+  padding: 28px;
+}
+
+.exchange-auth-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid #285375;
+  border-radius: 13px;
+  background: #102a3e;
+  color: #2fb2ff;
+}
+
+.exchange-auth-card h3 {
+  margin: 16px 0 5px;
+  font-size: 20px;
+}
+
+.exchange-auth-card > p {
+  margin: 0 0 19px;
+  color: #71899d;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.exchange-auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 17px;
+  border: 1px solid #17354b;
+  border-radius: 9px;
+  background: #07121c;
+  padding: 4px;
+}
+
+.exchange-auth-tabs button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 8px;
+  color: #6f879a;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.exchange-auth-tabs button.active {
+  background: #153650;
+  color: #dceaf3;
+}
+
+.exchange-auth-card label,
+.exchange-connect-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.exchange-auth-card label span,
+.exchange-connect-card label span {
+  color: #8da4b6;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.exchange-auth-card input,
+.exchange-connect-card input,
+.exchange-connect-card select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #1b3a52;
+  border-radius: 8px;
+  outline: none;
+  background: #07131e;
+  padding: 10px 11px;
+  color: #d7e4ed;
+  font-size: 12px;
+}
+
+.exchange-auth-card input:focus,
+.exchange-connect-card input:focus,
+.exchange-connect-card select:focus {
+  border-color: #248fd0;
+  box-shadow: 0 0 0 2px rgba(36, 143, 208, .12);
+}
+
+.exchange-primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid #218bd0;
+  border-radius: 9px;
+  background: #167ab7;
+  padding: 10px 13px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.exchange-primary-button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+.exchange-security-card {
+  padding: 24px;
+  color: #8ea6b8;
+}
+
+.exchange-security-card > svg {
+  color: #24b978;
+}
+
+.exchange-security-card h3 {
+  margin: 13px 0 12px;
+  color: #d2e0e9;
+  font-size: 15px;
+}
+
+.exchange-security-card ul {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.exchange-security-card--compact {
+  min-height: 0;
+}
+
+.exchange-connect-card {
+  padding: 20px;
+}
+
+.exchange-card-title > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 17px;
+}
+
+.exchange-card-title svg {
+  color: #2fb2ff;
+}
+
+.exchange-card-title h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.exchange-card-title p {
+  margin: 0;
+  color: #70889a;
+  font-size: 10px;
+}
+
+.exchange-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+
+.exchange-live-warning,
+.exchange-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 10px 11px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.exchange-live-warning {
+  margin-bottom: 12px;
+  border: 1px solid #654d22;
+  background: rgba(155, 109, 23, .11);
+  color: #e3bd72;
+}
+
+.exchange-alert--error {
+  border: 1px solid #65303a;
+  background: rgba(158, 45, 62, .12);
+  color: #ff969f;
+}
+
+.exchange-alert--success {
+  border: 1px solid #20543d;
+  background: rgba(27, 143, 90, .11);
+  color: #72d8a7;
+}
+
+.exchange-auth-card .exchange-alert {
+  margin-bottom: 12px;
+}
+
+.exchange-accounts-section,
+.exchange-portfolio {
+  padding: 18px;
+}
+
+.exchange-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 14px;
+}
+
+.exchange-section-title > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.exchange-section-title h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.exchange-section-title span {
+  border-radius: 12px;
+  background: #102b3f;
+  padding: 3px 7px;
+  color: #83a4bb;
+  font-size: 9px;
+}
+
+.exchange-account-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(310px, 1fr)
+    );
+  gap: 12px;
+}
+
+.exchange-account-card {
+  border: 1px solid #18354a;
+  border-radius: 11px;
+  background: #07141f;
+  padding: 15px;
+  cursor: pointer;
+  transition:
+    border-color .16s ease,
+    transform .16s ease;
+}
+
+.exchange-account-card:hover,
+.exchange-account-card.selected {
+  border-color: #287aad;
+  transform: translateY(-1px);
+}
+
+.exchange-account-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.exchange-account-card__top span {
+  color: #6e879a;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.exchange-account-card__top h4 {
+  margin: 5px 0;
+  font-size: 15px;
+}
+
+.exchange-account-card__top code {
+  color: #7f9db2;
+  font-size: 9px;
+}
+
+.exchange-status {
+  border: 1px solid;
+  border-radius: 20px;
+  padding: 4px 7px;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.exchange-status--connected {
+  border-color: #286e4e;
+  color: #54d294;
+}
+
+.exchange-status--unverified {
+  border-color: #4c5d6b;
+  color: #91a6b6;
+}
+
+.exchange-status--error,
+.exchange-status--unsafe {
+  border-color: #733842;
+  color: #ff818c;
+}
+
+.exchange-permissions {
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.exchange-permissions span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #142e41;
+  border-radius: 7px;
+  background: #091925;
+  padding: 8px;
+  color: #668094;
+  font-size: 8px;
+}
+
+.exchange-permissions b {
+  color: #b9cad5;
+  font-size: 10px;
+}
+
+.exchange-account-error {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: #ff8992;
+  font-size: 9px;
+}
+
+.exchange-account-date {
+  margin-top: 11px;
+  color: #5e778a;
+  font-size: 8px;
+}
+
+.exchange-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 13px;
+}
+
+.exchange-account-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #24465d;
+  border-radius: 7px;
+  background: #102535;
+  padding: 7px 9px;
+  color: #a9becc;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.exchange-account-actions button.danger {
+  border-color: #59303a;
+  background: #28151b;
+  color: #e88b93;
+}
+
+.exchange-account-actions button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.exchange-empty-state,
+.exchange-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 170px;
+  color: #688194;
+}
+
+.exchange-empty-state {
+  flex-direction: column;
+  border: 1px dashed #244257;
+  border-radius: 10px;
+}
+
+.exchange-empty-state strong {
+  font-size: 11px;
+}
+
+.exchange-portfolio {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.exchange-portfolio-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 13px;
+}
+
+.exchange-data-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.exchange-data-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #153047;
+  padding: 12px 14px;
+}
+
+.exchange-data-card__title svg {
+  color: #2daaf3;
+}
+
+.exchange-data-card__title h4 {
+  margin: 0;
+  font-size: 12px;
+}
+
+.exchange-data-card__title span {
+  margin-left: auto;
+  border-radius: 12px;
+  background: #102b3f;
+  padding: 3px 7px;
+  color: #8aa8bc;
+  font-size: 8px;
+}
+
+.exchange-table-wrap {
+  overflow-x: auto;
+}
+
+.exchange-data-card table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9px;
+}
+
+.exchange-data-card th,
+.exchange-data-card td {
+  border-bottom: 1px solid #11283a;
+  padding: 9px 11px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.exchange-data-card th:first-child,
+.exchange-data-card td:first-child {
+  text-align: left;
+}
+
+.exchange-data-card th {
+  color: #638096;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.exchange-data-card td {
+  color: #a9bbc8;
+}
+
+.exchange-data-card tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.exchange-table-empty {
+  display: grid;
+  place-items: center;
+  min-height: 110px;
+  color: #627b8f;
+  font-size: 10px;
+}
+
+.is-positive {
+  color: #45cf8b !important;
+}
+
+.is-negative,
+.is-danger {
+  color: #ff747f !important;
+}
+
+.is-spinning {
+  animation: exchange-spin .8s linear infinite;
+}
+
+@keyframes exchange-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1050px) {
+  .exchange-auth-layout,
+  .exchange-connect-grid,
+  .exchange-portfolio-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .exchange-auth-card {
+    width: auto;
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 680px) {
+  .exchange-page-heading {
+    flex-direction: column;
+  }
+
+  .exchange-user {
+    width: 100%;
+    box-sizing: border-box;
+    justify-content: space-between;
+  }
+
+  .exchange-form-grid,
+  .exchange-permissions {
+    grid-template-columns: 1fr;
+  }
+
+  .exchange-account-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .exchange-account-card__top,
+  .exchange-section-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
