@@ -195,4 +195,3 @@ def downgrade() -> None:
         "trading_orders",
         "user_id",
     )
-
