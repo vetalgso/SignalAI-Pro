@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import (
     BaseModel,
@@ -9,6 +10,10 @@ from pydantic import (
     Field,
     SecretStr,
     field_validator,
+)
+
+from app.tradinggpt.orders.schemas import (
+    OrderExecuteRequest,
 )
 
 
@@ -111,6 +116,14 @@ class ExchangeAccountResponse(
 
     created_at: datetime
     updated_at: datetime
+
+
+class ExchangeAccountOrderRequest(
+    OrderExecuteRequest
+):
+    exchange: Literal["BINANCE"] = (
+        "BINANCE"
+    )
 
 
 class ExchangeAccountDeleteResponse(

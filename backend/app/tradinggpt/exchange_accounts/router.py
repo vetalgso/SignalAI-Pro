@@ -16,6 +16,12 @@ from app.api.dependencies import (
 from app.core.config import settings
 from app.database.session import get_db
 from app.models.user import User
+from app.tradinggpt.orders.models import (
+    OrderIntent,
+)
+from app.tradinggpt.orders.schemas import (
+    OrderPreviewResponse,
+)
 from app.tradinggpt.portfolio_sync.models import (
     PortfolioSnapshot,
 )
@@ -30,12 +36,15 @@ from .repository import (
 from .schemas import (
     ExchangeAccountCreateRequest,
     ExchangeAccountDeleteResponse,
+    ExchangeAccountOrderRequest,
     ExchangeAccountResponse,
 )
 from .service import (
     ExchangeAccountNotFoundError,
     ExchangeAccountService,
     ExchangeConnectionError,
+    ExchangeTradingUnavailableError,
+    LiveExchangeExecutionDisabledError,
     UnsafeExchangePermissionsError,
 )
 
@@ -234,6 +243,75 @@ def get_exchange_portfolio(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
+
+
+@router.post(
+    "/{account_id}/orders/preview",
+    response_model=OrderPreviewResponse,
+)
+def preview_exchange_account_order(
+    account_id: int,
+    request: ExchangeAccountOrderRequest,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> OrderPreviewResponse:
+    try:
+        execution = build_service(
+            db
+        ).order_execution_service(
+            account_id=account_id,
+            user_id=current_user.id,
+        )
+
+        preview = execution.preview(
+            OrderIntent(
+                **request.model_dump()
+            )
+        )
+    except ExchangeAccountNotFoundError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(exc),
+        ) from exc
+    except (
+        ExchangeTradingUnavailableError,
+        LiveExchangeExecutionDisabledError,
+        UnsafeExchangePermissionsError,
+    ) as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except ExchangeConnectionError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return OrderPreviewResponse.model_validate(
+        preview.to_dict()
+    )
 
 
 @router.delete(
