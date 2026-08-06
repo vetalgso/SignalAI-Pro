@@ -221,4 +221,3 @@ def test_preview_rejects_non_binance_exchange(
 
     assert response.status_code == 422
     assert service.calls == []
-
