@@ -7,11 +7,15 @@ from typing import Any
 from sqlalchemy import (
     Boolean,
     DateTime,
+    ForeignKey,
+    Index,
     Integer,
     JSON,
     Numeric,
     String,
     Text,
+    UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,14 +25,56 @@ from app.database.base import Base
 class TradingOrder(Base):
     __tablename__ = "trading_orders"
 
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "idempotency_key",
+            name=(
+                "uq_trading_orders_"
+                "user_id_idempotency_key"
+            ),
+        ),
+        Index(
+            "uq_trading_orders_"
+            "system_idempotency_key",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text(
+                "user_id IS NULL"
+            ),
+            sqlite_where=text(
+                "user_id IS NULL"
+            ),
+        ),
+    )
+
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
     )
 
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "users.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    exchange_account_id: Mapped[
+        int | None
+    ] = mapped_column(
+        ForeignKey(
+            "exchange_accounts.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
     idempotency_key: Mapped[str] = mapped_column(
         String(128),
-        unique=True,
         index=True,
         nullable=False,
     )

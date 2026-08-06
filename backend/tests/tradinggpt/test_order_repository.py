@@ -146,3 +146,97 @@ def test_repository_lists_recent_with_filters() -> None:
 
         assert len(results) == 1
         assert results[0].idempotency_key == "second"
+
+
+def test_repository_isolates_orders_by_user(
+) -> None:
+    with build_session() as session:
+        first_repository = (
+            TradingOrderRepository(
+                session,
+                user_id=7,
+                exchange_account_id=70,
+            )
+        )
+        second_repository = (
+            TradingOrderRepository(
+                session,
+                user_id=8,
+                exchange_account_id=80,
+            )
+        )
+
+        first = first_repository.create(
+            idempotency_key="shared-key",
+            exchange="BINANCE",
+            market_type="SPOT",
+            symbol="BTCUSDT",
+            side="BUY",
+            order_type="MARKET",
+            requested_quantity=0.001,
+            requested_price=60_000.0,
+            dry_run=False,
+            request_payload={},
+        )
+
+        second = second_repository.create(
+            idempotency_key="shared-key",
+            exchange="BINANCE",
+            market_type="SPOT",
+            symbol="ETHUSDT",
+            side="BUY",
+            order_type="MARKET",
+            requested_quantity=0.01,
+            requested_price=3_000.0,
+            dry_run=False,
+            request_payload={},
+        )
+
+        session.commit()
+
+        assert first.id != second.id
+        assert first.user_id == 7
+        assert first.exchange_account_id == 70
+        assert second.user_id == 8
+        assert second.exchange_account_id == 80
+
+        assert (
+            first_repository
+            .get_by_id(second.id)
+            is None
+        )
+
+        first_duplicate = (
+            first_repository
+            .get_by_idempotency_key(
+                "shared-key"
+            )
+        )
+        second_duplicate = (
+            second_repository
+            .get_by_idempotency_key(
+                "shared-key"
+            )
+        )
+
+        assert first_duplicate is not None
+        assert second_duplicate is not None
+        assert first_duplicate.id == first.id
+        assert second_duplicate.id == second.id
+
+        first_results = (
+            first_repository.list_recent()
+        )
+        second_results = (
+            second_repository.list_recent()
+        )
+
+        assert [
+            item.id
+            for item in first_results
+        ] == [first.id]
+
+        assert [
+            item.id
+            for item in second_results
+        ] == [second.id]

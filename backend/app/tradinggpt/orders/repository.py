@@ -13,8 +13,17 @@ class TradingOrderRepository:
     def __init__(
         self,
         session: Session,
+        *,
+        user_id: int | None = None,
+        exchange_account_id: (
+            int | None
+        ) = None,
     ) -> None:
         self._session = session
+        self._user_id = user_id
+        self._exchange_account_id = (
+            exchange_account_id
+        )
 
     def create(
         self,
@@ -32,6 +41,10 @@ class TradingOrderRepository:
         status: str = "PENDING",
     ) -> TradingOrder:
         order = TradingOrder(
+            user_id=self._user_id,
+            exchange_account_id=(
+                self._exchange_account_id
+            ),
             idempotency_key=idempotency_key,
             exchange=exchange,
             market_type=market_type,
@@ -60,9 +73,15 @@ class TradingOrderRepository:
         self,
         order_id: int,
     ) -> TradingOrder | None:
-        return self._session.get(
-            TradingOrder,
-            order_id,
+        statement = select(
+            TradingOrder
+        ).where(
+            TradingOrder.id == order_id,
+            self._user_scope(),
+        )
+
+        return self._session.scalar(
+            statement
         )
 
     def get_by_idempotency_key(
@@ -71,7 +90,8 @@ class TradingOrderRepository:
     ) -> TradingOrder | None:
         statement = select(TradingOrder).where(
             TradingOrder.idempotency_key
-            == idempotency_key
+            == idempotency_key,
+            self._user_scope(),
         )
 
         return self._session.scalar(statement)
@@ -84,7 +104,11 @@ class TradingOrderRepository:
         symbol: str | None = None,
         status: str | None = None,
     ) -> list[TradingOrder]:
-        statement = select(TradingOrder)
+        statement = select(
+            TradingOrder
+        ).where(
+            self._user_scope()
+        )
 
         if exchange is not None:
             statement = statement.where(
@@ -107,6 +131,20 @@ class TradingOrderRepository:
 
         return list(
             self._session.scalars(statement)
+        )
+
+    def _user_scope(
+        self,
+    ) -> Any:
+        if self._user_id is None:
+            return (
+                TradingOrder.user_id
+                .is_(None)
+            )
+
+        return (
+            TradingOrder.user_id
+            == self._user_id
         )
 
     def apply_preview(
