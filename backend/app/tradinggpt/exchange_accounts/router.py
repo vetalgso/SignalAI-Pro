@@ -16,10 +16,17 @@ from app.api.dependencies import (
 from app.core.config import settings
 from app.database.session import get_db
 from app.models.user import User
+from app.tradinggpt.orders.journal_service import (
+    JournaledOrderService,
+)
 from app.tradinggpt.orders.models import (
     OrderIntent,
 )
+from app.tradinggpt.orders.repository import (
+    TradingOrderRepository,
+)
 from app.tradinggpt.orders.schemas import (
+    OrderJournalResponse,
     OrderPreviewResponse,
 )
 from app.tradinggpt.portfolio_sync.models import (
@@ -36,6 +43,7 @@ from .repository import (
 from .schemas import (
     ExchangeAccountCreateRequest,
     ExchangeAccountDeleteResponse,
+    ExchangeAccountOrderExecuteRequest,
     ExchangeAccountOrderRequest,
     ExchangeAccountResponse,
 )
@@ -243,6 +251,91 @@ def get_exchange_portfolio(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         ) from exc
+
+
+@router.post(
+    "/{account_id}/orders/execute",
+    response_model=OrderJournalResponse,
+)
+def execute_exchange_account_order(
+    account_id: int,
+    request: (
+        ExchangeAccountOrderExecuteRequest
+    ),
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> OrderJournalResponse:
+    try:
+        execution = build_service(
+            db
+        ).order_execution_service(
+            account_id=account_id,
+            user_id=current_user.id,
+        )
+
+        journal = JournaledOrderService(
+            repository=(
+                TradingOrderRepository(
+                    db,
+                    user_id=current_user.id,
+                    exchange_account_id=(
+                        account_id
+                    ),
+                )
+            ),
+            execution_service=execution,
+        )
+
+        result = journal.execute(
+            request
+        )
+    except ExchangeAccountNotFoundError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(exc),
+        ) from exc
+    except (
+        ExchangeTradingUnavailableError,
+        LiveExchangeExecutionDisabledError,
+        UnsafeExchangePermissionsError,
+    ) as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except ExchangeConnectionError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    return OrderJournalResponse.model_validate(
+        result
+    )
 
 
 @router.post(

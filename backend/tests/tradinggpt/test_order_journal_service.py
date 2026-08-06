@@ -173,3 +173,62 @@ def test_dry_run_does_not_execute_order() -> None:
         assert result["status"] == "DRY_RUN"
         assert result["dry_run"] is True
         assert execution.execute_calls == 0
+
+def test_journal_persists_user_and_account_scope(
+) -> None:
+    with build_session() as session:
+        repository = TradingOrderRepository(
+            session,
+            user_id=7,
+            exchange_account_id=42,
+        )
+
+        service = JournaledOrderService(
+            repository=repository,
+            execution_service=(
+                FakeExecutionService()
+            ),
+        )
+
+        result = service.execute(
+            build_request(
+                idempotency_key=(
+                    "scoped-journal"
+                ),
+                dry_run=True,
+            )
+        )
+
+        stored = repository.get_by_id(
+            int(result["journal_id"])
+        )
+
+        assert stored is not None
+        assert stored.user_id == 7
+        assert (
+            stored.exchange_account_id
+            == 42
+        )
+
+        foreign_repository = (
+            TradingOrderRepository(
+                session,
+                user_id=8,
+                exchange_account_id=42,
+            )
+        )
+
+        assert (
+            foreign_repository.get_by_id(
+                stored.id
+            )
+            is None
+        )
+
+        assert (
+            foreign_repository
+            .get_by_idempotency_key(
+                "scoped-journal"
+            )
+            is None
+        )

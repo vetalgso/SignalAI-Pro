@@ -13,6 +13,7 @@ from pydantic import (
 )
 
 from app.tradinggpt.orders.schemas import (
+    JournalOrderExecuteRequest,
     OrderExecuteRequest,
 )
 
@@ -124,6 +125,15 @@ class ExchangeAccountOrderRequest(
     exchange: Literal["BINANCE"] = (
         "BINANCE"
     )
+
+
+class ExchangeAccountOrderExecuteRequest(
+    JournalOrderExecuteRequest
+):
+    exchange: Literal["BINANCE"] = (
+        "BINANCE"
+    )
+    dry_run: bool = True
 
 
 class ExchangeAccountDeleteResponse(

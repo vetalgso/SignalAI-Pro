@@ -221,3 +221,202 @@ def test_preview_rejects_non_binance_exchange(
 
     assert response.status_code == 422
     assert service.calls == []
+
+class FakeJournalService:
+    def __init__(self) -> None:
+        self.request: object | None = None
+
+    def execute(
+        self,
+        request: object,
+    ) -> dict[str, object]:
+        self.request = request
+
+        model_dump = getattr(
+            request,
+            "model_dump",
+        )
+
+        request_payload = model_dump(
+            mode="json"
+        )
+
+        return {
+            "journal_id": 101,
+            "idempotency_key": (
+                request_payload[
+                    "idempotency_key"
+                ]
+            ),
+            "replayed": False,
+            "dry_run": request_payload[
+                "dry_run"
+            ],
+            "exchange": "BINANCE",
+            "market_type": "SPOT",
+            "symbol": "BTCUSDT",
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "status": "DRY_RUN",
+            "requested_quantity": 0.001,
+            "normalized_quantity": 0.001,
+            "requested_price": 60_000.0,
+            "normalized_price": 60_000.0,
+            "filled_quantity": 0.0,
+            "average_price": None,
+            "client_order_id": None,
+            "exchange_order_id": None,
+            "simulated": True,
+            "request_payload": (
+                request_payload
+            ),
+            "preview_payload": {
+                "valid": True,
+            },
+            "execution_payload": {
+                "dry_run": True,
+            },
+            "error_message": None,
+            "created_at": (
+                "2026-08-06T00:00:00Z"
+            ),
+            "updated_at": (
+                "2026-08-06T00:00:00Z"
+            ),
+        }
+
+def test_execute_requires_authentication(
+    client: TestClient,
+) -> None:
+    clear_auth_overrides()
+
+    payload = build_payload()
+    payload["idempotency_key"] = (
+        "unauthorized-execute"
+    )
+
+    response = client.post(
+        "/api/v3/exchange/accounts/"
+        "42/orders/execute",
+        json=payload,
+    )
+
+    assert response.status_code == 401
+
+
+def test_execute_defaults_to_scoped_dry_run(
+    client: TestClient,
+    monkeypatch: object,
+) -> None:
+    db = FakeDb()
+    execution = FakeExecutionService()
+    account_service = (
+        FakeExchangeAccountService(
+            execution
+        )
+    )
+    journal = FakeJournalService()
+    repository_calls: list[
+        dict[str, object]
+    ] = []
+
+    def repository_factory(
+        selected_db: object,
+        *,
+        user_id: int,
+        exchange_account_id: int,
+    ) -> object:
+        repository_calls.append(
+            {
+                "db": selected_db,
+                "user_id": user_id,
+                "exchange_account_id": (
+                    exchange_account_id
+                ),
+            }
+        )
+
+        return object()
+
+    def journal_factory(
+        *,
+        repository: object,
+        execution_service: object,
+    ) -> FakeJournalService:
+        assert repository is not None
+        assert (
+            execution_service
+            is execution
+        )
+
+        return journal
+
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_service",
+        lambda _: account_service,
+    )
+    monkeypatch.setattr(
+        exchange_account_router,
+        "TradingOrderRepository",
+        repository_factory,
+    )
+    monkeypatch.setattr(
+        exchange_account_router,
+        "JournaledOrderService",
+        journal_factory,
+    )
+
+    install_auth_overrides(db)
+
+    payload = build_payload()
+    payload["idempotency_key"] = (
+        "account-42-dry-run"
+    )
+
+    try:
+        response = client.post(
+            "/api/v3/exchange/accounts/"
+            "42/orders/execute",
+            json=payload,
+        )
+    finally:
+        clear_auth_overrides()
+
+    assert response.status_code == 200
+
+    assert account_service.calls == [
+        {
+            "account_id": 42,
+            "user_id": 7,
+        }
+    ]
+
+    assert repository_calls == [
+        {
+            "db": db,
+            "user_id": 7,
+            "exchange_account_id": 42,
+        }
+    ]
+
+    assert getattr(
+        journal.request,
+        "exchange",
+    ) == "BINANCE"
+
+    assert getattr(
+        journal.request,
+        "dry_run",
+    ) is True
+
+    result = response.json()
+
+    assert result["journal_id"] == 101
+    assert result["dry_run"] is True
+    assert result["status"] == "DRY_RUN"
+    assert (
+        result["idempotency_key"]
+        == "account-42-dry-run"
+    )
+    assert db.rollback_calls == 0
