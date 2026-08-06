@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.tradinggpt.quality_guard import AnalysisQualityGuard
+from app.tradinggpt.scoring import ScoringEngine
 
 
 DEFAULT_SCAN_ASSETS = [
@@ -24,26 +25,53 @@ class ScannerResult:
     asset: str
     symbol: str
     score: float
+    opportunity_score: float
+    consensus_score: float
+    timeframe_consensus_score: float
+    ranking_score: float
     confidence: int
     risk: str
     recommendation: str
+    trade_direction: str
     signal_action: str | None
     forecast_direction: str | None
+    timeframe_directions: dict[str, str]
+    trend_direction: str
+    trade_style: str
+    reasons: list[str]
     quality_penalty: int
     warnings: list[str]
+    market_price: float | None = None
+    signal_strategy: str | None = None
+    signal_levels: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "asset": self.asset,
             "symbol": self.symbol,
             "score": round(self.score, 2),
+            "opportunity_score": round(self.opportunity_score, 2),
+            "consensus_score": round(self.consensus_score, 2),
+            "timeframe_consensus_score": round(
+                self.timeframe_consensus_score,
+                2,
+            ),
+            "ranking_score": round(self.ranking_score, 2),
             "confidence": self.confidence,
             "risk": self.risk,
             "recommendation": self.recommendation,
+            "trade_direction": self.trade_direction,
             "signal_action": self.signal_action,
             "forecast_direction": self.forecast_direction,
+            "timeframe_directions": self.timeframe_directions,
+            "trend_direction": self.trend_direction,
+            "trade_style": self.trade_style,
+            "reasons": self.reasons,
             "quality_penalty": self.quality_penalty,
             "warnings": self.warnings,
+            "market_price": self.market_price,
+            "signal_strategy": self.signal_strategy,
+            "signal_levels": self.signal_levels,
         }
 
 
@@ -88,9 +116,11 @@ class CryptoMarketScanner:
         ranked = sorted(
             results,
             key=lambda item: (
-                item.score,
+                item.ranking_score,
+                item.timeframe_consensus_score,
+                item.opportunity_score,
+                item.consensus_score,
                 item.confidence,
-                -item.quality_penalty,
             ),
             reverse=True,
         )
@@ -98,7 +128,12 @@ class CryptoMarketScanner:
         opportunities = [
             item
             for item in ranked
-            if item.recommendation in {"BUY", "CAUTIOUS_BUY"}
+            if item.recommendation in {
+                "LONG",
+                "SHORT",
+                "CAUTIOUS_BUY",
+                "CAUTIOUS_SHORT",
+            }
         ][:limit]
 
         watchlist = [
@@ -110,10 +145,10 @@ class CryptoMarketScanner:
         avoid = [
             item
             for item in reversed(ranked)
-            if item.recommendation in {
-                "CAUTIOUS_SELL",
-                "AVOID_OR_REDUCE",
-            }
+            if (
+                item.risk == "high"
+                and item.confidence < 35
+            )
         ][:limit]
 
         return {
@@ -175,9 +210,44 @@ class CryptoMarketScanner:
 
         confidence = max(15, confidence - quality_penalty)
 
-        recommendation = self.crypto_asset_module._recommendation(
+        trade_direction = ScoringEngine.trade_direction(score)
+
+        consensus_score = ScoringEngine.consensus_score(
+            combined_direction=trade_direction,
+            signal_score=signal_score,
+            forecast_score=forecast_score,
+            news_score=news_score,
+            signal_available=signal is not None,
+            forecast_available=forecast is not None,
+            news_available=news is not None,
+        )
+
+        opportunity_score = ScoringEngine.opportunity_score(
             score,
             confidence,
+            consensus_score,
+        )
+
+        timeframe_analysis = ScoringEngine.timeframe_analysis(
+            forecast,
+            trade_direction,
+        )
+
+        timeframe_consensus_score = float(
+            timeframe_analysis["timeframe_consensus_score"]
+        )
+
+        ranking_score = ScoringEngine.ranking_score(
+            opportunity_score,
+            consensus_score,
+            confidence,
+            timeframe_consensus_score,
+        )
+
+        recommendation = ScoringEngine.recommendation(
+            score,
+            confidence,
+            opportunity_score,
         )
 
         risk = self.crypto_asset_module._risk_level(
@@ -187,26 +257,69 @@ class CryptoMarketScanner:
         )
 
         signal_action = None
+        market_price = None
+        signal_strategy = None
+        signal_levels = None
+
         if signal:
-            signal_action = (
-                signal.get("decision", {}).get("action")
+            decision = signal.get(
+                "decision",
+                {},
             )
+
+            signal_action = decision.get(
+                "action"
+            )
+            signal_strategy = decision.get(
+                "strategy"
+            )
+            market_price = signal.get(
+                "price"
+            )
+
+            raw_levels = decision.get(
+                "levels"
+            )
+
+            if isinstance(raw_levels, dict):
+                signal_levels = raw_levels
 
         forecast_direction = self._primary_forecast_direction(
             forecast
+        )
+
+        reasons = ScoringEngine.explanation_reasons(
+            signal=signal,
+            news=news,
+            trade_direction=trade_direction,
+            consensus_score=consensus_score,
+            timeframe_analysis=timeframe_analysis,
+            risk=risk,
         )
 
         return ScannerResult(
             asset=asset,
             symbol=symbol,
             score=score,
+            opportunity_score=opportunity_score,
+            consensus_score=consensus_score,
+            timeframe_consensus_score=timeframe_consensus_score,
+            ranking_score=ranking_score,
             confidence=confidence,
             risk=risk,
             recommendation=recommendation,
+            trade_direction=trade_direction,
             signal_action=signal_action,
             forecast_direction=forecast_direction,
+            timeframe_directions=timeframe_analysis["directions"],
+            trend_direction=timeframe_analysis["trend_direction"],
+            trade_style=timeframe_analysis["trade_style"],
+            reasons=reasons,
             quality_penalty=quality_penalty,
             warnings=warnings,
+            market_price=market_price,
+            signal_strategy=signal_strategy,
+            signal_levels=signal_levels,
         )
 
     @staticmethod

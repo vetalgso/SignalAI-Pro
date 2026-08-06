@@ -4,11 +4,11 @@ import asyncio
 from typing import Any
 
 from app.forecasting import ForecastService
-from app.indicators.service import calculate_indicator_snapshot
 from app.news import NewsService
-from app.services.binance_market import BinanceMarketService
 from app.signal_engine.service import build_signal_analysis
 from app.tradinggpt.quality_guard import AnalysisQualityGuard
+from app.tradinggpt.scoring import ScoringEngine
+from app.tradinggpt.data import MarketDataService
 from app.tradinggpt.schemas import (
     AnalysisFactor,
     AssistantChatRequest,
@@ -38,6 +38,10 @@ FORECAST_HORIZONS = [60, 240, 1440, 2880]
 
 
 class CryptoAssetAnalysisModule:
+
+    def __init__(self):
+        self.market_data = MarketDataService()
+
     async def analyze(
         self,
         asset: str,
@@ -74,18 +78,27 @@ class CryptoAssetAnalysisModule:
             available_sources=available_sources,
         )
 
-    async def _load_signal(self, symbol: str) -> dict[str, Any] | None:
+    
+    async def _load_signal(
+        self,
+        symbol: str,
+    ) -> dict[str, Any] | None:
         try:
-            candles = await BinanceMarketService().klines(symbol, "1h", 250)
-            snapshot = calculate_indicator_snapshot(candles)
-            decision = build_signal_analysis(snapshot)
+            snapshot = await self.market_data.get_market_snapshot(
+                asset=symbol.removesuffix("USDT"),
+                interval="1h",
+                candle_limit=250,
+            )
+
+            decision = build_signal_analysis(snapshot.indicators)
 
             return {
-                "symbol": symbol,
-                "interval": "1h",
-                "price": float(snapshot["price"]),
-                "indicators": snapshot,
+                "symbol": snapshot.symbol,
+                "interval": snapshot.interval,
+                "price": snapshot.price,
+                "indicators": snapshot.indicators,
                 "decision": decision,
+                "market_data": snapshot.model_dump(),
             }
         except Exception:
             return None
@@ -140,8 +153,60 @@ class CryptoAssetAnalysisModule:
         confidence = max(15, confidence - quality_penalty)
 
         market_view = self._market_view(weighted_score)
-        risk = self._risk_level(signal, forecast, request.context.risk_level)
-        recommendation = self._recommendation(weighted_score, confidence)
+        risk = self._risk_level(
+            signal,
+            forecast,
+            request.context.risk_level,
+        )
+        recommendation = self._recommendation(
+            weighted_score,
+            confidence,
+        )
+
+        trade_direction = ScoringEngine.trade_direction(
+            weighted_score
+        )
+
+        consensus_score = ScoringEngine.consensus_score(
+            combined_direction=trade_direction,
+            signal_score=signal_score,
+            forecast_score=forecast_score,
+            news_score=news_score,
+            signal_available=signal is not None,
+            forecast_available=forecast is not None,
+            news_available=news is not None,
+        )
+
+        opportunity_score = ScoringEngine.opportunity_score(
+            weighted_score,
+            confidence,
+            consensus_score,
+        )
+
+        timeframe_analysis = ScoringEngine.timeframe_analysis(
+            forecast,
+            trade_direction,
+        )
+
+        timeframe_consensus_score = float(
+            timeframe_analysis["timeframe_consensus_score"]
+        )
+
+        ranking_score = ScoringEngine.ranking_score(
+            opportunity_score,
+            consensus_score,
+            confidence,
+            timeframe_consensus_score,
+        )
+
+        reasons = ScoringEngine.explanation_reasons(
+            signal=signal,
+            news=news,
+            trade_direction=trade_direction,
+            consensus_score=consensus_score,
+            timeframe_analysis=timeframe_analysis,
+            risk=risk,
+        )
 
         factors: list[AnalysisFactor] = []
 
@@ -179,6 +244,16 @@ class CryptoAssetAnalysisModule:
                     summary="Прогнозы временно недоступны.",
                 )
             )
+
+        factors.append(
+            AnalysisFactor(
+                type="timeframe_alignment",
+                score=round(timeframe_consensus_score),
+                summary=self._timeframe_summary(
+                    timeframe_analysis
+                ),
+            )
+        )
 
         if news:
             factors.append(
@@ -219,6 +294,9 @@ class CryptoAssetAnalysisModule:
             forecast=forecast,
             news=news,
             available_sources=available_sources,
+            trade_direction=trade_direction,
+            timeframe_analysis=timeframe_analysis,
+            consensus_score=consensus_score,
         )
 
         return AssistantChatResponse(
@@ -237,7 +315,37 @@ class CryptoAssetAnalysisModule:
                 "asset": asset,
                 "symbol": symbol,
                 "recommendation": recommendation,
+                "trade_direction": trade_direction,
                 "combined_score": round(weighted_score, 2),
+                "opportunity_score": round(
+                    opportunity_score,
+                    2,
+                ),
+                "consensus_score": round(
+                    consensus_score,
+                    2,
+                ),
+                "timeframe_consensus_score": round(
+                    timeframe_consensus_score,
+                    2,
+                ),
+                "ranking_score": round(
+                    ranking_score,
+                    2,
+                ),
+                "timeframe_directions": timeframe_analysis[
+                    "directions"
+                ],
+                "timeframe_scores": timeframe_analysis[
+                    "scores"
+                ],
+                "trend_direction": timeframe_analysis[
+                    "trend_direction"
+                ],
+                "trade_style": timeframe_analysis[
+                    "trade_style"
+                ],
+                "reasons": reasons,
                 "sources_available": available_sources,
                 "quality_penalty": quality_penalty,
                 "quality_warnings": quality_warnings,
@@ -250,75 +358,15 @@ class CryptoAssetAnalysisModule:
 
     @staticmethod
     def _signal_score(signal: dict[str, Any] | None) -> float:
-        if not signal:
-            return 50.0
-
-        decision = signal["decision"]
-        action = decision["action"]
-        confidence = float(decision["confidence"])
-
-        if action == "LONG":
-            return 50 + confidence / 2
-
-        if action == "SHORT":
-            return 50 - confidence / 2
-
-        scores = decision.get("score", {})
-        long_score = float(scores.get("long_score", 0))
-        short_score = float(scores.get("short_score", 0))
-
-        return max(0.0, min(100.0, 50 + (long_score - short_score) / 2))
+        return ScoringEngine.signal_score(signal)
 
     @staticmethod
     def _forecast_score(forecast: dict[str, Any] | None) -> float:
-        if not forecast or not forecast.get("forecasts"):
-            return 50.0
-
-        weighted_total = 0.0
-        total_weight = 0.0
-
-        for item in forecast["forecasts"]:
-            probabilities = item["probabilities"]
-            directional_score = (
-                50
-                + float(probabilities["up"]) * 50
-                - float(probabilities["down"]) * 50
-            )
-
-            horizon = int(item["horizon_minutes"])
-            weight = {
-                60: 1.0,
-                240: 1.1,
-                1440: 1.25,
-                2880: 1.0,
-            }.get(horizon, 1.0)
-
-            weighted_total += directional_score * weight
-            total_weight += weight
-
-        return max(0.0, min(100.0, weighted_total / total_weight))
+        return ScoringEngine.forecast_score(forecast)
 
     @staticmethod
     def _news_score(news: dict[str, Any] | None) -> float:
-        if not news or not news.get("articles"):
-            return 50.0
-
-        weighted_sentiment = 0.0
-        total_weight = 0.0
-
-        for article in news["articles"]:
-            sentiment_value = {
-                "positive": 1.0,
-                "neutral": 0.0,
-                "negative": -1.0,
-            }.get(article.get("sentiment"), 0.0)
-
-            weight = max(1.0, float(article.get("impact_score", 50)))
-            weighted_sentiment += sentiment_value * weight
-            total_weight += weight
-
-        normalized = weighted_sentiment / total_weight if total_weight else 0.0
-        return max(0.0, min(100.0, 50 + normalized * 50))
+        return ScoringEngine.news_score(news)
 
     @staticmethod
     def _combined_score(
@@ -330,29 +378,14 @@ class CryptoAssetAnalysisModule:
         forecast_available: bool,
         news_available: bool,
     ) -> tuple[float, int]:
-        sources = [
-            (signal_score, 0.45, signal_available),
-            (forecast_score, 0.40, forecast_available),
-            (news_score, 0.15, news_available),
-        ]
-
-        weighted_total = 0.0
-        total_weight = 0.0
-
-        for score, weight, available in sources:
-            if available:
-                weighted_total += score * weight
-                total_weight += weight
-
-        if total_weight == 0:
-            return 50.0, 0
-
-        combined = weighted_total / total_weight
-        distance_from_neutral = abs(combined - 50) * 2
-        coverage = total_weight
-        confidence = round(min(95, distance_from_neutral * 0.65 + coverage * 35))
-
-        return combined, max(20, confidence)
+        return ScoringEngine.combined_score(
+            signal_score=signal_score,
+            forecast_score=forecast_score,
+            news_score=news_score,
+            signal_available=signal_available,
+            forecast_available=forecast_available,
+            news_available=news_available,
+        )
 
     @staticmethod
     def _market_view(score: float) -> str:
@@ -451,6 +484,49 @@ class CryptoAssetAnalysisModule:
         )
 
     @staticmethod
+    def _timeframe_summary(
+        timeframe_analysis: dict[str, Any],
+    ) -> str:
+        directions = timeframe_analysis.get(
+            "directions",
+            {},
+        )
+
+        if not directions:
+            return (
+                "Данные по нескольким временным горизонтам "
+                "недоступны."
+            )
+
+        direction_parts = [
+            f"{label}: {directions[label]}"
+            for label in ("15m", "1H", "4H", "1D")
+            if label in directions
+        ]
+
+        consensus = float(
+            timeframe_analysis.get(
+                "timeframe_consensus_score",
+                50.0,
+            )
+        )
+        trend = timeframe_analysis.get(
+            "trend_direction",
+            "NEUTRAL",
+        )
+        trade_style = timeframe_analysis.get(
+            "trade_style",
+            "NEUTRAL",
+        )
+
+        return (
+            f"Горизонты: {', '.join(direction_parts)}. "
+            f"Согласованность: {consensus:.0f}%. "
+            f"Основной тренд: {trend}. "
+            f"Тип сделки: {trade_style}."
+        )
+
+    @staticmethod
     def _news_summary(news: dict[str, Any]) -> str:
         articles = news.get("articles", [])
 
@@ -479,6 +555,9 @@ class CryptoAssetAnalysisModule:
         forecast: dict[str, Any] | None,
         news: dict[str, Any] | None,
         available_sources: int,
+        trade_direction: str,
+        timeframe_analysis: dict[str, Any],
+        consensus_score: float,
     ) -> str:
         recommendation_text = {
             "BUY": "покупка выглядит привлекательной",
@@ -493,8 +572,18 @@ class CryptoAssetAnalysisModule:
             f"Итоговый режим: {market_view}.",
             f"Уверенность анализа: {confidence}%.",
             f"Уровень риска: {risk}.",
+            f"Направление сделки: {trade_direction}.",
+            (
+                "Согласованность аналитических источников: "
+                f"{consensus_score:.0f}%."
+            ),
             f"Доступно аналитических источников: {available_sources} из 3.",
         ]
+
+        timeframe_summary = self._timeframe_summary(
+            timeframe_analysis
+        )
+        parts.append(timeframe_summary)
 
         if signal:
             decision = signal["decision"]

@@ -13,19 +13,22 @@ import {
   Settings,
   Star,
   TrendingUp,
+  WalletCards,
 } from 'lucide-react';
+import { ExchangeCenter } from './features/exchange/ExchangeCenter';
+import { SignalCenter } from './features/signals/SignalCenter';
 import './styles.css';
 
 const API = '/api';
 const FORECAST_HORIZONS = [15, 30, 60, 120, 240, 1440, 2880, 7200, 14400];
 
 type Pair = { symbol: string; base_asset: string; quote_asset: string };
-type Page = 'dashboard' | 'markets' | 'signals' | 'future' | 'news' | 'analytics' | 'settings';
+type Page = 'dashboard' | 'markets' | 'signals' | 'portfolio' | 'future' | 'news' | 'analytics' | 'settings';
 type Language = 'ru' | 'en';
 
 const dictionary = {
   ru: {
-    dashboard: 'Обзор', markets: 'Рынки', signals: 'Сигналы', future: 'Будущие сигналы',
+    dashboard: 'Обзор', markets: 'Рынки', signals: 'Сигналы', portfolio: 'Портфель', future: 'Будущие сигналы',
     news: 'Новости', analytics: 'Аналитика', settings: 'Настройки', pair: 'Торговая пара',
     timeframe: 'Таймфрейм', refresh: 'Обновить', current: 'Текущий сигнал',
     forecast: 'Прогноз движения', latest: 'Последние новости', confidence: 'Уверенность',
@@ -41,7 +44,7 @@ const dictionary = {
     long: 'ПОКУПКА', short: 'ПРОДАЖА', wait: 'ОЖИДАНИЕ', neutral: 'НЕЙТРАЛЬНО',
   },
   en: {
-    dashboard: 'Dashboard', markets: 'Markets', signals: 'Signals', future: 'Future signals',
+    dashboard: 'Dashboard', markets: 'Markets', signals: 'Signals', portfolio: 'Portfolio', future: 'Future signals',
     news: 'News', analytics: 'Analytics', settings: 'Settings', pair: 'Trading pair',
     timeframe: 'Timeframe', refresh: 'Refresh', current: 'Current signal',
     forecast: 'Movement forecast', latest: 'Latest news', confidence: 'Confidence',
@@ -98,6 +101,7 @@ function App() {
     { id: 'dashboard' as Page, icon: LayoutDashboard, label: t.dashboard },
     { id: 'markets' as Page, icon: TrendingUp, label: t.markets },
     { id: 'signals' as Page, icon: Activity, label: t.signals },
+    { id: 'portfolio' as Page, icon: WalletCards, label: t.portfolio },
     { id: 'future' as Page, icon: BarChart3, label: t.future },
     { id: 'news' as Page, icon: Newspaper, label: t.news },
     { id: 'analytics' as Page, icon: Globe2, label: t.analytics },
@@ -262,11 +266,12 @@ function App() {
           <div className="header-actions"><Bell /><select value={lang} onChange={(event) => { const value = event.target.value as Language; setLang(value); localStorage.setItem('lang', value); }}><option value="ru">Русский</option><option value="en">English</option></select></div>
         </header>
 
-        {(page === 'dashboard' || page === 'markets' || page === 'signals' || page === 'future' || page === 'news') && controls}
+        {(page === 'dashboard' || page === 'markets' || page === 'future' || page === 'news') && controls}
 
         {page === 'dashboard' && <><section className="grid">{marketPanel}{signalPanel}</section>{forecastPanel}{newsPanel}</>}
         {page === 'markets' && <><h2 className="section-heading">{t.marketOverview}</h2>{marketPanel}</>}
-        {page === 'signals' && <><h2 className="section-heading">{t.signalDetails}</h2><section className="single-column">{signalPanel}</section></>}
+        {page === 'signals' && <SignalCenter language={lang} />}
+        {page === 'portfolio' && <ExchangeCenter language={lang} />}
         {page === 'future' && <><h2 className="section-heading">{t.forecastDetails}</h2>{forecastPanel}</>}
         {page === 'news' && <><h2 className="section-heading">{t.newsMonitor}</h2>{newsPanel}</>}
         {page === 'analytics' && <section className="page-panel"><h2>{t.analyticsTitle}</h2><div className="stats-grid"><article><span>{t.activePair}</span><strong>{symbol}</strong></article><article><span>{t.activeTimeframe}</span><strong>{interval}</strong></article><article><span>{t.forecastsCount}</span><strong>{forecasts.length}</strong></article><article><span>{t.newsCount}</span><strong>{news.length}</strong></article></div></section>}
