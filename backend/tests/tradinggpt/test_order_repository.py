@@ -240,3 +240,87 @@ def test_repository_isolates_orders_by_user(
             item.id
             for item in second_results
         ] == [second.id]
+
+def test_repository_isolates_orders_by_exchange_account(
+) -> None:
+    with build_session() as session:
+        first_repository = (
+            TradingOrderRepository(
+                session,
+                user_id=7,
+                exchange_account_id=70,
+            )
+        )
+        second_repository = (
+            TradingOrderRepository(
+                session,
+                user_id=7,
+                exchange_account_id=71,
+            )
+        )
+
+        first = first_repository.create(
+            idempotency_key="account-70",
+            exchange="BINANCE",
+            market_type="SPOT",
+            symbol="BTCUSDT",
+            side="BUY",
+            order_type="MARKET",
+            requested_quantity=0.001,
+            requested_price=60_000.0,
+            dry_run=True,
+            request_payload={},
+        )
+
+        second = second_repository.create(
+            idempotency_key="account-71",
+            exchange="BINANCE",
+            market_type="SPOT",
+            symbol="ETHUSDT",
+            side="BUY",
+            order_type="MARKET",
+            requested_quantity=0.01,
+            requested_price=3_000.0,
+            dry_run=True,
+            request_payload={},
+        )
+
+        session.commit()
+
+        assert (
+            first_repository.get_by_id(
+                second.id
+            )
+            is None
+        )
+
+        assert (
+            second_repository.get_by_id(
+                first.id
+            )
+            is None
+        )
+
+        assert [
+            item.id
+            for item in (
+                first_repository
+                .list_recent()
+            )
+        ] == [first.id]
+
+        assert [
+            item.id
+            for item in (
+                second_repository
+                .list_recent()
+            )
+        ] == [second.id]
+
+        assert (
+            first_repository
+            .get_by_idempotency_key(
+                "account-71"
+            )
+            is not None
+        )

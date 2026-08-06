@@ -77,7 +77,7 @@ class TradingOrderRepository:
             TradingOrder
         ).where(
             TradingOrder.id == order_id,
-            self._user_scope(),
+            *self._ownership_scope(),
         )
 
         return self._session.scalar(
@@ -107,7 +107,7 @@ class TradingOrderRepository:
         statement = select(
             TradingOrder
         ).where(
-            self._user_scope()
+            *self._ownership_scope()
         )
 
         if exchange is not None:
@@ -132,6 +132,25 @@ class TradingOrderRepository:
         return list(
             self._session.scalars(statement)
         )
+
+    def _ownership_scope(
+        self,
+    ) -> tuple[Any, ...]:
+        predicates = [
+            self._user_scope()
+        ]
+
+        if (
+            self._exchange_account_id
+            is not None
+        ):
+            predicates.append(
+                TradingOrder
+                .exchange_account_id
+                == self._exchange_account_id
+            )
+
+        return tuple(predicates)
 
     def _user_scope(
         self,

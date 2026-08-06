@@ -63,6 +63,24 @@ class FakeExchangeAccountService:
         self.calls: list[
             dict[str, int]
         ] = []
+        self.get_calls: list[
+            dict[str, int]
+        ] = []
+
+    def get(
+        self,
+        *,
+        account_id: int,
+        user_id: int,
+    ) -> object:
+        self.get_calls.append(
+            {
+                "account_id": account_id,
+                "user_id": user_id,
+            }
+        )
+
+        return object()
 
     def order_execution_service(
         self,
@@ -419,4 +437,292 @@ def test_execute_defaults_to_scoped_dry_run(
         result["idempotency_key"]
         == "account-42-dry-run"
     )
+    assert db.rollback_calls == 0
+
+def test_history_uses_authenticated_account_scope(
+    client: TestClient,
+    monkeypatch: object,
+) -> None:
+    db = FakeDb()
+    execution = FakeExecutionService()
+    account_service = (
+        FakeExchangeAccountService(
+            execution
+        )
+    )
+    repository_calls: list[
+        dict[str, object]
+    ] = []
+    list_calls: list[
+        dict[str, object]
+    ] = []
+
+    class FakeHistoryRepository:
+        def list_recent(
+            self,
+            *,
+            limit: int,
+            exchange: str | None,
+            symbol: str | None,
+            status: str | None,
+        ) -> list[object]:
+            list_calls.append(
+                {
+                    "limit": limit,
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "status": status,
+                }
+            )
+
+            return []
+
+    def repository_factory(
+        selected_db: object,
+        *,
+        user_id: int,
+        exchange_account_id: int,
+    ) -> FakeHistoryRepository:
+        repository_calls.append(
+            {
+                "db": selected_db,
+                "user_id": user_id,
+                "exchange_account_id": (
+                    exchange_account_id
+                ),
+            }
+        )
+
+        return FakeHistoryRepository()
+
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_service",
+        lambda _: account_service,
+    )
+    monkeypatch.setattr(
+        exchange_account_router,
+        "TradingOrderRepository",
+        repository_factory,
+    )
+
+    install_auth_overrides(db)
+
+    try:
+        response = client.get(
+            "/api/v3/exchange/accounts/"
+            "42/orders/history",
+            params={
+                "limit": 10,
+                "symbol": "btcusdt",
+                "status": "OPEN",
+            },
+        )
+    finally:
+        clear_auth_overrides()
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+    assert account_service.get_calls == [
+        {
+            "account_id": 42,
+            "user_id": 7,
+        }
+    ]
+
+    assert repository_calls == [
+        {
+            "db": db,
+            "user_id": 7,
+            "exchange_account_id": 42,
+        }
+    ]
+
+    assert list_calls == [
+        {
+            "limit": 10,
+            "exchange": "BINANCE",
+            "symbol": "BTCUSDT",
+            "status": "OPEN",
+        }
+    ]
+
+class FakeLifecycleResult:
+    def __init__(
+        self,
+        status: str,
+    ) -> None:
+        self.status = status
+
+    def to_dict(
+        self,
+    ) -> dict[str, object]:
+        return {
+            "exchange": "BINANCE",
+            "symbol": "BTCUSDT",
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "status": self.status,
+            "client_order_id": (
+                "client-9001"
+            ),
+            "exchange_order_id": "9001",
+            "requested_quantity": 0.001,
+            "filled_quantity": 0.0,
+            "average_price": None,
+            "simulated": True,
+            "message": (
+                f"Testnet order: "
+                f"{self.status}."
+            ),
+        }
+
+
+class FakeLifecycleExecutionService:
+    def __init__(self) -> None:
+        self.calls: list[
+            dict[str, object]
+        ] = []
+
+    def list_open_orders(
+        self,
+        *,
+        exchange: str,
+        symbol: str | None,
+    ) -> list[FakeLifecycleResult]:
+        self.calls.append(
+            {
+                "operation": "open",
+                "exchange": exchange,
+                "symbol": symbol,
+            }
+        )
+
+        return [
+            FakeLifecycleResult("OPEN")
+        ]
+
+    def get_order(
+        self,
+        *,
+        exchange: str,
+        symbol: str,
+        order_id: str,
+    ) -> FakeLifecycleResult:
+        self.calls.append(
+            {
+                "operation": "status",
+                "exchange": exchange,
+                "symbol": symbol,
+                "order_id": order_id,
+            }
+        )
+
+        return FakeLifecycleResult("OPEN")
+
+    def cancel_order(
+        self,
+        *,
+        exchange: str,
+        symbol: str,
+        order_id: str,
+    ) -> FakeLifecycleResult:
+        self.calls.append(
+            {
+                "operation": "cancel",
+                "exchange": exchange,
+                "symbol": symbol,
+                "order_id": order_id,
+            }
+        )
+
+        return FakeLifecycleResult(
+            "CANCELED"
+        )
+
+def test_remote_lifecycle_uses_authenticated_account(
+    client: TestClient,
+    monkeypatch: object,
+) -> None:
+    db = FakeDb()
+    execution = (
+        FakeLifecycleExecutionService()
+    )
+    account_service = (
+        FakeExchangeAccountService(
+            execution
+        )
+    )
+
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_service",
+        lambda _: account_service,
+    )
+
+    install_auth_overrides(db)
+
+    try:
+        opened = client.get(
+            "/api/v3/exchange/accounts/"
+            "42/orders/open",
+            params={"symbol": "btcusdt"},
+        )
+        status_response = client.get(
+            "/api/v3/exchange/accounts/"
+            "42/orders/9001",
+            params={"symbol": "btcusdt"},
+        )
+        canceled = client.delete(
+            "/api/v3/exchange/accounts/"
+            "42/orders/9001",
+            params={"symbol": "btcusdt"},
+        )
+    finally:
+        clear_auth_overrides()
+
+    assert opened.status_code == 200
+    assert status_response.status_code == 200
+    assert canceled.status_code == 200
+
+    assert (
+        opened.json()[0]["status"]
+        == "OPEN"
+    )
+    assert (
+        status_response.json()["status"]
+        == "OPEN"
+    )
+    assert (
+        canceled.json()["status"]
+        == "CANCELED"
+    )
+
+    assert account_service.calls == [
+        {"account_id": 42, "user_id": 7},
+        {"account_id": 42, "user_id": 7},
+        {"account_id": 42, "user_id": 7},
+    ]
+
+    assert execution.calls == [
+        {
+            "operation": "open",
+            "exchange": "BINANCE",
+            "symbol": "BTCUSDT",
+        },
+        {
+            "operation": "status",
+            "exchange": "BINANCE",
+            "symbol": "BTCUSDT",
+            "order_id": "9001",
+        },
+        {
+            "operation": "cancel",
+            "exchange": "BINANCE",
+            "symbol": "BTCUSDT",
+            "order_id": "9001",
+        },
+    ]
+
     assert db.rollback_calls == 0
