@@ -11,7 +11,7 @@ from app.database.session import get_db
 from app.main import app
 from app.models.user import User
 from app.tradinggpt.exchange_accounts import (
-    router as exchange_account_router,
+    order_router as exchange_account_router,
 )
 from app.tradinggpt.orders.validation_models import (
     OrderPreviewResult,
