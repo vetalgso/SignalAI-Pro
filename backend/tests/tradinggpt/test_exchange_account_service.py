@@ -16,7 +16,10 @@ from app.tradinggpt.exchange_accounts.schemas import (
     ExchangeAccountResponse,
 )
 from app.tradinggpt.exchange_accounts.service import (
+    ExchangeAccountNotFoundError,
     ExchangeAccountService,
+    ExchangeTradingUnavailableError,
+    LiveExchangeExecutionDisabledError,
     UnsafeExchangePermissionsError,
 )
 
@@ -127,16 +130,20 @@ class FakeBinanceClient:
         self,
         *,
         can_withdraw: bool = False,
+        can_trade: bool = True,
     ) -> None:
         self.can_withdraw = (
             can_withdraw
+        )
+        self.can_trade = (
+            can_trade
         )
 
     def get_account(
         self,
     ) -> dict[str, object]:
         return {
-            "canTrade": True,
+            "canTrade": self.can_trade,
             "canDeposit": True,
             "canWithdraw": (
                 self.can_withdraw
@@ -174,10 +181,12 @@ class FakeBinanceClient:
 
 
 def request(
+    *,
+    environment: str = "TESTNET",
 ) -> ExchangeAccountCreateRequest:
     return ExchangeAccountCreateRequest(
         label="My Binance",
-        environment="TESTNET",
+        environment=environment,
         api_key="api-key-12345678",
         secret_key="secret-key-12345678",
     )
@@ -340,3 +349,88 @@ def test_portfolio_uses_existing_provider(
     assert len(snapshot.balances) == 2
     assert len(snapshot.open_orders) == 1
     assert len(snapshot.positions) == 2
+
+
+def test_order_execution_uses_owned_testnet_account(
+) -> None:
+    service, _ = build_service()
+
+    account = service.create_or_replace(
+        user_id=7,
+        request=request(),
+    )
+
+    execution = (
+        service.order_execution_service(
+            account_id=account.id,
+            user_id=7,
+        )
+    )
+
+    assert execution.supports(
+        "BINANCE"
+    ) is True
+
+    assert execution.supports(
+        "PAPER"
+    ) is False
+
+
+def test_order_execution_rejects_foreign_account(
+) -> None:
+    service, _ = build_service()
+
+    account = service.create_or_replace(
+        user_id=7,
+        request=request(),
+    )
+
+    with pytest.raises(
+        ExchangeAccountNotFoundError
+    ):
+        service.order_execution_service(
+            account_id=account.id,
+            user_id=8,
+        )
+
+
+def test_order_execution_rejects_live_account(
+) -> None:
+    service, _ = build_service()
+
+    account = service.create_or_replace(
+        user_id=7,
+        request=request(
+            environment="LIVE"
+        ),
+    )
+
+    with pytest.raises(
+        LiveExchangeExecutionDisabledError
+    ):
+        service.order_execution_service(
+            account_id=account.id,
+            user_id=7,
+        )
+
+
+def test_order_execution_requires_trade_permission(
+) -> None:
+    service, _ = build_service(
+        client=FakeBinanceClient(
+            can_trade=False
+        )
+    )
+
+    account = service.create_or_replace(
+        user_id=7,
+        request=request(),
+    )
+
+    with pytest.raises(
+        ExchangeTradingUnavailableError
+    ):
+        service.order_execution_service(
+            account_id=account.id,
+            user_id=7,
+        )

@@ -10,6 +10,12 @@ from app.models.exchange_account import (
 from app.tradinggpt.exchanges.client_factory import (
     create_binance_client_from_credentials,
 )
+from app.tradinggpt.orders.adapters import (
+    BinanceOrderAdapter,
+)
+from app.tradinggpt.orders.execution_service import (
+    OrderExecutionService,
+)
 from app.tradinggpt.portfolio_sync.binance import (
     BinancePortfolioProvider,
 )
@@ -43,6 +49,18 @@ class ExchangeConnectionError(
 
 
 class UnsafeExchangePermissionsError(
+    RuntimeError
+):
+    pass
+
+
+class ExchangeTradingUnavailableError(
+    RuntimeError
+):
+    pass
+
+
+class LiveExchangeExecutionDisabledError(
     RuntimeError
 ):
     pass
@@ -241,6 +259,49 @@ class ExchangeAccountService:
             ) from exc
 
         return snapshot
+
+    def order_execution_service(
+        self,
+        *,
+        account_id: int,
+        user_id: int,
+    ) -> OrderExecutionService:
+        account = self.get(
+            account_id=account_id,
+            user_id=user_id,
+        )
+
+        if account.environment != "TESTNET":
+            raise (
+                LiveExchangeExecutionDisabledError(
+                    "LIVE exchange execution "
+                    "is disabled."
+                )
+            )
+
+        client = self._build_client(
+            account
+        )
+
+        self._verify_client(
+            account=account,
+            client=client,
+        )
+
+        if account.can_trade is not True:
+            raise ExchangeTradingUnavailableError(
+                "Binance account does not "
+                "permit trading."
+            )
+
+        return OrderExecutionService(
+            adapters=[
+                BinanceOrderAdapter(
+                    client=client,
+                    testnet=True,
+                ),
+            ]
+        )
 
     def delete(
         self,
