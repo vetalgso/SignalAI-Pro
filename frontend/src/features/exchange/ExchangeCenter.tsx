@@ -22,6 +22,9 @@ import {
 } from 'react';
 
 import {
+  ExchangeOrderCenter,
+} from './ExchangeOrderCenter';
+import {
   deleteExchangeAccount,
   ExchangeApiError,
   fetchCurrentUser,
@@ -1356,6 +1359,14 @@ export function ExchangeCenter({
           </div>
         )}
       </section>
+
+      {selectedAccount && token && (
+        <ExchangeOrderCenter
+          account={selectedAccount}
+          language={language}
+          token={token}
+        />
+      )}
 
       {selectedAccount && portfolio && (
         <section className="exchange-portfolio">
