@@ -1,4 +1,10 @@
 import type {
+  AccountOrderExecuteRequest,
+  AccountOrderHistoryQuery,
+  AccountOrderJournal,
+  AccountOrderPreview,
+  AccountOrderRequest,
+  AccountOrderResult,
   AuthTokenResponse,
   AuthUser,
   ExchangeAccount,
@@ -277,4 +283,207 @@ export async function deleteExchangeAccount(
     deleted: boolean;
     account_id: number;
   }>(response);
+}
+
+function accountOrdersPath(
+  accountId: number,
+): string {
+  return (
+    `${API}/v3/exchange/accounts/`
+    + `${accountId}/orders`
+  );
+}
+
+export async function previewExchangeAccountOrder(
+  token: string,
+  accountId: number,
+  payload: AccountOrderRequest,
+): Promise<AccountOrderPreview> {
+  const response = await fetch(
+    `${accountOrdersPath(accountId)}/preview`,
+    {
+      method: 'POST',
+      headers: {
+        ...authHeaders(token),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  return readJson<AccountOrderPreview>(
+    response,
+  );
+}
+
+export async function executeExchangeAccountOrder(
+  token: string,
+  accountId: number,
+  payload: AccountOrderExecuteRequest,
+): Promise<AccountOrderJournal> {
+  const response = await fetch(
+    `${accountOrdersPath(accountId)}/execute`,
+    {
+      method: 'POST',
+      headers: {
+        ...authHeaders(token),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  return readJson<AccountOrderJournal>(
+    response,
+  );
+}
+
+function withQuery(
+  path: string,
+  values: Record<
+    string,
+    string | number | undefined
+  >,
+): string {
+  const query = new URLSearchParams();
+
+  Object.entries(values).forEach(
+    ([key, value]) => {
+      if (
+        value !== undefined
+        && String(value).length > 0
+      ) {
+        query.set(key, String(value));
+      }
+    },
+  );
+
+  const encoded = query.toString();
+
+  return encoded.length > 0
+    ? `${path}?${encoded}`
+    : path;
+}
+
+export async function fetchExchangeAccountOrderHistory(
+  token: string,
+  accountId: number,
+  query: AccountOrderHistoryQuery = {},
+): Promise<AccountOrderJournal[]> {
+  const response = await fetch(
+    withQuery(
+      `${accountOrdersPath(accountId)}/history`,
+      {
+        limit: query.limit,
+        symbol: query.symbol?.trim(),
+        status: query.status?.trim(),
+      },
+    ),
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  return readJson<AccountOrderJournal[]>(
+    response,
+  );
+}
+
+export async function fetchExchangeAccountOrderJournal(
+  token: string,
+  accountId: number,
+  journalId: number,
+): Promise<AccountOrderJournal> {
+  const response = await fetch(
+    (
+      `${accountOrdersPath(accountId)}/history/`
+      + `${journalId}`
+    ),
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  return readJson<AccountOrderJournal>(
+    response,
+  );
+}
+
+export async function fetchExchangeAccountOpenOrders(
+  token: string,
+  accountId: number,
+  symbol?: string,
+): Promise<AccountOrderResult[]> {
+  const response = await fetch(
+    withQuery(
+      `${accountOrdersPath(accountId)}/open`,
+      {
+        symbol: symbol?.trim(),
+      },
+    ),
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  return readJson<AccountOrderResult[]>(
+    response,
+  );
+}
+
+export async function fetchExchangeAccountOrderStatus(
+  token: string,
+  accountId: number,
+  orderId: string,
+  symbol: string,
+): Promise<AccountOrderResult> {
+  const path = (
+    `${accountOrdersPath(accountId)}/`
+    + encodeURIComponent(orderId)
+  );
+
+  const response = await fetch(
+    withQuery(
+      path,
+      {
+        symbol: symbol.trim(),
+      },
+    ),
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  return readJson<AccountOrderResult>(
+    response,
+  );
+}
+
+export async function cancelExchangeAccountOrder(
+  token: string,
+  accountId: number,
+  orderId: string,
+  symbol: string,
+): Promise<AccountOrderResult> {
+  const path = (
+    `${accountOrdersPath(accountId)}/`
+    + encodeURIComponent(orderId)
+  );
+
+  const response = await fetch(
+    withQuery(
+      path,
+      {
+        symbol: symbol.trim(),
+      },
+    ),
+    {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    },
+  );
+
+  return readJson<AccountOrderResult>(
+    response,
+  );
 }

@@ -79,3 +79,110 @@ export interface ExchangeAccountCreate {
   api_key: string;
   secret_key: string;
 }
+
+export type ExchangeMarketType =
+  | 'SPOT'
+  | 'FUTURES';
+
+export type AccountOrderSide =
+  | 'BUY'
+  | 'SELL';
+
+export type AccountOrderType =
+  | 'MARKET'
+  | 'LIMIT';
+
+export type AccountOrderStatus =
+  | 'FILLED'
+  | 'OPEN'
+  | 'PARTIALLY_FILLED'
+  | 'CANCELED'
+  | 'REJECTED'
+  | 'FAILED';
+
+export interface AccountOrderRequest {
+  exchange: 'BINANCE';
+  market_type: ExchangeMarketType;
+  symbol: string;
+  side: AccountOrderSide;
+  order_type: AccountOrderType;
+  quantity: number;
+  reference_price: number | null;
+  stop_loss: number | null;
+  take_profit_1: number | null;
+  take_profit_2: number | null;
+  leverage: number;
+  reduce_only: boolean;
+}
+
+export interface AccountOrderExecuteRequest
+  extends AccountOrderRequest {
+  idempotency_key: string | null;
+  dry_run: boolean;
+}
+
+export interface AccountOrderPreview {
+  exchange: string;
+  symbol: string;
+  side: AccountOrderSide;
+  order_type: AccountOrderType;
+  valid: boolean;
+  requested_quantity: number;
+  normalized_quantity: number;
+  requested_price: number | null;
+  normalized_price: number | null;
+  estimated_notional: number | null;
+  available_balance: number | null;
+  balance_asset: string | null;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface AccountOrderResult {
+  exchange: string;
+  symbol: string;
+  side: AccountOrderSide;
+  order_type: AccountOrderType;
+  status: AccountOrderStatus;
+  client_order_id: string;
+  exchange_order_id: string | null;
+  requested_quantity: number;
+  filled_quantity: number;
+  average_price: number | null;
+  simulated: boolean;
+  message: string;
+}
+
+export interface AccountOrderJournal {
+  journal_id: number;
+  idempotency_key: string;
+  replayed: boolean;
+  dry_run: boolean;
+  exchange: string;
+  market_type: string;
+  symbol: string;
+  side: string;
+  order_type: string;
+  status: string;
+  requested_quantity: number;
+  normalized_quantity: number | null;
+  requested_price: number | null;
+  normalized_price: number | null;
+  filled_quantity: number;
+  average_price: number | null;
+  client_order_id: string | null;
+  exchange_order_id: string | null;
+  simulated: boolean;
+  request_payload: Record<string, unknown>;
+  preview_payload: Record<string, unknown> | null;
+  execution_payload: Record<string, unknown> | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AccountOrderHistoryQuery {
+  limit?: number;
+  symbol?: string;
+  status?: string;
+}
