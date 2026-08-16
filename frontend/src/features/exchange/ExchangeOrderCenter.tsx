@@ -18,6 +18,9 @@ import {
   ExchangeOrderActivity,
 } from './ExchangeOrderActivity';
 import {
+  ExchangeTestnetExecution,
+} from './ExchangeTestnetExecution';
+import {
   ExchangeApiError,
   executeExchangeAccountOrder,
   previewExchangeAccountOrder,
@@ -77,6 +80,8 @@ const copy = {
     warnings: 'Предупреждения',
     errors: 'Ошибки',
     resultTitle: 'Результат dry-run',
+    testnetResultTitle:
+      'Результат TESTNET-ордера',
     status: 'Статус',
     journalId: 'Запись журнала',
     idempotency: 'Ключ операции',
@@ -122,6 +127,8 @@ const copy = {
     warnings: 'Warnings',
     errors: 'Errors',
     resultTitle: 'Dry-run result',
+    testnetResultTitle:
+      'TESTNET order result',
     status: 'Status',
     journalId: 'Journal entry',
     idempotency: 'Operation key',
@@ -691,11 +698,38 @@ export function ExchangeOrderCenter({
         </article>
       )}
 
+      {(
+        preview?.valid
+        && request
+        && previewRequest
+        && JSON.stringify(request)
+          === JSON.stringify(previewRequest)
+      ) && (
+        <ExchangeTestnetExecution
+          account={account}
+          busy={
+            previewBusy
+            || executionBusy
+          }
+          language={language}
+          onBusyChange={
+            setExecutionBusy
+          }
+          onExecuted={setJournal}
+          request={request}
+          token={token}
+        />
+      )}
+
       {journal && (
         <article className="exchange-order-journal">
           <div>
             <CheckCircle2 size={18} />
-            <h4>{t.resultTitle}</h4>
+            <h4>
+              {journal.dry_run
+                ? t.resultTitle
+                : t.testnetResultTitle}
+            </h4>
           </div>
 
           <dl>
