@@ -1,0 +1,279 @@
+.exchange-order-activity {
+  margin-top: 18px;
+  border-top: 1px solid #1a3b52;
+  padding-top: 17px;
+}
+
+.exchange-order-activity-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.exchange-order-activity-header > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.exchange-order-activity-header > div > svg {
+  margin-top: 1px;
+  color: #2fb2ff;
+}
+
+.exchange-order-activity-header h3,
+.exchange-order-activity-header p {
+  margin: 0;
+}
+
+.exchange-order-activity-header h3 {
+  color: #dce9f2;
+  font-size: 14px;
+}
+
+.exchange-order-activity-header p {
+  margin-top: 3px;
+  color: #728b9d;
+  font-size: 9px;
+}
+
+.exchange-order-activity-header > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #245274;
+  border-radius: 8px;
+  background: #102b3f;
+  padding: 7px 10px;
+  color: #9fc5dd;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.exchange-order-activity-header > button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.exchange-order-activity-warning,
+.exchange-order-activity-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 11px;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.exchange-order-activity-warning {
+  border: 1px solid #654d22;
+  background: rgba(155, 109, 23, .1);
+  color: #e3bd72;
+}
+
+.exchange-order-activity-error {
+  border: 1px solid #65303a;
+  background: rgba(158, 45, 62, .11);
+  color: #ff969f;
+}
+
+.exchange-order-activity-warning svg,
+.exchange-order-activity-error svg {
+  flex: 0 0 auto;
+}
+
+.exchange-order-activity-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 11px;
+}
+
+.exchange-order-activity-tabs {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  border: 1px solid #17354b;
+  border-radius: 9px;
+  background: #07121c;
+  padding: 4px;
+}
+
+.exchange-order-activity-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 105px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 7px 10px;
+  color: #6f879a;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.exchange-order-activity-tabs button.active {
+  background: #153650;
+  color: #dceaf3;
+}
+
+.exchange-order-activity-tabs button:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
+.exchange-order-activity-tabs button span {
+  border-radius: 12px;
+  background: #0a1c29;
+  padding: 2px 6px;
+  color: #7fa1b8;
+  font-size: 8px;
+}
+
+.exchange-order-activity-controls > label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: min(210px, 100%);
+}
+
+.exchange-order-activity-controls > label span {
+  color: #7891a3;
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.exchange-order-activity-controls input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #1b3a52;
+  border-radius: 8px;
+  outline: none;
+  background: #07131e;
+  padding: 8px 10px;
+  color: #d7e4ed;
+  font-size: 10px;
+}
+
+.exchange-order-activity-controls input:focus {
+  border-color: #248fd0;
+  box-shadow:
+    0 0 0 2px rgba(36, 143, 208, .12);
+}
+
+.exchange-order-activity-empty {
+  display: grid;
+  place-items: center;
+  min-height: 88px;
+  border: 1px dashed #1b3a50;
+  border-radius: 9px;
+  color: #637e91;
+  font-size: 10px;
+}
+
+.exchange-order-activity-table {
+  overflow-x: auto;
+  border: 1px solid #17354b;
+  border-radius: 9px;
+}
+
+.exchange-order-activity-table table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.exchange-order-activity-table th,
+.exchange-order-activity-table td {
+  border-bottom: 1px solid #132f43;
+  padding: 9px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.exchange-order-activity-table th {
+  background: #0b2030;
+  color: #718da1;
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.exchange-order-activity-table td {
+  color: #bdcfda;
+  font-size: 9px;
+}
+
+.exchange-order-activity-table
+  tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.exchange-order-activity-table
+  tbody tr:hover td {
+  background: rgba(24, 65, 91, .16);
+}
+
+.exchange-order-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.exchange-order-row-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #28516e;
+  border-radius: 6px;
+  background: #102a3d;
+  padding: 5px 7px;
+  color: #9dc1d8;
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.exchange-order-row-actions button.danger {
+  border-color: #63333b;
+  background: rgba(145, 43, 56, .13);
+  color: #ef8a94;
+}
+
+.exchange-order-row-actions button.confirm {
+  border-color: #846127;
+  background: rgba(164, 112, 24, .17);
+  color: #f2c66f;
+}
+
+.exchange-order-row-actions button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+@media (max-width: 680px) {
+  .exchange-order-activity-header,
+  .exchange-order-activity-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .exchange-order-activity-header > button,
+  .exchange-order-activity-controls > label {
+    width: 100%;
+  }
+
+  .exchange-order-activity-tabs {
+    width: 100%;
+  }
+}

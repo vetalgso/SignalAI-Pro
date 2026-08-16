@@ -15,6 +15,9 @@ import {
 import './ExchangeOrderCenter.css';
 
 import {
+  ExchangeOrderActivity,
+} from './ExchangeOrderActivity';
+import {
   ExchangeApiError,
   executeExchangeAccountOrder,
   previewExchangeAccountOrder,
@@ -719,6 +722,15 @@ export function ExchangeOrderCenter({
           </dl>
         </article>
       )}
+      <ExchangeOrderActivity
+        account={account}
+        language={language}
+        refreshKey={
+          journal?.journal_id ?? 0
+        }
+        token={token}
+      />
+
     </section>
   );
 }
