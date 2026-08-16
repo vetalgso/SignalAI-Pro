@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import (
     get_current_user,
 )
+from app.core.config import settings
 from app.database.session import get_db
 from app.models.user import User
 from app.tradinggpt.orders.journal_service import (
@@ -24,6 +25,9 @@ from app.tradinggpt.orders.models import (
 )
 from app.tradinggpt.orders.repository import (
     TradingOrderRepository,
+)
+from app.tradinggpt.orders.risk import (
+    OrderRiskPolicy,
 )
 from app.tradinggpt.orders.schemas import (
     OrderCancelResponse,
@@ -53,6 +57,24 @@ router = APIRouter(
         "TradingGPT Exchange Orders"
     ],
 )
+
+
+def build_order_risk_policy(
+) -> OrderRiskPolicy:
+    return OrderRiskPolicy.configured(
+        execution_enabled=(
+            settings
+            .testnet_order_execution_enabled
+        ),
+        max_order_notional=(
+            settings
+            .testnet_max_order_notional
+        ),
+        allowed_symbols=(
+            settings
+            .testnet_allowed_symbols
+        ),
+    )
 
 
 def raise_exchange_order_http_error(
@@ -428,6 +450,9 @@ def execute_exchange_account_order(
                 )
             ),
             execution_service=execution,
+            risk_policy=(
+                build_order_risk_policy()
+            ),
         )
 
         result = journal.execute(
@@ -500,9 +525,14 @@ def preview_exchange_account_order(
             user_id=current_user.id,
         )
 
-        preview = execution.preview(
-            OrderIntent(
-                **request.model_dump()
+        intent = OrderIntent(
+            **request.model_dump()
+        )
+
+        preview = (
+            build_order_risk_policy()
+            .apply(
+                execution.preview(intent)
             )
         )
     except ExchangeAccountNotFoundError as exc:

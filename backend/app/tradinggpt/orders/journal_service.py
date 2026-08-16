@@ -17,6 +17,7 @@ from .execution_service import (
 )
 from .models import OrderIntent
 from .repository import TradingOrderRepository
+from .risk import OrderRiskPolicy
 from .schemas import JournalOrderExecuteRequest
 from .validation_models import OrderPreviewResult
 
@@ -27,6 +28,7 @@ class JournaledOrderService:
         *,
         repository: TradingOrderRepository,
         execution_service: OrderExecutionService,
+        risk_policy: OrderRiskPolicy | None = None,
         portfolio_sync_service: (
             PortfolioSyncService | None
         ) = None,
@@ -36,6 +38,10 @@ class JournaledOrderService:
     ) -> None:
         self._repository = repository
         self._execution_service = execution_service
+        self._risk_policy = (
+            risk_policy
+            or OrderRiskPolicy()
+        )
         self._portfolio_sync_service = (
             portfolio_sync_service
         )
@@ -81,7 +87,9 @@ class JournaledOrderService:
             ),
         )
 
-        preview = self._preview(intent)
+        preview = self._risk_policy.apply(
+            self._preview(intent)
+        )
 
         preview_payload = preview.to_dict()
         preview_error = (

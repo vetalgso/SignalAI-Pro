@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     exchange_credentials_encryption_key: str = ""
 
+    testnet_order_execution_enabled: bool = True
+    testnet_max_order_notional: float = Field(
+        default=100.0,
+        gt=0,
+        le=1_000_000_000,
+    )
+    testnet_allowed_symbols: str = ""
+
     binance_api_key: str = ""
     binance_api_secret: str = ""
     binance_testnet: bool = True

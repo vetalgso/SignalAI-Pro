@@ -10,6 +10,9 @@ from app.models.user import User
 from app.tradinggpt.exchange_accounts import (
     order_router as exchange_account_router,
 )
+from app.tradinggpt.orders.risk import (
+    OrderRiskPolicy,
+)
 from app.tradinggpt.orders.validation_models import (
     OrderPreviewResult,
 )
@@ -179,12 +182,14 @@ def test_execute_defaults_to_scoped_dry_run(
         *,
         repository: object,
         execution_service: object,
+        risk_policy: object,
     ) -> FakeJournalService:
         assert repository is not None
         assert (
             execution_service
             is execution
         )
+        assert risk_policy is not None
 
         return journal
 
@@ -256,4 +261,50 @@ def test_execute_defaults_to_scoped_dry_run(
         result["idempotency_key"]
         == "account-42-dry-run"
     )
+    assert db.rollback_calls == 0
+
+def test_preview_applies_testnet_risk_policy(
+    client: TestClient,
+    monkeypatch: object,
+) -> None:
+    db = FakeDb()
+    execution = FakeExecutionService()
+    service = FakeExchangeAccountService(
+        execution
+    )
+
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_service",
+        lambda _: service,
+    )
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_order_risk_policy",
+        lambda: OrderRiskPolicy.configured(
+            execution_enabled=True,
+            max_order_notional=50.0,
+            allowed_symbols="BTCUSDT",
+        ),
+    )
+
+    install_auth_overrides(db)
+
+    try:
+        response = client.post(
+            "/api/v3/exchange/accounts/"
+            "42/orders/preview",
+            json=build_payload(),
+        )
+    finally:
+        clear_auth_overrides()
+
+    assert response.status_code == 200
+
+    payload = response.json()
+
+    assert payload["valid"] is False
+    assert payload["estimated_notional"] == 60.0
+    assert len(payload["errors"]) == 1
+    assert "exceeds" in payload["errors"][0]
     assert db.rollback_calls == 0

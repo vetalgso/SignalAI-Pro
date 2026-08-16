@@ -13,4 +13,14 @@ SignalAI Pro is a FastAPI-based trading signal platform with PostgreSQL, Redis, 
 - Human-readable reasons and risk warnings
 - Actionable signals can be saved to PostgreSQL
 
-This release is an analytical prototype, not financial advice. It does not place orders.
+## Exchange execution safety
+
+SignalAI Pro supports authenticated, encrypted, account-scoped Binance Spot Testnet execution:
+
+- exchange preview and dry-run journal;
+- explicitly confirmed TESTNET order submission;
+- order history, status, open orders, and cancellation;
+- server-side master switch, maximum order notional, and optional symbol allowlist;
+- LIVE exchange execution remains blocked by the backend.
+
+This project is not financial advice. TESTNET execution uses simulated exchange funds; do not enable LIVE trading without a separate production risk review.

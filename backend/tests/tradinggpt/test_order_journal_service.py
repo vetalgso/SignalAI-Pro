@@ -14,6 +14,9 @@ from app.tradinggpt.orders.journal_service import (
 from app.tradinggpt.orders.repository import (
     TradingOrderRepository,
 )
+from app.tradinggpt.orders.risk import (
+    OrderRiskPolicy,
+)
 from app.tradinggpt.orders.schemas import (
     JournalOrderExecuteRequest,
 )
@@ -231,4 +234,53 @@ def test_journal_persists_user_and_account_scope(
                 "scoped-journal"
             )
             is None
+        )
+
+def test_risk_policy_blocks_execution_before_adapter(
+) -> None:
+    with build_session() as session:
+        execution = FakeExecutionService()
+
+        service = JournaledOrderService(
+            repository=TradingOrderRepository(
+                session
+            ),
+            execution_service=execution,
+            risk_policy=(
+                OrderRiskPolicy.configured(
+                    execution_enabled=True,
+                    max_order_notional=100.0,
+                    allowed_symbols="BTCUSDT",
+                )
+            ),
+        )
+
+        result = service.execute(
+            build_request(
+                idempotency_key=(
+                    "risk-blocked-order"
+                )
+            )
+        )
+
+        assert (
+            result["status"]
+            == "VALIDATION_FAILED"
+        )
+        assert execution.execute_calls == 0
+        assert "exceeds" in str(
+            result["error_message"]
+        )
+
+        preview_payload = result[
+            "preview_payload"
+        ]
+
+        assert isinstance(
+            preview_payload,
+            dict,
+        )
+        assert (
+            preview_payload["valid"]
+            is False
         )
