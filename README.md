@@ -22,7 +22,7 @@ SignalAI Pro supports authenticated, encrypted, account-scoped Binance Spot Test
 - order history, status, open orders, and cancellation;
 - server-side master switch, maximum order notional, and optional symbol allowlist;
 - account-scoped UTC daily notional and open-order limits;
-- serialized execution checks prevent parallel orders from bypassing account limits;
+- serialized execution checks and live Testnet open-order counts prevent stale or parallel limit bypasses;
 - dry runs do not consume limits, while reduce-only orders may reduce exposure;
 - LIVE exchange execution remains blocked by the backend.
 

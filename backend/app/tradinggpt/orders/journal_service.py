@@ -17,7 +17,10 @@ from .execution_service import (
 )
 from .models import OrderIntent
 from .repository import TradingOrderRepository
-from .risk import OrderRiskPolicy
+from .risk import (
+    OrderRiskPolicy,
+    OrderRiskUsage,
+)
 from .schemas import JournalOrderExecuteRequest
 from .validation_models import OrderPreviewResult
 
@@ -77,12 +80,37 @@ class JournaledOrderService:
         if (
             self._risk_policy
             .requires_account_usage
+            and not intent.reduce_only
         ):
             self._repository.lock_risk_scope()
-            risk_usage = (
+
+            stored_usage = (
                 self._repository
                 .get_today_risk_usage()
             )
+            risk_usage = stored_usage
+
+            if (
+                self._risk_policy
+                .requires_open_order_usage
+            ):
+                remote_open_orders = (
+                    self._execution_service
+                    .list_open_orders(
+                        exchange=intent.exchange,
+                        symbol=None,
+                    )
+                )
+
+                risk_usage = OrderRiskUsage(
+                    daily_notional=(
+                        stored_usage
+                        .daily_notional
+                    ),
+                    open_orders=len(
+                        remote_open_orders
+                    ),
+                )
 
         order = self._repository.create(
             idempotency_key=idempotency_key,

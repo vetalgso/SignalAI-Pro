@@ -28,6 +28,20 @@ from app.tradinggpt.orders.validation_models import (
 class FakeExecutionService:
     def __init__(self) -> None:
         self.execute_calls = 0
+        self.open_order_calls = 0
+        self.open_orders: list[
+            object
+        ] = []
+
+    def list_open_orders(
+        self,
+        *,
+        exchange: str,
+        symbol: str | None = None,
+    ) -> list[object]:
+        self.open_order_calls += 1
+
+        return self.open_orders
 
     def preview(
         self,
@@ -90,6 +104,7 @@ def build_request(
     *,
     idempotency_key: str,
     dry_run: bool = False,
+    reduce_only: bool = False,
 ) -> JournalOrderExecuteRequest:
     return JournalOrderExecuteRequest(
         idempotency_key=idempotency_key,
@@ -102,7 +117,7 @@ def build_request(
         quantity=0.01,
         reference_price=60_000.0,
         leverage=1,
-        reduce_only=False,
+        reduce_only=reduce_only,
     )
 
 
@@ -344,3 +359,96 @@ def test_journal_blocks_projected_daily_notional(
 
         assert usage.daily_notional == 600.0
         assert usage.open_orders == 0
+
+
+
+def test_journal_uses_remote_open_order_count(
+) -> None:
+    with build_session() as session:
+        execution = FakeExecutionService()
+        execution.open_orders = [
+            object(),
+        ]
+
+        repository = TradingOrderRepository(
+            session,
+            user_id=7,
+            exchange_account_id=42,
+        )
+        repository.lock_risk_scope = (
+            lambda: None
+        )
+
+        service = JournaledOrderService(
+            repository=repository,
+            execution_service=execution,
+            risk_policy=(
+                OrderRiskPolicy.configured(
+                    execution_enabled=True,
+                    max_order_notional=700.0,
+                    max_daily_notional=1000.0,
+                    max_open_orders=1,
+                    allowed_symbols="BTCUSDT",
+                )
+            ),
+        )
+
+        result = service.execute(
+            build_request(
+                idempotency_key=(
+                    "remote-open-limit"
+                )
+            )
+        )
+
+        assert (
+            result["status"]
+            == "VALIDATION_FAILED"
+        )
+        assert "Open order count 1" in str(
+            result["error_message"]
+        )
+        assert execution.open_order_calls == 1
+        assert execution.execute_calls == 0
+
+
+def test_reduce_only_skips_remote_usage_limit(
+) -> None:
+    with build_session() as session:
+        execution = FakeExecutionService()
+        execution.open_orders = [
+            object(),
+        ]
+
+        repository = TradingOrderRepository(
+            session,
+            user_id=7,
+            exchange_account_id=42,
+        )
+
+        service = JournaledOrderService(
+            repository=repository,
+            execution_service=execution,
+            risk_policy=(
+                OrderRiskPolicy.configured(
+                    execution_enabled=True,
+                    max_order_notional=700.0,
+                    max_daily_notional=500.0,
+                    max_open_orders=1,
+                    allowed_symbols="BTCUSDT",
+                )
+            ),
+        )
+
+        result = service.execute(
+            build_request(
+                idempotency_key=(
+                    "reduce-only-risk-exit"
+                ),
+                reduce_only=True,
+            )
+        )
+
+        assert result["status"] == "FILLED"
+        assert execution.open_order_calls == 0
+        assert execution.execute_calls == 1

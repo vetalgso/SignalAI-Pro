@@ -17,6 +17,9 @@ from app.api.dependencies import (
 from app.core.config import settings
 from app.database.session import get_db
 from app.models.user import User
+from app.tradinggpt.orders.execution_service import (
+    OrderExecutionService,
+)
 from app.tradinggpt.orders.journal_service import (
     JournaledOrderService,
 )
@@ -89,6 +92,7 @@ def build_order_risk_policy(
 def build_order_risk_usage(
     db: Session,
     *,
+    execution_service: OrderExecutionService,
     user_id: int,
     account_id: int,
 ) -> OrderRiskUsage:
@@ -98,7 +102,24 @@ def build_order_risk_usage(
         exchange_account_id=account_id,
     )
 
-    return repository.get_today_risk_usage()
+    stored_usage = (
+        repository.get_today_risk_usage()
+    )
+    remote_open_orders = (
+        execution_service.list_open_orders(
+            exchange="BINANCE",
+            symbol=None,
+        )
+    )
+
+    return OrderRiskUsage(
+        daily_notional=(
+            stored_usage.daily_notional
+        ),
+        open_orders=len(
+            remote_open_orders
+        ),
+    )
 
 
 def raise_exchange_order_http_error(
@@ -553,15 +574,23 @@ def preview_exchange_account_order(
             **request.model_dump()
         )
 
+        risk_usage = None
+
+        if not intent.reduce_only:
+            risk_usage = (
+                build_order_risk_usage(
+                    db,
+                    execution_service=execution,
+                    user_id=current_user.id,
+                    account_id=account_id,
+                )
+            )
+
         preview = (
             build_order_risk_policy()
             .apply(
                 execution.preview(intent),
-                usage=build_order_risk_usage(
-                    db,
-                    user_id=current_user.id,
-                    account_id=account_id,
-                ),
+                usage=risk_usage,
                 increases_exposure=(
                     not intent.reduce_only
                 ),

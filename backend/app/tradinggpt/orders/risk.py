@@ -71,6 +71,12 @@ class OrderRiskPolicy:
             or self.max_open_orders is not None
         )
 
+    @property
+    def requires_open_order_usage(
+        self,
+    ) -> bool:
+        return self.max_open_orders is not None
+
     def apply(
         self,
         preview: OrderPreviewResult,
