@@ -284,3 +284,63 @@ def test_risk_policy_blocks_execution_before_adapter(
             preview_payload["valid"]
             is False
         )
+
+
+
+def test_journal_blocks_projected_daily_notional(
+) -> None:
+    with build_session() as session:
+        execution = FakeExecutionService()
+        repository = TradingOrderRepository(
+            session,
+            user_id=7,
+            exchange_account_id=42,
+        )
+
+        repository.lock_risk_scope = (
+            lambda: None
+        )
+
+        service = JournaledOrderService(
+            repository=repository,
+            execution_service=execution,
+            risk_policy=(
+                OrderRiskPolicy.configured(
+                    execution_enabled=True,
+                    max_order_notional=700.0,
+                    max_daily_notional=1000.0,
+                    max_open_orders=5,
+                    allowed_symbols="BTCUSDT",
+                )
+            ),
+        )
+
+        first = service.execute(
+            build_request(
+                idempotency_key=(
+                    "daily-risk-first"
+                )
+            )
+        )
+        second = service.execute(
+            build_request(
+                idempotency_key=(
+                    "daily-risk-second"
+                )
+            )
+        )
+
+        assert first["status"] == "FILLED"
+        assert (
+            second["status"]
+            == "VALIDATION_FAILED"
+        )
+        assert "Projected daily notional" in str(
+            second["error_message"]
+        )
+        assert execution.execute_calls == 1
+
+        usage = repository.get_today_risk_usage()
+
+        assert usage.daily_notional == 600.0
+        assert usage.open_orders == 0

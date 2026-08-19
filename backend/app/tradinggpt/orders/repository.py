@@ -1,12 +1,29 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.models.exchange_account import (
+    ExchangeAccount,
+)
 from app.models.trading_order import TradingOrder
+
+from .risk import OrderRiskUsage
+
+
+RISK_NOTIONAL_STATUSES = (
+    "FILLED",
+    "OPEN",
+    "PARTIALLY_FILLED",
+)
+OPEN_ORDER_STATUSES = (
+    "OPEN",
+    "PARTIALLY_FILLED",
+)
 
 
 class TradingOrderRepository:
@@ -133,6 +150,120 @@ class TradingOrderRepository:
             self._session.scalars(statement)
         )
 
+    def lock_risk_scope(self) -> None:
+        user_id, account_id = (
+            self._require_account_scope()
+        )
+
+        statement = (
+            select(ExchangeAccount.id)
+            .where(
+                ExchangeAccount.id
+                == account_id,
+                ExchangeAccount.user_id
+                == user_id,
+            )
+            .with_for_update()
+        )
+
+        if self._session.scalar(
+            statement
+        ) is None:
+            raise ValueError(
+                "Exchange account risk scope "
+                "was not found."
+            )
+
+    def get_risk_usage(
+        self,
+        *,
+        since: datetime,
+    ) -> OrderRiskUsage:
+        self._require_account_scope()
+
+        daily_statement = select(
+            func.coalesce(
+                func.sum(
+                    TradingOrder
+                    .estimated_notional
+                ),
+                0,
+            )
+        ).where(
+            *self._ownership_scope(),
+            TradingOrder.dry_run.is_(False),
+            TradingOrder.created_at >= since,
+            TradingOrder.status.in_(
+                RISK_NOTIONAL_STATUSES
+            ),
+        )
+
+        open_statement = select(
+            func.count(TradingOrder.id)
+        ).where(
+            *self._ownership_scope(),
+            TradingOrder.dry_run.is_(False),
+            TradingOrder.status.in_(
+                OPEN_ORDER_STATUSES
+            ),
+        )
+
+        daily_notional = (
+            self._session.scalar(
+                daily_statement
+            )
+        )
+        open_orders = self._session.scalar(
+            open_statement
+        )
+
+        return OrderRiskUsage(
+            daily_notional=float(
+                daily_notional or 0
+            ),
+            open_orders=int(
+                open_orders or 0
+            ),
+        )
+
+    def get_today_risk_usage(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> OrderRiskUsage:
+        reference = (
+            now
+            or datetime.now(timezone.utc)
+        )
+        since = reference.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
+        return self.get_risk_usage(
+            since=since
+        )
+
+    def _require_account_scope(
+        self,
+    ) -> tuple[int, int]:
+        if (
+            self._user_id is None
+            or self._exchange_account_id
+            is None
+        ):
+            raise ValueError(
+                "User and exchange account "
+                "scope are required."
+            )
+
+        return (
+            self._user_id,
+            self._exchange_account_id,
+        )
+
     def _ownership_scope(
         self,
     ) -> tuple[Any, ...]:
@@ -174,6 +305,9 @@ class TradingOrderRepository:
         normalized_quantity: float,
         normalized_price: float | None,
         preview_payload: dict[str, Any],
+        estimated_notional: (
+            float | None
+        ) = None,
         error_message: str | None = None,
     ) -> TradingOrder:
         order.normalized_quantity = Decimal(
@@ -185,6 +319,11 @@ class TradingOrderRepository:
             else None
         )
         order.preview_payload = preview_payload
+        order.estimated_notional = (
+            Decimal(str(estimated_notional))
+            if estimated_notional is not None
+            else None
+        )
         order.status = (
             "PREVIEWED"
             if valid

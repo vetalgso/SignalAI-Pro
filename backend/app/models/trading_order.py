@@ -46,6 +46,15 @@ class TradingOrder(Base):
                 "user_id IS NULL"
             ),
         ),
+        Index(
+            "ix_trading_orders_"
+            "account_risk_usage",
+            "user_id",
+            "exchange_account_id",
+            "dry_run",
+            "status",
+            "created_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -123,6 +132,12 @@ class TradingOrder(Base):
         nullable=True,
     )
     normalized_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(30, 12),
+        nullable=True,
+    )
+    estimated_notional: Mapped[
+        Decimal | None
+    ] = mapped_column(
         Numeric(30, 12),
         nullable=True,
     )

@@ -21,6 +21,9 @@ SignalAI Pro supports authenticated, encrypted, account-scoped Binance Spot Test
 - explicitly confirmed TESTNET order submission;
 - order history, status, open orders, and cancellation;
 - server-side master switch, maximum order notional, and optional symbol allowlist;
+- account-scoped UTC daily notional and open-order limits;
+- serialized execution checks prevent parallel orders from bypassing account limits;
+- dry runs do not consume limits, while reduce-only orders may reduce exposure;
 - LIVE exchange execution remains blocked by the backend.
 
 This project is not financial advice. TESTNET execution uses simulated exchange funds; do not enable LIVE trading without a separate production risk review.

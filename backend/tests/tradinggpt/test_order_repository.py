@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -324,3 +326,136 @@ def test_repository_isolates_orders_by_exchange_account(
             )
             is not None
         )
+
+
+
+def create_risk_usage_order(
+    repository: TradingOrderRepository,
+    *,
+    idempotency_key: str,
+    status: str,
+    estimated_notional: float,
+    dry_run: bool = False,
+) -> TradingOrder:
+    order = repository.create(
+        idempotency_key=idempotency_key,
+        exchange="BINANCE",
+        market_type="SPOT",
+        symbol="BTCUSDT",
+        side="BUY",
+        order_type="LIMIT",
+        requested_quantity=0.001,
+        requested_price=60_000.0,
+        dry_run=dry_run,
+        request_payload={},
+    )
+
+    repository.apply_preview(
+        order,
+        valid=True,
+        normalized_quantity=0.001,
+        normalized_price=60_000.0,
+        estimated_notional=(
+            estimated_notional
+        ),
+        preview_payload={
+            "valid": True,
+            "estimated_notional": (
+                estimated_notional
+            ),
+        },
+    )
+
+    repository.apply_execution(
+        order,
+        status=status,
+        client_order_id=None,
+        exchange_order_id=None,
+        filled_quantity=(
+            0.001
+            if status == "FILLED"
+            else 0.0
+        ),
+        average_price=(
+            60_000.0
+            if status == "FILLED"
+            else None
+        ),
+        simulated=dry_run,
+        execution_payload={
+            "status": status,
+        },
+    )
+
+    return order
+
+
+def test_repository_calculates_account_risk_usage(
+) -> None:
+    with build_session() as session:
+        first_repository = (
+            TradingOrderRepository(
+                session,
+                user_id=7,
+                exchange_account_id=70,
+            )
+        )
+        second_repository = (
+            TradingOrderRepository(
+                session,
+                user_id=7,
+                exchange_account_id=71,
+            )
+        )
+
+        create_risk_usage_order(
+            first_repository,
+            idempotency_key="filled-70",
+            status="FILLED",
+            estimated_notional=60.0,
+        )
+        create_risk_usage_order(
+            first_repository,
+            idempotency_key="open-70",
+            status="OPEN",
+            estimated_notional=40.0,
+        )
+        create_risk_usage_order(
+            first_repository,
+            idempotency_key="dry-run-70",
+            status="DRY_RUN",
+            estimated_notional=900.0,
+            dry_run=True,
+        )
+        create_risk_usage_order(
+            second_repository,
+            idempotency_key="filled-71",
+            status="FILLED",
+            estimated_notional=500.0,
+        )
+
+        session.commit()
+
+        since = datetime(
+            2000,
+            1,
+            1,
+            tzinfo=timezone.utc,
+        )
+
+        first_usage = (
+            first_repository.get_risk_usage(
+                since=since
+            )
+        )
+        second_usage = (
+            second_repository.get_risk_usage(
+                since=since
+            )
+        )
+
+        assert first_usage.daily_notional == 100.0
+        assert first_usage.open_orders == 1
+
+        assert second_usage.daily_notional == 500.0
+        assert second_usage.open_orders == 0

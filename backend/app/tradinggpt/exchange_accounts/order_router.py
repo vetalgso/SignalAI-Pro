@@ -28,6 +28,7 @@ from app.tradinggpt.orders.repository import (
 )
 from app.tradinggpt.orders.risk import (
     OrderRiskPolicy,
+    OrderRiskUsage,
 )
 from app.tradinggpt.orders.schemas import (
     OrderCancelResponse,
@@ -70,11 +71,34 @@ def build_order_risk_policy(
             settings
             .testnet_max_order_notional
         ),
+        max_daily_notional=(
+            settings
+            .testnet_max_daily_notional
+        ),
+        max_open_orders=(
+            settings
+            .testnet_max_open_orders
+        ),
         allowed_symbols=(
             settings
             .testnet_allowed_symbols
         ),
     )
+
+
+def build_order_risk_usage(
+    db: Session,
+    *,
+    user_id: int,
+    account_id: int,
+) -> OrderRiskUsage:
+    repository = TradingOrderRepository(
+        db,
+        user_id=user_id,
+        exchange_account_id=account_id,
+    )
+
+    return repository.get_today_risk_usage()
 
 
 def raise_exchange_order_http_error(
@@ -532,7 +556,15 @@ def preview_exchange_account_order(
         preview = (
             build_order_risk_policy()
             .apply(
-                execution.preview(intent)
+                execution.preview(intent),
+                usage=build_order_risk_usage(
+                    db,
+                    user_id=current_user.id,
+                    account_id=account_id,
+                ),
+                increases_exposure=(
+                    not intent.reduce_only
+                ),
             )
         )
     except ExchangeAccountNotFoundError as exc:

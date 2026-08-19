@@ -41,6 +41,16 @@ class Settings(BaseSettings):
         gt=0,
         le=1_000_000_000,
     )
+    testnet_max_daily_notional: float = Field(
+        default=500.0,
+        gt=0,
+        le=1_000_000_000,
+    )
+    testnet_max_open_orders: int = Field(
+        default=5,
+        ge=1,
+        le=1_000,
+    )
     testnet_allowed_symbols: str = ""
 
     binance_api_key: str = ""

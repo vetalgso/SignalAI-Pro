@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.tradinggpt.orders.risk import (
     OrderRiskPolicy,
+    OrderRiskUsage,
 )
 from app.tradinggpt.orders.validation_models import (
     OrderPreviewResult,
@@ -149,3 +150,96 @@ def test_policy_preserves_invalid_preview(
     assert result.errors == [
         "Exchange validation failed."
     ]
+
+
+
+def test_policy_blocks_projected_daily_notional(
+) -> None:
+    policy = OrderRiskPolicy.configured(
+        execution_enabled=True,
+        max_order_notional=100.0,
+        max_daily_notional=500.0,
+        max_open_orders=5,
+        allowed_symbols="",
+    )
+
+    result = policy.apply(
+        build_preview(notional=50.0),
+        usage=OrderRiskUsage(
+            daily_notional=460.0,
+            open_orders=1,
+        ),
+    )
+
+    assert result.valid is False
+    assert "Projected daily notional" in (
+        result.errors[0]
+    )
+    assert "510.00000000" in result.errors[0]
+
+
+def test_policy_blocks_open_order_limit(
+) -> None:
+    policy = OrderRiskPolicy.configured(
+        execution_enabled=True,
+        max_order_notional=100.0,
+        max_daily_notional=500.0,
+        max_open_orders=5,
+        allowed_symbols="",
+    )
+
+    result = policy.apply(
+        build_preview(notional=50.0),
+        usage=OrderRiskUsage(
+            daily_notional=100.0,
+            open_orders=5,
+        ),
+    )
+
+    assert result.valid is False
+    assert "Open order count 5" in (
+        result.errors[0]
+    )
+
+
+def test_policy_allows_projected_usage_at_limits(
+) -> None:
+    policy = OrderRiskPolicy.configured(
+        execution_enabled=True,
+        max_order_notional=100.0,
+        max_daily_notional=500.0,
+        max_open_orders=5,
+        allowed_symbols="",
+    )
+
+    result = policy.apply(
+        build_preview(notional=50.0),
+        usage=OrderRiskUsage(
+            daily_notional=450.0,
+            open_orders=4,
+        ),
+    )
+
+    assert result.valid is True
+
+
+def test_reduce_only_bypasses_account_usage_limits(
+) -> None:
+    policy = OrderRiskPolicy.configured(
+        execution_enabled=True,
+        max_order_notional=100.0,
+        max_daily_notional=500.0,
+        max_open_orders=5,
+        allowed_symbols="",
+    )
+
+    result = policy.apply(
+        build_preview(notional=50.0),
+        usage=OrderRiskUsage(
+            daily_notional=500.0,
+            open_orders=5,
+        ),
+        increases_exposure=False,
+    )
+
+    assert result.valid is True

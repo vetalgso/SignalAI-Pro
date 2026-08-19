@@ -1,5 +1,7 @@
 from __future__ import annotations
 from typing import Any
+
+import pytest
 from fastapi.testclient import TestClient
 from app.api.dependencies import (
     get_current_user,
@@ -12,6 +14,7 @@ from app.tradinggpt.exchange_accounts import (
 )
 from app.tradinggpt.orders.risk import (
     OrderRiskPolicy,
+    OrderRiskUsage,
 )
 from app.tradinggpt.orders.validation_models import (
     OrderPreviewResult,
@@ -28,6 +31,19 @@ from tests.tradinggpt.exchange_account_order_api_support import (
     clear_auth_overrides,
     install_auth_overrides,
 )
+
+
+@pytest.fixture(autouse=True)
+def install_empty_order_risk_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_order_risk_usage",
+        lambda *args, **kwargs: (
+            OrderRiskUsage()
+        ),
+    )
 
 
 def test_preview_requires_authentication(
@@ -308,3 +324,66 @@ def test_preview_applies_testnet_risk_policy(
     assert len(payload["errors"]) == 1
     assert "exceeds" in payload["errors"][0]
     assert db.rollback_calls == 0
+
+
+
+def test_preview_applies_account_risk_usage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeDb()
+    execution = FakeExecutionService()
+    service = FakeExchangeAccountService(
+        execution
+    )
+
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_service",
+        lambda _: service,
+    )
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_order_risk_policy",
+        lambda: OrderRiskPolicy.configured(
+            execution_enabled=True,
+            max_order_notional=100.0,
+            max_daily_notional=100.0,
+            max_open_orders=5,
+            allowed_symbols="BTCUSDT",
+        ),
+    )
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_order_risk_usage",
+        lambda *args, **kwargs: (
+            OrderRiskUsage(
+                daily_notional=50.0,
+                open_orders=1,
+            )
+        ),
+    )
+
+    install_auth_overrides(db)
+
+    try:
+        response = client.post(
+            "/api/v3/exchange/accounts/"
+            "42/orders/preview",
+            json=build_payload(),
+        )
+    finally:
+        clear_auth_overrides()
+
+    assert response.status_code == 200
+
+    payload = response.json()
+
+    assert payload["valid"] is False
+    assert payload["estimated_notional"] == 60.0
+    assert "Projected daily notional" in (
+        payload["errors"][0]
+    )
+    assert "110.00000000" in (
+        payload["errors"][0]
+    )

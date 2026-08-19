@@ -72,6 +72,18 @@ class JournaledOrderService:
 
         intent = self._build_intent(request)
 
+        risk_usage = None
+
+        if (
+            self._risk_policy
+            .requires_account_usage
+        ):
+            self._repository.lock_risk_scope()
+            risk_usage = (
+                self._repository
+                .get_today_risk_usage()
+            )
+
         order = self._repository.create(
             idempotency_key=idempotency_key,
             exchange=request.exchange,
@@ -88,7 +100,11 @@ class JournaledOrderService:
         )
 
         preview = self._risk_policy.apply(
-            self._preview(intent)
+            self._preview(intent),
+            usage=risk_usage,
+            increases_exposure=(
+                not intent.reduce_only
+            ),
         )
 
         preview_payload = preview.to_dict()
@@ -106,6 +122,9 @@ class JournaledOrderService:
             ),
             normalized_price=preview.normalized_price,
             preview_payload=preview_payload,
+            estimated_notional=(
+                preview.estimated_notional
+            ),
             error_message=preview_error,
         )
 
