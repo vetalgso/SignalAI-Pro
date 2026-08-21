@@ -22,11 +22,15 @@ from app.api.dependencies import (
 from app.core.config import settings
 from app.database.session import get_db
 from app.models.user import User
+from app.tradinggpt.orders.execution_models import (
+    OrderExecutionResult,
+)
 from app.tradinggpt.orders.execution_service import (
     OrderExecutionService,
 )
 from app.tradinggpt.orders.journal_service import (
     JournaledOrderService,
+    OrderReconciliationUnavailableError,
 )
 from app.tradinggpt.orders.models import (
     OrderIntent,
@@ -132,6 +136,28 @@ def build_order_risk_usage(
     )
 
 
+def reconcile_exchange_order_result(
+    db: Session,
+    *,
+    execution_service: OrderExecutionService,
+    result: OrderExecutionResult,
+    user_id: int,
+    account_id: int,
+) -> None:
+    journal = JournaledOrderService(
+        repository=TradingOrderRepository(
+            db,
+            user_id=user_id,
+            exchange_account_id=account_id,
+        ),
+        execution_service=execution_service,
+    )
+
+    journal.reconcile_remote_result(
+        result
+    )
+
+
 def raise_exchange_order_http_error(
     db: Session,
     exc: Exception,
@@ -160,6 +186,7 @@ def raise_exchange_order_http_error(
         exc,
         (
             ExchangeConnectionError,
+            OrderReconciliationUnavailableError,
             OrderRiskUsageUnavailableError,
         ),
     ):
@@ -534,12 +561,21 @@ def get_exchange_account_order(
             symbol=symbol.upper(),
             order_id=order_id,
         )
+
+        reconcile_exchange_order_result(
+            db,
+            execution_service=execution,
+            result=result,
+            user_id=current_user.id,
+            account_id=account_id,
+        )
     except (
         ExchangeAccountNotFoundError,
         ExchangeTradingUnavailableError,
         LiveExchangeExecutionDisabledError,
         UnsafeExchangePermissionsError,
         ExchangeConnectionError,
+        OrderReconciliationUnavailableError,
         OrderRiskUsageUnavailableError,
         ValueError,
     ) as exc:
@@ -586,12 +622,21 @@ def cancel_exchange_account_order(
             symbol=symbol.upper(),
             order_id=order_id,
         )
+
+        reconcile_exchange_order_result(
+            db,
+            execution_service=execution,
+            result=result,
+            user_id=current_user.id,
+            account_id=account_id,
+        )
     except (
         ExchangeAccountNotFoundError,
         ExchangeTradingUnavailableError,
         LiveExchangeExecutionDisabledError,
         UnsafeExchangePermissionsError,
         ExchangeConnectionError,
+        OrderReconciliationUnavailableError,
         OrderRiskUsageUnavailableError,
         ValueError,
     ) as exc:

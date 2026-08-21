@@ -4,7 +4,12 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import (
+    and_,
+    func,
+    or_,
+    select,
+)
 from sqlalchemy.orm import Session
 
 from app.models.exchange_account import (
@@ -96,6 +101,32 @@ class TradingOrderRepository:
             TradingOrder.id == order_id,
             *self._ownership_scope(),
         )
+
+        return self._session.scalar(
+            statement
+        )
+
+    def get_by_exchange_order_id(
+        self,
+        exchange_order_id: str,
+        *,
+        symbol: str,
+        for_update: bool = False,
+    ) -> TradingOrder | None:
+        statement = select(
+            TradingOrder
+        ).where(
+            TradingOrder.exchange_order_id
+            == exchange_order_id,
+            TradingOrder.symbol
+            == symbol.upper(),
+            *self._ownership_scope(),
+        )
+
+        if for_update:
+            statement = (
+                statement.with_for_update()
+            )
 
         return self._session.scalar(
             statement
@@ -193,8 +224,16 @@ class TradingOrderRepository:
             *self._ownership_scope(),
             TradingOrder.dry_run.is_(False),
             TradingOrder.created_at >= since,
-            TradingOrder.status.in_(
-                RISK_NOTIONAL_STATUSES
+            or_(
+                TradingOrder.status.in_(
+                    RISK_NOTIONAL_STATUSES
+                ),
+                and_(
+                    TradingOrder.status
+                    == "CANCELED",
+                    TradingOrder.filled_quantity
+                    > 0,
+                ),
             ),
         )
 
@@ -361,6 +400,53 @@ class TradingOrderRepository:
         )
         order.simulated = simulated
         order.execution_payload = execution_payload
+        order.error_message = error_message
+
+        self._session.flush()
+
+        return order
+
+    def apply_reconciliation(
+        self,
+        order: TradingOrder,
+        *,
+        status: str,
+        client_order_id: str,
+        filled_quantity: float,
+        average_price: float | None,
+        simulated: bool,
+        reconciliation_payload: (
+            dict[str, Any]
+        ),
+        error_message: str | None = None,
+    ) -> TradingOrder:
+        execution_payload = dict(
+            order.execution_payload or {}
+        )
+        execution_payload[
+            "last_reconciliation"
+        ] = reconciliation_payload
+
+        order.status = status
+
+        if client_order_id:
+            order.client_order_id = (
+                client_order_id
+            )
+
+        order.filled_quantity = Decimal(
+            str(filled_quantity)
+        )
+
+        if average_price is not None:
+            order.average_price = Decimal(
+                str(average_price)
+            )
+
+        order.simulated = simulated
+        order.execution_payload = (
+            execution_payload
+        )
         order.error_message = error_message
 
         self._session.flush()

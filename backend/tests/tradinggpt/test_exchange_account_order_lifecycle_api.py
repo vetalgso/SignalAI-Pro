@@ -156,6 +156,11 @@ def test_remote_lifecycle_uses_authenticated_account(
         "build_service",
         lambda _: account_service,
     )
+    monkeypatch.setattr(
+        exchange_account_router,
+        "reconcile_exchange_order_result",
+        lambda *args, **kwargs: None,
+    )
 
     install_auth_overrides(db)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.models.trading_order import TradingOrder
@@ -24,6 +25,12 @@ from .risk import (
 )
 from .schemas import JournalOrderExecuteRequest
 from .validation_models import OrderPreviewResult
+
+
+class OrderReconciliationUnavailableError(
+    RuntimeError
+):
+    pass
 
 
 class JournaledOrderService:
@@ -417,6 +424,66 @@ class JournaledOrderService:
                 mode="json"
             ),
         }
+
+    def reconcile_remote_result(
+        self,
+        result: OrderExecutionResult,
+    ) -> dict[str, object] | None:
+        if (
+            result.status == "FAILED"
+            or result.exchange_order_id is None
+        ):
+            raise (
+                OrderReconciliationUnavailableError(
+                    "Remote order state could "
+                    "not be reconciled."
+                )
+            )
+
+        order = (
+            self._repository
+            .get_by_exchange_order_id(
+                result.exchange_order_id,
+                symbol=result.symbol,
+                for_update=True,
+            )
+        )
+
+        if order is None:
+            return None
+
+        self._repository.apply_reconciliation(
+            order,
+            status=result.status,
+            client_order_id=(
+                result.client_order_id
+            ),
+            filled_quantity=(
+                result.filled_quantity
+            ),
+            average_price=result.average_price,
+            simulated=result.simulated,
+            reconciliation_payload={
+                "checked_at": (
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat()
+                ),
+                "result": result.to_dict(),
+            },
+            error_message=(
+                result.message
+                if result.status == "REJECTED"
+                else None
+            ),
+        )
+
+        self._repository._session.commit()
+        self._repository._session.refresh(
+            order
+        )
+
+        return self.serialize(order)
 
     def list_history(
         self,
