@@ -186,3 +186,24 @@ export interface AccountOrderHistoryQuery {
   symbol?: string;
   status?: string;
 }
+
+
+export interface AccountOrderRiskStatus {
+  source: 'BINANCE_TESTNET';
+  execution_enabled: boolean;
+  max_order_notional: number | null;
+  daily_notional: number;
+  max_daily_notional: number | null;
+  remaining_daily_notional:
+    | number
+    | null;
+  open_orders: number;
+  max_open_orders: number | null;
+  remaining_open_order_slots:
+    | number
+    | null;
+  allowed_symbols: string[];
+  order_submission_available: boolean;
+  period_started_at: string;
+  resets_at: string;
+}

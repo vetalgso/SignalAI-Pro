@@ -136,6 +136,33 @@ class ExchangeAccountOrderExecuteRequest(
     dry_run: bool = True
 
 
+class ExchangeAccountOrderRiskResponse(
+    BaseModel
+):
+    source: Literal["BINANCE_TESTNET"]
+    execution_enabled: bool
+
+    max_order_notional: float | None
+
+    daily_notional: float
+    max_daily_notional: float | None
+    remaining_daily_notional: (
+        float | None
+    )
+
+    open_orders: int
+    max_open_orders: int | None
+    remaining_open_order_slots: (
+        int | None
+    )
+
+    allowed_symbols: list[str]
+    order_submission_available: bool
+
+    period_started_at: datetime
+    resets_at: datetime
+
+
 class ExchangeAccountDeleteResponse(
     BaseModel
 ):

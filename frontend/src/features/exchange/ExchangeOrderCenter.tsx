@@ -18,6 +18,9 @@ import {
   ExchangeOrderActivity,
 } from './ExchangeOrderActivity';
 import {
+  ExchangeOrderRisk,
+} from './ExchangeOrderRisk';
+import {
   ExchangeTestnetExecution,
 } from './ExchangeTestnetExecution';
 import {
@@ -462,6 +465,15 @@ export function ExchangeOrderCenter({
           <span>{error}</span>
         </div>
       )}
+
+      <ExchangeOrderRisk
+        account={account}
+        language={language}
+        refreshKey={
+          journal?.journal_id ?? 0
+        }
+        token={token}
+      />
 
       <form
         className="exchange-order-form"

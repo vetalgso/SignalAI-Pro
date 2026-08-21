@@ -5,6 +5,7 @@ import type {
   AccountOrderPreview,
   AccountOrderRequest,
   AccountOrderResult,
+  AccountOrderRiskStatus,
   AuthTokenResponse,
   AuthUser,
   ExchangeAccount,
@@ -291,6 +292,22 @@ function accountOrdersPath(
   return (
     `${API}/v3/exchange/accounts/`
     + `${accountId}/orders`
+  );
+}
+
+export async function fetchExchangeAccountOrderRisk(
+  token: string,
+  accountId: number,
+): Promise<AccountOrderRiskStatus> {
+  const response = await fetch(
+    `${accountOrdersPath(accountId)}/risk`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  return readJson<AccountOrderRiskStatus>(
+    response,
   );
 }
 

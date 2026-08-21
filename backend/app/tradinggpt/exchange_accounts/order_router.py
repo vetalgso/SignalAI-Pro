@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+)
 from typing import Annotated, NoReturn
 
 from fastapi import (
@@ -45,6 +50,7 @@ from .router import build_service
 from .schemas import (
     ExchangeAccountOrderExecuteRequest,
     ExchangeAccountOrderRequest,
+    ExchangeAccountOrderRiskResponse,
 )
 from .service import (
     ExchangeAccountNotFoundError,
@@ -294,6 +300,136 @@ def get_exchange_account_order_history(
         JournaledOrderService.serialize(
             order
         )
+    )
+
+
+@router.get(
+    "/{account_id}/orders/risk",
+    response_model=(
+        ExchangeAccountOrderRiskResponse
+    ),
+)
+def get_exchange_account_order_risk(
+    account_id: int,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> ExchangeAccountOrderRiskResponse:
+    try:
+        execution = build_service(
+            db
+        ).order_execution_service(
+            account_id=account_id,
+            user_id=current_user.id,
+        )
+
+        policy = build_order_risk_policy()
+        usage = build_order_risk_usage(
+            db,
+            execution_service=execution,
+            user_id=current_user.id,
+            account_id=account_id,
+        )
+    except (
+        ExchangeAccountNotFoundError,
+        ExchangeTradingUnavailableError,
+        LiveExchangeExecutionDisabledError,
+        UnsafeExchangePermissionsError,
+        ExchangeConnectionError,
+        ValueError,
+    ) as exc:
+        raise_exchange_order_http_error(
+            db,
+            exc,
+        )
+
+    now = datetime.now(timezone.utc)
+    period_started_at = now.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    resets_at = (
+        period_started_at
+        + timedelta(days=1)
+    )
+
+    remaining_daily_notional = (
+        max(
+            0.0,
+            policy.max_daily_notional
+            - usage.daily_notional,
+        )
+        if policy.max_daily_notional
+        is not None
+        else None
+    )
+
+    remaining_open_order_slots = (
+        max(
+            0,
+            policy.max_open_orders
+            - usage.open_orders,
+        )
+        if policy.max_open_orders
+        is not None
+        else None
+    )
+
+    order_submission_available = (
+        policy.execution_enabled
+        and (
+            remaining_daily_notional
+            is None
+            or remaining_daily_notional > 0
+        )
+        and (
+            remaining_open_order_slots
+            is None
+            or remaining_open_order_slots > 0
+        )
+    )
+
+    return ExchangeAccountOrderRiskResponse(
+        source="BINANCE_TESTNET",
+        execution_enabled=(
+            policy.execution_enabled
+        ),
+        max_order_notional=(
+            policy.max_order_notional
+        ),
+        daily_notional=(
+            usage.daily_notional
+        ),
+        max_daily_notional=(
+            policy.max_daily_notional
+        ),
+        remaining_daily_notional=(
+            remaining_daily_notional
+        ),
+        open_orders=usage.open_orders,
+        max_open_orders=(
+            policy.max_open_orders
+        ),
+        remaining_open_order_slots=(
+            remaining_open_order_slots
+        ),
+        allowed_symbols=sorted(
+            policy.allowed_symbols
+        ),
+        order_submission_available=(
+            order_submission_available
+        ),
+        period_started_at=(
+            period_started_at
+        ),
+        resets_at=resets_at,
     )
 
 
