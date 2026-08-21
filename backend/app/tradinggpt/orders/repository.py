@@ -181,6 +181,51 @@ class TradingOrderRepository:
             self._session.scalars(statement)
         )
 
+    def list_reconciliation_candidates(
+        self,
+        *,
+        limit: int = 50,
+    ) -> list[TradingOrder]:
+        if limit < 1:
+            raise ValueError(
+                "Reconciliation candidate limit "
+                "must be greater than zero."
+            )
+
+        statement = (
+            select(TradingOrder)
+            .where(
+                TradingOrder.user_id.is_not(
+                    None
+                ),
+                TradingOrder
+                .exchange_account_id
+                .is_not(None),
+                TradingOrder.exchange
+                == "BINANCE",
+                TradingOrder.dry_run.is_(
+                    False
+                ),
+                TradingOrder.status.in_(
+                    OPEN_ORDER_STATUSES
+                ),
+                TradingOrder
+                .exchange_order_id
+                .is_not(None),
+            )
+            .order_by(
+                TradingOrder.updated_at.asc(),
+                TradingOrder.id.asc(),
+            )
+            .limit(limit)
+        )
+
+        return list(
+            self._session.scalars(
+                statement
+            ).all()
+        )
+
     def lock_risk_scope(self) -> None:
         user_id, account_id = (
             self._require_account_scope()

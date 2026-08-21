@@ -459,3 +459,120 @@ def test_repository_calculates_account_risk_usage(
 
         assert second_usage.daily_notional == 500.0
         assert second_usage.open_orders == 0
+
+def test_repository_lists_reconciliation_candidates(
+) -> None:
+    with build_session() as session:
+        def create_order(
+            *,
+            key: str,
+            account_id: int,
+            exchange: str,
+            status: str,
+            dry_run: bool,
+            exchange_order_id: str | None,
+        ) -> object:
+            repository = TradingOrderRepository(
+                session,
+                user_id=7,
+                exchange_account_id=(
+                    account_id
+                ),
+            )
+
+            order = repository.create(
+                idempotency_key=key,
+                exchange=exchange,
+                market_type="SPOT",
+                symbol="BTCUSDT",
+                side="BUY",
+                order_type="LIMIT",
+                requested_quantity=0.001,
+                requested_price=50000.0,
+                dry_run=dry_run,
+                request_payload={},
+            )
+
+            repository.apply_execution(
+                order,
+                status=status,
+                client_order_id=(
+                    f"client-{key}"
+                ),
+                exchange_order_id=(
+                    exchange_order_id
+                ),
+                filled_quantity=0.0,
+                average_price=None,
+                simulated=False,
+                execution_payload={},
+            )
+
+            return order
+
+        open_order = create_order(
+            key="reconcile-open",
+            account_id=42,
+            exchange="BINANCE",
+            status="OPEN",
+            dry_run=False,
+            exchange_order_id="remote-open",
+        )
+        partial_order = create_order(
+            key="reconcile-partial",
+            account_id=42,
+            exchange="BINANCE",
+            status="PARTIALLY_FILLED",
+            dry_run=False,
+            exchange_order_id="remote-partial",
+        )
+
+        create_order(
+            key="ignore-dry-run",
+            account_id=42,
+            exchange="BINANCE",
+            status="OPEN",
+            dry_run=True,
+            exchange_order_id="remote-dry",
+        )
+        create_order(
+            key="ignore-paper",
+            account_id=42,
+            exchange="PAPER",
+            status="OPEN",
+            dry_run=False,
+            exchange_order_id="remote-paper",
+        )
+        create_order(
+            key="ignore-filled",
+            account_id=42,
+            exchange="BINANCE",
+            status="FILLED",
+            dry_run=False,
+            exchange_order_id="remote-filled",
+        )
+        create_order(
+            key="ignore-missing-remote-id",
+            account_id=42,
+            exchange="BINANCE",
+            status="OPEN",
+            dry_run=False,
+            exchange_order_id=None,
+        )
+
+        session.commit()
+
+        results = (
+            TradingOrderRepository(session)
+            .list_reconciliation_candidates(
+                limit=10
+            )
+        )
+
+        assert {
+            order.id
+            for order in results
+        } == {
+            open_order.id,
+            partial_order.id,
+        }
