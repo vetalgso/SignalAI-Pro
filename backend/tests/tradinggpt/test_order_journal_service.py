@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -16,6 +17,7 @@ from app.tradinggpt.orders.repository import (
 )
 from app.tradinggpt.orders.risk import (
     OrderRiskPolicy,
+    OrderRiskUsageUnavailableError,
 )
 from app.tradinggpt.orders.schemas import (
     JournalOrderExecuteRequest,
@@ -367,7 +369,24 @@ def test_journal_uses_remote_open_order_count(
     with build_session() as session:
         execution = FakeExecutionService()
         execution.open_orders = [
-            object(),
+            OrderExecutionResult(
+                exchange="PAPER",
+                symbol="BTCUSDT",
+                side="BUY",
+                order_type="LIMIT",
+                status="OPEN",
+                client_order_id=(
+                    "remote-open-client"
+                ),
+                exchange_order_id=(
+                    "remote-open-order"
+                ),
+                requested_quantity=0.01,
+                filled_quantity=0.0,
+                average_price=None,
+                simulated=True,
+                message="Remote order is open.",
+            ),
         ]
 
         repository = TradingOrderRepository(
@@ -417,7 +436,24 @@ def test_reduce_only_skips_remote_usage_limit(
     with build_session() as session:
         execution = FakeExecutionService()
         execution.open_orders = [
-            object(),
+            OrderExecutionResult(
+                exchange="PAPER",
+                symbol="BTCUSDT",
+                side="BUY",
+                order_type="LIMIT",
+                status="OPEN",
+                client_order_id=(
+                    "remote-open-client"
+                ),
+                exchange_order_id=(
+                    "remote-open-order"
+                ),
+                requested_quantity=0.01,
+                filled_quantity=0.0,
+                average_price=None,
+                simulated=True,
+                message="Remote order is open.",
+            ),
         ]
 
         repository = TradingOrderRepository(
@@ -452,3 +488,64 @@ def test_reduce_only_skips_remote_usage_limit(
         assert result["status"] == "FILLED"
         assert execution.open_order_calls == 0
         assert execution.execute_calls == 1
+
+
+
+def test_journal_fails_closed_when_remote_usage_fails(
+) -> None:
+    with build_session() as session:
+        execution = FakeExecutionService()
+        execution.open_orders = [
+            OrderExecutionResult(
+                exchange="BINANCE",
+                symbol="",
+                side="BUY",
+                order_type="LIMIT",
+                status="FAILED",
+                client_order_id="",
+                exchange_order_id=None,
+                requested_quantity=0.0,
+                filled_quantity=0.0,
+                average_price=None,
+                simulated=True,
+                message="Remote request failed.",
+            )
+        ]
+
+        repository = TradingOrderRepository(
+            session,
+            user_id=7,
+            exchange_account_id=42,
+        )
+        repository.lock_risk_scope = (
+            lambda: None
+        )
+
+        service = JournaledOrderService(
+            repository=repository,
+            execution_service=execution,
+            risk_policy=(
+                OrderRiskPolicy.configured(
+                    execution_enabled=True,
+                    max_order_notional=1000.0,
+                    max_daily_notional=5000.0,
+                    max_open_orders=5,
+                    allowed_symbols="BTCUSDT",
+                )
+            ),
+        )
+
+        with pytest.raises(
+            OrderRiskUsageUnavailableError,
+            match="could not be verified",
+        ):
+            service.execute(
+                build_request(
+                    idempotency_key=(
+                        "remote-usage-failed"
+                    )
+                )
+            )
+
+        assert execution.execute_calls == 0
+        assert repository.list_recent() == []

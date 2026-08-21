@@ -15,6 +15,7 @@ from app.tradinggpt.exchange_accounts import (
 from app.tradinggpt.orders.risk import (
     OrderRiskPolicy,
     OrderRiskUsage,
+    OrderRiskUsageUnavailableError,
 )
 from app.tradinggpt.orders.validation_models import (
     OrderPreviewResult,
@@ -491,3 +492,52 @@ def test_risk_status_uses_authenticated_account(
         }
     ]
     assert db.rollback_calls == 0
+
+
+
+def test_risk_status_fails_closed_when_usage_unavailable(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = FakeDb()
+    execution = FakeExecutionService()
+    service = FakeExchangeAccountService(
+        execution
+    )
+
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_service",
+        lambda _: service,
+    )
+
+    def unavailable(
+        *args: object,
+        **kwargs: object,
+    ) -> OrderRiskUsage:
+        raise OrderRiskUsageUnavailableError(
+            "Binance TESTNET open-order "
+            "usage could not be verified."
+        )
+
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_order_risk_usage",
+        unavailable,
+    )
+
+    install_auth_overrides(db)
+
+    try:
+        response = client.get(
+            "/api/v3/exchange/accounts/"
+            "42/orders/risk"
+        )
+    finally:
+        clear_auth_overrides()
+
+    assert response.status_code == 502
+    assert "could not be verified" in (
+        response.json()["detail"]
+    )
+    assert db.rollback_calls == 1

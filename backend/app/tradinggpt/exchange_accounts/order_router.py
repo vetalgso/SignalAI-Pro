@@ -37,6 +37,8 @@ from app.tradinggpt.orders.repository import (
 from app.tradinggpt.orders.risk import (
     OrderRiskPolicy,
     OrderRiskUsage,
+    OrderRiskUsageUnavailableError,
+    count_verified_open_orders,
 )
 from app.tradinggpt.orders.schemas import (
     OrderCancelResponse,
@@ -122,8 +124,10 @@ def build_order_risk_usage(
         daily_notional=(
             stored_usage.daily_notional
         ),
-        open_orders=len(
-            remote_open_orders
+        open_orders=(
+            count_verified_open_orders(
+                remote_open_orders
+            )
         ),
     )
 
@@ -154,7 +158,10 @@ def raise_exchange_order_http_error(
         )
     elif isinstance(
         exc,
-        ExchangeConnectionError,
+        (
+            ExchangeConnectionError,
+            OrderRiskUsageUnavailableError,
+        ),
     ):
         status_code = (
             status.HTTP_502_BAD_GATEWAY
@@ -341,6 +348,7 @@ def get_exchange_account_order_risk(
         LiveExchangeExecutionDisabledError,
         UnsafeExchangePermissionsError,
         ExchangeConnectionError,
+        OrderRiskUsageUnavailableError,
         ValueError,
     ) as exc:
         raise_exchange_order_http_error(
@@ -477,6 +485,7 @@ def list_exchange_account_open_orders(
         LiveExchangeExecutionDisabledError,
         UnsafeExchangePermissionsError,
         ExchangeConnectionError,
+        OrderRiskUsageUnavailableError,
         ValueError,
     ) as exc:
         raise_exchange_order_http_error(
@@ -531,6 +540,7 @@ def get_exchange_account_order(
         LiveExchangeExecutionDisabledError,
         UnsafeExchangePermissionsError,
         ExchangeConnectionError,
+        OrderRiskUsageUnavailableError,
         ValueError,
     ) as exc:
         raise_exchange_order_http_error(
@@ -582,6 +592,7 @@ def cancel_exchange_account_order(
         LiveExchangeExecutionDisabledError,
         UnsafeExchangePermissionsError,
         ExchangeConnectionError,
+        OrderRiskUsageUnavailableError,
         ValueError,
     ) as exc:
         raise_exchange_order_http_error(
@@ -659,7 +670,10 @@ def execute_exchange_account_order(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
-    except ExchangeConnectionError as exc:
+    except (
+        ExchangeConnectionError,
+        OrderRiskUsageUnavailableError,
+    ) as exc:
         db.rollback()
 
         raise HTTPException(

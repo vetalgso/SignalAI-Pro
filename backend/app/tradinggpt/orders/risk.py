@@ -1,13 +1,45 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import (
     dataclass,
     replace,
 )
 
+from .execution_models import (
+    OrderExecutionResult,
+)
 from .validation_models import (
     OrderPreviewResult,
 )
+
+
+class OrderRiskUsageUnavailableError(
+    RuntimeError
+):
+    pass
+
+
+def count_verified_open_orders(
+    results: Sequence[
+        OrderExecutionResult
+    ],
+) -> int:
+    allowed_statuses = {
+        "OPEN",
+        "PARTIALLY_FILLED",
+    }
+
+    if any(
+        result.status not in allowed_statuses
+        for result in results
+    ):
+        raise OrderRiskUsageUnavailableError(
+            "Binance TESTNET open-order "
+            "usage could not be verified."
+        )
+
+    return len(results)
 
 
 @dataclass(frozen=True, slots=True)

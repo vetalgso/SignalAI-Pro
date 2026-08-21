@@ -20,6 +20,7 @@ from .repository import TradingOrderRepository
 from .risk import (
     OrderRiskPolicy,
     OrderRiskUsage,
+    count_verified_open_orders,
 )
 from .schemas import JournalOrderExecuteRequest
 from .validation_models import OrderPreviewResult
@@ -107,8 +108,10 @@ class JournaledOrderService:
                         stored_usage
                         .daily_notional
                     ),
-                    open_orders=len(
-                        remote_open_orders
+                    open_orders=(
+                        count_verified_open_orders(
+                            remote_open_orders
+                        )
                     ),
                 )
 
