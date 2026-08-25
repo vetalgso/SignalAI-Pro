@@ -4,6 +4,8 @@ import type {
   AccountOrderJournal,
   AccountOrderPreview,
   AccountOrderRequest,
+  AccountOrderReconciliationBatch,
+  AccountOrderReconciliationHistoryQuery,
   AccountOrderReconciliationStatus,
   AccountOrderResult,
   AccountOrderRiskStatus,
@@ -313,6 +315,35 @@ export async function fetchExchangeAccountOrderReconciliationStatus(
   return readJson<AccountOrderReconciliationStatus>(
     response,
   );
+}
+
+
+export async function fetchExchangeAccountOrderReconciliationHistory(
+  token: string,
+  accountId: number,
+  query: (
+    AccountOrderReconciliationHistoryQuery
+  ) = {},
+): Promise<AccountOrderReconciliationBatch[]> {
+  const response = await fetch(
+    withQuery(
+      (
+        `${accountOrdersPath(accountId)}`
+        + '/reconciliation/history'
+      ),
+      {
+        limit: query.limit,
+        action: query.action?.trim(),
+      },
+    ),
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  return readJson<
+    AccountOrderReconciliationBatch[]
+  >(response);
 }
 
 
