@@ -23,6 +23,12 @@ from app.tradinggpt.scheduler.distributed_lock import (
     PostgresAdvisorySchedulerLock,
 )
 
+from .reconciliation_batch_journal_service import (
+    JournaledOrderReconciliationBatchService,
+)
+from .reconciliation_batch_repository import (
+    OrderReconciliationBatchRepository,
+)
 from .reconciliation_service import (
     AutomaticOrderReconciliationService,
 )
@@ -111,32 +117,17 @@ def run_order_reconciliation_background_tick(
                 )
             )
 
-            payload = (
-                service.run_batch().to_dict()
+            return (
+                JournaledOrderReconciliationBatchService(
+                    runner=service,
+                    repository=(
+                        OrderReconciliationBatchRepository(
+                            session
+                        )
+                    ),
+                )
+                .run_batch()
             )
-
-            if payload.get("action") in {
-                "FAILED",
-                "PARTIAL",
-            }:
-                errors = payload.get("errors")
-
-                if isinstance(
-                    errors,
-                    (list, tuple),
-                ):
-                    payload["reason"] = (
-                        "; ".join(
-                            str(error)
-                            for error in errors
-                        )
-                        or (
-                            "Automatic reconciliation "
-                            "batch failed."
-                        )
-                    )
-
-            return payload
     finally:
         if acquired:
             distributed_lock.release()

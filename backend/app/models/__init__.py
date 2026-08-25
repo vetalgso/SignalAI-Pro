@@ -1,4 +1,7 @@
 from app.models.exchange_account import ExchangeAccount
+from app.models.order_reconciliation_batch import (
+    OrderReconciliationBatch,
+)
 from app.models.trading_signal import TradingSignal, TradingSignalEvent
 from app.models.scheduler_payload import SchedulerPayload
 from app.models.scheduler_state import SchedulerState
@@ -12,6 +15,7 @@ from app.models.user import User
 
 __all__ = [
     "ExchangeAccount",
+    "OrderReconciliationBatch",
     "TradingSignal",
     "TradingSignalEvent",
     "SchedulerPayload",

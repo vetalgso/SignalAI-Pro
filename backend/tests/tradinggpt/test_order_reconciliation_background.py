@@ -103,9 +103,73 @@ class FakeBatchService:
         )
 
 
+class FakeBatchRepository:
+    instances: list[
+        "FakeBatchRepository"
+    ] = []
+
+    def __init__(
+        self,
+        session: object,
+    ) -> None:
+        self.session = session
+        self.instances.append(self)
+
+
+class FakeJournalService:
+    instances: list[
+        "FakeJournalService"
+    ] = []
+
+    def __init__(
+        self,
+        *,
+        runner: FakeBatchService,
+        repository: FakeBatchRepository,
+    ) -> None:
+        self.runner = runner
+        self.repository = repository
+        self.instances.append(self)
+
+    def run_batch(
+        self,
+    ) -> dict[str, object]:
+        payload = (
+            self.runner.run_batch().to_dict()
+        )
+
+        if payload.get("action") in {
+            "FAILED",
+            "PARTIAL",
+        }:
+            errors = payload.get("errors")
+
+            if isinstance(
+                errors,
+                (list, tuple),
+            ):
+                payload["reason"] = (
+                    "; ".join(
+                        str(error)
+                        for error in errors
+                    )
+                    or (
+                        "Automatic reconciliation "
+                        "batch failed."
+                    )
+                )
+
+        return payload
+
+
 @pytest.fixture(autouse=True)
-def reset_batch_service() -> None:
+def reset_batch_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     FakeBatchService.instances = []
+    FakeBatchRepository.instances = []
+    FakeJournalService.instances = []
+
     FakeBatchService.payload = {
         "action": "NO_CANDIDATES",
         "scanned": 0,
@@ -114,6 +178,17 @@ def reset_batch_service() -> None:
         "failed": 0,
         "errors": (),
     }
+
+    monkeypatch.setattr(
+        reconciliation_background,
+        "OrderReconciliationBatchRepository",
+        FakeBatchRepository,
+    )
+    monkeypatch.setattr(
+        reconciliation_background,
+        "JournaledOrderReconciliationBatchService",
+        FakeJournalService,
+    )
 
 
 def test_tick_skips_when_disabled(
@@ -232,6 +307,28 @@ def test_tick_runs_batch_and_releases_lock(
     assert batch.batch_size == 25
     assert batch.session is (
         session_context.session
+    )
+
+    assert len(
+        FakeBatchRepository.instances
+    ) == 1
+    assert (
+        FakeBatchRepository
+        .instances[0]
+        .session
+        is session_context.session
+    )
+
+    assert len(
+        FakeJournalService.instances
+    ) == 1
+
+    journal = FakeJournalService.instances[0]
+
+    assert journal.runner is batch
+    assert (
+        journal.repository
+        is FakeBatchRepository.instances[0]
     )
 
     execution = (
