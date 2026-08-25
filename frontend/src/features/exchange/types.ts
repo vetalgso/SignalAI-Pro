@@ -207,3 +207,26 @@ export interface AccountOrderRiskStatus {
   period_started_at: string;
   resets_at: string;
 }
+
+export interface AccountOrderReconciliationStatus {
+  account_id: number;
+  source: 'BINANCE_TESTNET';
+  enabled: boolean;
+  read_only: true;
+
+  poll_interval_seconds: number;
+  batch_size: number;
+
+  running: boolean;
+  stopping: boolean;
+  iterations: number;
+  failed_ticks: number;
+
+  started_at: string | null;
+  stopped_at: string | null;
+  last_tick_started_at: string | null;
+  last_tick_finished_at: string | null;
+
+  last_action: string | null;
+  last_error: string | null;
+}

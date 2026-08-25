@@ -18,6 +18,9 @@ import {
   ExchangeOrderActivity,
 } from './ExchangeOrderActivity';
 import {
+  ExchangeOrderReconciliation,
+} from './ExchangeOrderReconciliation';
+import {
   ExchangeOrderRisk,
 } from './ExchangeOrderRisk';
 import {
@@ -467,6 +470,15 @@ export function ExchangeOrderCenter({
       )}
 
       <ExchangeOrderRisk
+        account={account}
+        language={language}
+        refreshKey={
+          journal?.journal_id ?? 0
+        }
+        token={token}
+      />
+
+      <ExchangeOrderReconciliation
         account={account}
         language={language}
         refreshKey={

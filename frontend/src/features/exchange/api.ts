@@ -4,6 +4,7 @@ import type {
   AccountOrderJournal,
   AccountOrderPreview,
   AccountOrderRequest,
+  AccountOrderReconciliationStatus,
   AccountOrderResult,
   AccountOrderRiskStatus,
   AuthTokenResponse,
@@ -294,6 +295,26 @@ function accountOrdersPath(
     + `${accountId}/orders`
   );
 }
+
+export async function fetchExchangeAccountOrderReconciliationStatus(
+  token: string,
+  accountId: number,
+): Promise<AccountOrderReconciliationStatus> {
+  const response = await fetch(
+    (
+      `${accountOrdersPath(accountId)}`
+      + '/reconciliation/status'
+    ),
+    {
+      headers: authHeaders(token),
+    },
+  );
+
+  return readJson<AccountOrderReconciliationStatus>(
+    response,
+  );
+}
+
 
 export async function fetchExchangeAccountOrderRisk(
   token: string,
