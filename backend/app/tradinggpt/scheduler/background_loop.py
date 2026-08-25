@@ -41,6 +41,9 @@ class SchedulerBackgroundLoop:
             dict[str, object],
         ],
         poll_interval_seconds: float = 5.0,
+        task_name: str = (
+            "tradinggpt-scheduler-loop"
+        ),
     ) -> None:
         if poll_interval_seconds <= 0:
             raise ValueError(
@@ -48,7 +51,14 @@ class SchedulerBackgroundLoop:
                 "greater than zero."
             )
 
+        if not task_name.strip():
+            raise ValueError(
+                "Background task name must not "
+                "be empty."
+            )
+
         self._tick_callback = tick_callback
+        self._task_name = task_name
         self._poll_interval_seconds = (
             poll_interval_seconds
         )
@@ -83,7 +93,7 @@ class SchedulerBackgroundLoop:
 
         self._task = asyncio.create_task(
             self._run(),
-            name="tradinggpt-scheduler-loop",
+            name=self._task_name,
         )
 
         return True

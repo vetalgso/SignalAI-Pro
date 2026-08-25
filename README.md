@@ -27,3 +27,19 @@ SignalAI Pro supports authenticated, encrypted, account-scoped Binance Spot Test
 - LIVE exchange execution remains blocked by the backend.
 
 This project is not financial advice. TESTNET execution uses simulated exchange funds; do not enable LIVE trading without a separate production risk review.
+
+### Automatic order reconciliation
+
+The API can periodically refresh local `OPEN` and
+`PARTIALLY_FILLED` Binance Testnet journal entries from
+the remote order status.
+
+The worker is read-only: it calls only the remote order
+status operation and never submits or cancels orders.
+A dedicated PostgreSQL advisory lock ensures that only
+one API instance processes a batch at a time.
+
+The worker is disabled by default. Enable it with
+`ORDER_RECONCILIATION_BACKGROUND_ENABLED=true`.
+The interval, batch size, and lock key use the related
+`ORDER_RECONCILIATION_*` environment variables.

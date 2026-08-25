@@ -7,6 +7,9 @@ from app.tradinggpt.exchange_accounts.order_router import (
     router as tradinggpt_exchange_account_orders_router,
 )
 from app.tradinggpt.exchange_accounts.router import router as tradinggpt_exchange_accounts_router
+from app.tradinggpt.orders.reconciliation_background import (
+    order_reconciliation_background_loop,
+)
 from app.tradinggpt.orders.router import router as tradinggpt_orders_router
 from app.tradinggpt.portfolio_sync.router import router as tradinggpt_portfolio_router
 from app.tradinggpt.positions.router import router as tradinggpt_positions_router
@@ -49,6 +52,7 @@ async def lifespan(
 ) -> AsyncIterator[None]:
     scheduler_loop_started = False
     signal_loop_started = False
+    reconciliation_loop_started = False
 
     if settings.scheduler_background_loop_enabled:
         scheduler_loop_started = await (
@@ -65,9 +69,25 @@ async def lifespan(
             .start()
         )
 
+    if getattr(
+        settings,
+        "order_reconciliation_background_enabled",
+        False,
+    ):
+        reconciliation_loop_started = await (
+            order_reconciliation_background_loop
+            .start()
+        )
+
     try:
         yield
     finally:
+        if reconciliation_loop_started:
+            await (
+                order_reconciliation_background_loop
+                .stop()
+            )
+
         if signal_loop_started:
             await (
                 signal_lifecycle_background_loop

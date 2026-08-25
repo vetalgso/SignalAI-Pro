@@ -115,3 +115,41 @@ def test_lifespan_does_not_stop_existing_loop(
 
     assert fake.start_calls == 1
     assert fake.stop_calls == 0
+
+def test_lifespan_starts_and_stops_reconciliation_loop(
+    monkeypatch,
+) -> None:
+    scheduler = FakeBackgroundLoop()
+    reconciliation = FakeBackgroundLoop()
+
+    monkeypatch.setattr(
+        main_module,
+        "scheduler_background_loop",
+        scheduler,
+    )
+    monkeypatch.setattr(
+        main_module,
+        "order_reconciliation_background_loop",
+        reconciliation,
+    )
+    monkeypatch.setattr(
+        main_module,
+        "settings",
+        SimpleNamespace(
+            scheduler_background_loop_enabled=False,
+            order_reconciliation_background_enabled=True,
+        ),
+    )
+
+    async def scenario() -> None:
+        async with main_module.lifespan(
+            main_module.app
+        ):
+            assert scheduler.start_calls == 0
+            assert reconciliation.start_calls == 1
+            assert reconciliation.stop_calls == 0
+
+        assert scheduler.stop_calls == 0
+        assert reconciliation.stop_calls == 1
+
+    asyncio.run(scenario())

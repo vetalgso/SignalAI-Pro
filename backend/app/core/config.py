@@ -17,6 +17,23 @@ class Settings(BaseSettings):
         le=3600,
     )
 
+    order_reconciliation_background_enabled: bool = False
+    order_reconciliation_poll_seconds: float = Field(
+        default=15.0,
+        gt=0,
+        le=3600,
+    )
+    order_reconciliation_batch_size: int = Field(
+        default=50,
+        ge=1,
+        le=1000,
+    )
+    order_reconciliation_advisory_lock_key: int = Field(
+        default=2026082101,
+        ge=1,
+        le=9223372036854775807,
+    )
+
     signal_tracking_enabled: bool = True
     signal_tracking_interval_seconds: float = Field(
         default=60.0,
