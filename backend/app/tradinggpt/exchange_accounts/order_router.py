@@ -38,6 +38,9 @@ from app.tradinggpt.orders.models import (
 from app.tradinggpt.orders.reconciliation_background import (
     order_reconciliation_background_loop,
 )
+from app.tradinggpt.orders.reconciliation_batch_repository import (
+    OrderReconciliationBatchRepository,
+)
 from app.tradinggpt.orders.repository import (
     TradingOrderRepository,
 )
@@ -59,6 +62,7 @@ from .router import build_service
 from .schemas import (
     ExchangeAccountOrderExecuteRequest,
     ExchangeAccountOrderRequest,
+    ExchangeAccountOrderReconciliationBatchResponse,
     ExchangeAccountOrderReconciliationStatusResponse,
     ExchangeAccountOrderRiskResponse,
 )
@@ -206,6 +210,83 @@ def raise_exchange_order_http_error(
         status_code=status_code,
         detail=str(exc),
     ) from exc
+
+
+@router.get(
+    "/{account_id}/orders/reconciliation/history",
+    response_model=list[
+        ExchangeAccountOrderReconciliationBatchResponse
+    ],
+)
+def list_exchange_account_order_reconciliation_history(
+    account_id: int,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=500,
+    ),
+    action: str | None = Query(
+        default=None,
+        min_length=1,
+    ),
+) -> list[
+    ExchangeAccountOrderReconciliationBatchResponse
+]:
+    try:
+        build_service(db).get(
+            account_id=account_id,
+            user_id=current_user.id,
+        )
+    except ExchangeAccountNotFoundError as exc:
+        raise_exchange_order_http_error(
+            db,
+            exc,
+        )
+
+    batches = (
+        OrderReconciliationBatchRepository(
+            db
+        )
+        .list_recent(
+            action=(
+                action.upper()
+                if action is not None
+                else None
+            ),
+            limit=limit,
+        )
+    )
+
+    return [
+        ExchangeAccountOrderReconciliationBatchResponse(
+            account_id=account_id,
+            batch_id=batch.id,
+            action=batch.action,
+            source=batch.source,
+            read_only=batch.read_only,
+            scanned=batch.scanned,
+            reconciled=batch.reconciled,
+            skipped=batch.skipped,
+            failed=batch.failed,
+            errors=list(
+                batch.errors or ()
+            ),
+            error_message=(
+                batch.error_message
+            ),
+            started_at=batch.started_at,
+            finished_at=batch.finished_at,
+        )
+        for batch in batches
+    ]
 
 
 @router.get(

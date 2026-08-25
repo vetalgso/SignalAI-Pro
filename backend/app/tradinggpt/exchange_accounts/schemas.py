@@ -163,6 +163,28 @@ class ExchangeAccountOrderRiskResponse(
     resets_at: datetime
 
 
+class ExchangeAccountOrderReconciliationBatchResponse(
+    BaseModel
+):
+    account_id: int
+    batch_id: int
+
+    action: str
+    source: Literal["BINANCE_TESTNET"]
+    read_only: Literal[True]
+
+    scanned: int
+    reconciled: int
+    skipped: int
+    failed: int
+
+    errors: list[str]
+    error_message: str | None
+
+    started_at: datetime
+    finished_at: datetime | None
+
+
 class ExchangeAccountOrderReconciliationStatusResponse(
     BaseModel
 ):
