@@ -10,6 +10,9 @@ from app.tradinggpt.exchange_accounts.router import router as tradinggpt_exchang
 from app.tradinggpt.orders.reconciliation_background import (
     order_reconciliation_background_loop,
 )
+from app.tradinggpt.orders.reconciliation_metrics_router import (
+    router as tradinggpt_order_reconciliation_metrics_router,
+)
 from app.tradinggpt.orders.router import router as tradinggpt_orders_router
 from app.tradinggpt.portfolio_sync.router import router as tradinggpt_portfolio_router
 from app.tradinggpt.positions.router import router as tradinggpt_positions_router
@@ -133,6 +136,10 @@ app.include_router(tradinggpt_engine_router, prefix="/api/v3")
 app.include_router(tradinggpt_exchange_accounts_router, prefix="/api/v3")
 app.include_router(
     tradinggpt_exchange_account_orders_router,
+    prefix="/api/v3",
+)
+app.include_router(
+    tradinggpt_order_reconciliation_metrics_router,
     prefix="/api/v3",
 )
 app.include_router(tradinggpt_orders_router, prefix="/api/v3")

@@ -580,3 +580,21 @@ Warning alerts направляются через receiver:
 - prometheus_data
 - alertmanager_data
 - grafana_data
+
+## Automatic order reconciliation monitoring
+
+Prometheus read-only endpoint:
+
+http://api:8000/api/v3/orders/reconciliation/metrics
+
+Job `signalai-order-reconciliation` показывает
+состояние worker, read-only invariant, итерации,
+ошибки, длительность и возраст последнего тика.
+
+Alerts находятся в `reconciliation-alerts.yml`.
+Выключенный worker не создаёт ложных alerts.
+
+Grafana dashboard UID:
+`signalai-order-reconciliation`.
+
+Мониторинг не отправляет и не отменяет ордера.

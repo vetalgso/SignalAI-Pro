@@ -11,10 +11,12 @@ required_files = (
     "monitoring/README.md",
     "monitoring/prometheus/prometheus.yml",
     "monitoring/prometheus/rules/scheduler-alerts.yml",
+    "monitoring/prometheus/rules/reconciliation-alerts.yml",
     "monitoring/prometheus/rules/alertmanager-alerts.yml",
     "monitoring/grafana/provisioning/datasources/prometheus.yml",
     "monitoring/grafana/provisioning/dashboards/signalai.yml",
     "monitoring/grafana/dashboards/signalai-scheduler-operations.json",
+    "monitoring/grafana/dashboards/signalai-order-reconciliation.json",
 )
 
 for filename in required_files:
@@ -59,6 +61,11 @@ prometheus = (
 for value in (
     "job_name: signalai-scheduler",
     "metrics_path: /api/v3/scheduler/metrics",
+    "job_name: signalai-order-reconciliation",
+    (
+        "metrics_path: "
+        "/api/v3/orders/reconciliation/metrics"
+    ),
     "api:8000",
     "/etc/prometheus/rules/*.yml",
 ):
@@ -86,6 +93,41 @@ for alert_name in expected_alerts:
     assert f"alert: {alert_name}" in rules, alert_name
 
 assert rules.count("      - alert: ") == 10
+
+reconciliation_rules = (
+    ROOT
+    / "monitoring/prometheus/rules/"
+    "reconciliation-alerts.yml"
+).read_text(encoding="utf-8")
+
+expected_reconciliation_alerts = (
+    "SignalAIOrderReconciliationMetricsTargetDown",
+    "SignalAIOrderReconciliationBackgroundLoopDown",
+    (
+        "SignalAIOrderReconciliation"
+        "BackgroundLoopStopping"
+    ),
+    (
+        "SignalAIOrderReconciliation"
+        "BackgroundTickFailure"
+    ),
+    "SignalAIOrderReconciliationLatestTickFailed",
+    "SignalAIOrderReconciliationTickStale",
+    "SignalAIOrderReconciliationReadOnlyInvariant",
+)
+
+for alert_name in expected_reconciliation_alerts:
+    assert (
+        f"alert: {alert_name}"
+        in reconciliation_rules
+    ), alert_name
+
+assert (
+    reconciliation_rules.count(
+        "      - alert: "
+    )
+    == 7
+)
 
 datasource = (
     ROOT
@@ -148,13 +190,82 @@ for metric in (
         for expression in expressions
     ), metric
 
+reconciliation_dashboard = json.loads(
+    (
+        ROOT
+        / "monitoring/grafana/dashboards/"
+        "signalai-order-reconciliation.json"
+    ).read_text(encoding="utf-8")
+)
+
+assert (
+    reconciliation_dashboard["uid"]
+    == "signalai-order-reconciliation"
+)
+assert (
+    reconciliation_dashboard["title"]
+    == "SignalAI Order Reconciliation"
+)
+assert reconciliation_dashboard["refresh"] == "5s"
+assert len(reconciliation_dashboard["panels"]) == 14
+
+reconciliation_ids = [
+    panel["id"]
+    for panel in reconciliation_dashboard["panels"]
+]
+
+assert len(reconciliation_ids) == len(
+    set(reconciliation_ids)
+)
+
+reconciliation_expressions = {
+    target["expr"]
+    for panel in reconciliation_dashboard["panels"]
+    for target in panel.get("targets", [])
+    if isinstance(target.get("expr"), str)
+}
+
+required_reconciliation_metrics = (
+    "signalai_order_reconciliation_enabled",
+    (
+        "signalai_order_reconciliation_"
+        "background_running"
+    ),
+    "signalai_order_reconciliation_read_only",
+    (
+        "signalai_order_reconciliation_"
+        "failed_ticks_total"
+    ),
+    (
+        "signalai_order_reconciliation_"
+        "seconds_since_last_tick"
+    ),
+    (
+        "signalai_order_reconciliation_"
+        "last_tick_duration_seconds"
+    ),
+    (
+        "signalai_order_reconciliation_"
+        "last_action_info"
+    ),
+    "ALERTS",
+)
+
+for metric in required_reconciliation_metrics:
+    assert any(
+        metric in expression
+        for expression in reconciliation_expressions
+    ), metric
+
 print("Monitoring files present: OK")
 print("Docker Compose services and volumes: OK")
 print("Prometheus scrape configuration: OK")
 print("Scheduler Prometheus alert rules: 10")
+print("Order reconciliation Prometheus alert rules: 7")
 print("Grafana datasource provisioning: OK")
 print("Grafana dashboard provisioning: OK")
 print("Scheduler Operations dashboard panels: 56")
+print("Order Reconciliation dashboard panels: 14")
 
 # v3.27 Alertmanager checks
 

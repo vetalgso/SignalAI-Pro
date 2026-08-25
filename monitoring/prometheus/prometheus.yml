@@ -49,3 +49,14 @@ scrape_configs:
         labels:
           service: signalai-api
           component: scheduler
+
+
+  - job_name: signalai-order-reconciliation
+    metrics_path: /api/v3/orders/reconciliation/metrics
+    scrape_interval: 5s
+    static_configs:
+      - targets:
+          - api:8000
+        labels:
+          service: signalai-api
+          component: order-reconciliation
