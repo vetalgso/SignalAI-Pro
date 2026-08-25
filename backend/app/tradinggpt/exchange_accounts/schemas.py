@@ -163,6 +163,31 @@ class ExchangeAccountOrderRiskResponse(
     resets_at: datetime
 
 
+class ExchangeAccountOrderReconciliationStatusResponse(
+    BaseModel
+):
+    account_id: int
+    source: Literal["BINANCE_TESTNET"]
+    enabled: bool
+    read_only: Literal[True]
+
+    poll_interval_seconds: float
+    batch_size: int
+
+    running: bool
+    stopping: bool
+    iterations: int
+    failed_ticks: int
+
+    started_at: datetime | None
+    stopped_at: datetime | None
+    last_tick_started_at: datetime | None
+    last_tick_finished_at: datetime | None
+
+    last_action: str | None
+    last_error: str | None
+
+
 class ExchangeAccountDeleteResponse(
     BaseModel
 ):

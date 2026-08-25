@@ -35,6 +35,9 @@ from app.tradinggpt.orders.journal_service import (
 from app.tradinggpt.orders.models import (
     OrderIntent,
 )
+from app.tradinggpt.orders.reconciliation_background import (
+    order_reconciliation_background_loop,
+)
 from app.tradinggpt.orders.repository import (
     TradingOrderRepository,
 )
@@ -56,6 +59,7 @@ from .router import build_service
 from .schemas import (
     ExchangeAccountOrderExecuteRequest,
     ExchangeAccountOrderRequest,
+    ExchangeAccountOrderReconciliationStatusResponse,
     ExchangeAccountOrderRiskResponse,
 )
 from .service import (
@@ -202,6 +206,80 @@ def raise_exchange_order_http_error(
         status_code=status_code,
         detail=str(exc),
     ) from exc
+
+
+@router.get(
+    "/{account_id}/orders/reconciliation/status",
+    response_model=(
+        ExchangeAccountOrderReconciliationStatusResponse
+    ),
+)
+def get_exchange_account_order_reconciliation_status(
+    account_id: int,
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> ExchangeAccountOrderReconciliationStatusResponse:
+    try:
+        build_service(db).get(
+            account_id=account_id,
+            user_id=current_user.id,
+        )
+    except ExchangeAccountNotFoundError as exc:
+        raise_exchange_order_http_error(
+            db,
+            exc,
+        )
+
+    loop_status = (
+        order_reconciliation_background_loop
+        .status()
+    )
+
+    return (
+        ExchangeAccountOrderReconciliationStatusResponse(
+            account_id=account_id,
+            source="BINANCE_TESTNET",
+            enabled=(
+                settings
+                .order_reconciliation_background_enabled
+            ),
+            read_only=True,
+            poll_interval_seconds=(
+                loop_status
+                .poll_interval_seconds
+            ),
+            batch_size=(
+                settings
+                .order_reconciliation_batch_size
+            ),
+            running=loop_status.running,
+            stopping=loop_status.stopping,
+            iterations=loop_status.iterations,
+            failed_ticks=(
+                loop_status.failed_ticks
+            ),
+            started_at=loop_status.started_at,
+            stopped_at=loop_status.stopped_at,
+            last_tick_started_at=(
+                loop_status
+                .last_tick_started_at
+            ),
+            last_tick_finished_at=(
+                loop_status
+                .last_tick_finished_at
+            ),
+            last_action=(
+                loop_status.last_action
+            ),
+            last_error=loop_status.last_error,
+        )
+    )
 
 
 @router.get(
