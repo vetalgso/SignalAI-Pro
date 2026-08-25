@@ -250,14 +250,22 @@ def test_tick_runs_batch_and_releases_lock(
     ]
 
 
+@pytest.mark.parametrize(
+    "action",
+    [
+        "FAILED",
+        "PARTIAL",
+    ],
+)
 def test_failed_tick_exposes_reason(
     monkeypatch: pytest.MonkeyPatch,
+    action: str,
 ) -> None:
     lock = FakeLock(acquired=True)
     session_context = FakeSessionContext()
 
     FakeBatchService.payload = {
-        "action": "FAILED",
+        "action": action,
         "scanned": 1,
         "reconciled": 0,
         "skipped": 0,
@@ -298,7 +306,7 @@ def test_failed_tick_exposes_reason(
         .run_order_reconciliation_background_tick()
     )
 
-    assert result["action"] == "FAILED"
+    assert result["action"] == action
     assert (
         result["reason"]
         == "Order 1: remote lookup failed."

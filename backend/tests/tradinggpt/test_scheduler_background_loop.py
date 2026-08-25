@@ -241,3 +241,44 @@ def test_failed_result_updates_loop_status() -> None:
         )
 
     asyncio.run(scenario())
+
+def test_configured_partial_result_updates_loop_status(
+) -> None:
+    async def scenario() -> None:
+        background = SchedulerBackgroundLoop(
+            tick_callback=lambda: {
+                "action": "PARTIAL",
+                "reason": (
+                    "One reconciliation item failed."
+                ),
+            },
+            poll_interval_seconds=0.05,
+            failure_actions=frozenset(
+                {
+                    "FAILED",
+                    "PARTIAL",
+                }
+            ),
+        )
+
+        await background.start()
+
+        await wait_until(
+            lambda: (
+                background.status().iterations
+                >= 1
+            )
+        )
+
+        await background.stop()
+
+        status = background.status()
+
+        assert status.failed_ticks >= 1
+        assert status.last_action == "PARTIAL"
+        assert (
+            status.last_error
+            == "One reconciliation item failed."
+        )
+
+    asyncio.run(scenario())

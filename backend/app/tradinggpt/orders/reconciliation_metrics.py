@@ -90,6 +90,7 @@ class OrderReconciliationMetricsService:
             or status.last_action
             in {
                 "FAILED",
+                "PARTIAL",
                 "LOOP_ERROR",
             }
         )

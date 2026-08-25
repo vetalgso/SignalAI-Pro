@@ -129,13 +129,21 @@ def test_reconciliation_metrics_render_runtime(
     assert metrics.endswith("\n")
 
 
+@pytest.mark.parametrize(
+    "last_action",
+    [
+        "FAILED",
+        "PARTIAL",
+    ],
+)
 def test_reconciliation_metrics_mark_failed_tick(
+    last_action: str,
 ) -> None:
     service = OrderReconciliationMetricsService(
         enabled=True,
         batch_size=10,
         status_provider=lambda: build_status(
-            last_action="FAILED",
+            last_action=last_action,
             last_error="Binance unavailable.",
             failed_ticks=1,
         ),
@@ -149,7 +157,8 @@ def test_reconciliation_metrics_mark_failed_tick(
     ) in metrics
     assert (
         "signalai_order_reconciliation_"
-        'last_action_info{action="FAILED"} 1'
+        "last_action_info"
+        f'{{action="{last_action}"}} 1'
     ) in metrics
 
 

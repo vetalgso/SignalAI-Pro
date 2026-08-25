@@ -44,6 +44,9 @@ class SchedulerBackgroundLoop:
         task_name: str = (
             "tradinggpt-scheduler-loop"
         ),
+        failure_actions: (
+            frozenset[str] | None
+        ) = None,
     ) -> None:
         if poll_interval_seconds <= 0:
             raise ValueError(
@@ -55,6 +58,18 @@ class SchedulerBackgroundLoop:
             raise ValueError(
                 "Background task name must not "
                 "be empty."
+            )
+
+        self._failure_actions = (
+            failure_actions
+            if failure_actions is not None
+            else frozenset({"FAILED"})
+        )
+
+        if not self._failure_actions:
+            raise ValueError(
+                "Background failure actions "
+                "must not be empty."
             )
 
         self._tick_callback = tick_callback
@@ -196,7 +211,10 @@ class SchedulerBackgroundLoop:
                 else None
             )
 
-            if self._last_action == "FAILED":
+            if (
+                self._last_action
+                in self._failure_actions
+            ):
                 self._failed_ticks += 1
                 self._last_error = str(
                     result.get("reason")

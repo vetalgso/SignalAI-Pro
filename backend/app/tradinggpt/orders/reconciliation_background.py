@@ -115,7 +115,10 @@ def run_order_reconciliation_background_tick(
                 service.run_batch().to_dict()
             )
 
-            if payload.get("action") == "FAILED":
+            if payload.get("action") in {
+                "FAILED",
+                "PARTIAL",
+            }:
                 errors = payload.get("errors")
 
                 if isinstance(
@@ -151,6 +154,12 @@ order_reconciliation_background_loop = (
         task_name=(
             "tradinggpt-order-"
             "reconciliation-loop"
+        ),
+        failure_actions=frozenset(
+            {
+                "FAILED",
+                "PARTIAL",
+            }
         ),
     )
 )
