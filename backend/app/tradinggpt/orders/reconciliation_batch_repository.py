@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models.order_reconciliation_batch import (
@@ -119,6 +119,41 @@ class OrderReconciliationBatchRepository:
 
     def rollback(self) -> None:
         self._session.rollback()
+
+    def prune_finished_before(
+        self,
+        *,
+        batch_id: int,
+    ) -> int:
+        if batch_id <= 1:
+            return 0
+
+        result = self._session.execute(
+            delete(
+                OrderReconciliationBatch
+            )
+            .where(
+                OrderReconciliationBatch.id
+                < batch_id
+            )
+            .where(
+                OrderReconciliationBatch
+                .finished_at
+                .is_not(None)
+            )
+        )
+        self._session.commit()
+
+        rowcount = getattr(
+            result,
+            "rowcount",
+            0,
+        )
+
+        return max(
+            0,
+            int(rowcount or 0),
+        )
 
     def get(
         self,

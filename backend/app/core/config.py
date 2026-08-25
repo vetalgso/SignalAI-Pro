@@ -28,6 +28,11 @@ class Settings(BaseSettings):
         ge=1,
         le=1000,
     )
+    order_reconciliation_history_limit: int = Field(
+        default=100_000,
+        ge=100,
+        le=10_000_000,
+    )
     order_reconciliation_advisory_lock_key: int = Field(
         default=2026082101,
         ge=1,

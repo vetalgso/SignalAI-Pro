@@ -41,5 +41,8 @@ one API instance processes a batch at a time.
 
 The worker is disabled by default. Enable it with
 `ORDER_RECONCILIATION_BACKGROUND_ENABLED=true`.
-The interval, batch size, and lock key use the related
-`ORDER_RECONCILIATION_*` environment variables.
+The interval, batch size, history limit, and lock key
+use the related `ORDER_RECONCILIATION_*` environment
+variables. By default, the newest 100,000 completed
+batch records are retained. Unfinished `STARTED`
+records are preserved for failure investigation.

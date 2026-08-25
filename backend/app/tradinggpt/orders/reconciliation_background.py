@@ -125,6 +125,10 @@ def run_order_reconciliation_background_tick(
                             session
                         )
                     ),
+                    history_limit=(
+                        settings
+                        .order_reconciliation_history_limit
+                    ),
                 )
                 .run_batch()
             )

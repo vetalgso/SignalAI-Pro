@@ -42,10 +42,18 @@ class JournaledOrderReconciliationBatchService:
             OrderReconciliationBatchRepository
         ),
         source: str = "BINANCE_TESTNET",
+        history_limit: int = 100_000,
     ) -> None:
+        if history_limit < 1:
+            raise ValueError(
+                "Reconciliation history limit "
+                "must be greater than zero."
+            )
+
         self._runner = runner
         self._repository = repository
         self._source = source
+        self._history_limit = history_limit
 
     def run_batch(
         self,
@@ -95,10 +103,20 @@ class JournaledOrderReconciliationBatchService:
             error_message=error_message,
         )
 
+        pruned_batches = (
+            self._prune_history(
+                latest_batch_id=stored.id
+            )
+        )
+
         payload = result.to_dict()
         payload.update({
             "action": stored.action,
             "batch_id": stored.id,
+            "history_limit": (
+                self._history_limit
+            ),
+            "pruned_batches": pruned_batches,
             "source": stored.source,
             "read_only": stored.read_only,
             "started_at": (
@@ -120,6 +138,24 @@ class JournaledOrderReconciliationBatchService:
             )
 
         return payload
+
+    def _prune_history(
+        self,
+        *,
+        latest_batch_id: int,
+    ) -> int:
+        cutoff_id = (
+            latest_batch_id
+            - self._history_limit
+            + 1
+        )
+
+        return (
+            self._repository
+            .prune_finished_before(
+                batch_id=cutoff_id
+            )
+        )
 
     @staticmethod
     def _error_message(

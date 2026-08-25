@@ -126,9 +126,11 @@ class FakeJournalService:
         *,
         runner: FakeBatchService,
         repository: FakeBatchRepository,
+        history_limit: int,
     ) -> None:
         self.runner = runner
         self.repository = repository
+        self.history_limit = history_limit
         self.instances.append(self)
 
     def run_batch(
@@ -137,6 +139,11 @@ class FakeJournalService:
         payload = (
             self.runner.run_batch().to_dict()
         )
+
+        payload["history_limit"] = (
+            self.history_limit
+        )
+        payload["pruned_batches"] = 0
 
         if payload.get("action") in {
             "FAILED",
@@ -271,6 +278,11 @@ def test_tick_runs_batch_and_releases_lock(
         25,
     )
     monkeypatch.setattr(
+        reconciliation_background.settings,
+        "order_reconciliation_history_limit",
+        250,
+    )
+    monkeypatch.setattr(
         reconciliation_background,
         "PostgresAdvisorySchedulerLock",
         lambda **kwargs: lock,
@@ -330,6 +342,7 @@ def test_tick_runs_batch_and_releases_lock(
         journal.repository
         is FakeBatchRepository.instances[0]
     )
+    assert journal.history_limit == 250
 
     execution = (
         batch.execution_service_factory(

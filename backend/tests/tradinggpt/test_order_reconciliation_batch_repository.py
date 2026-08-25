@@ -197,3 +197,62 @@ def test_repository_validates_inputs(
             match="limit",
         ):
             repository.list_recent(limit=0)
+
+
+def test_repository_prunes_only_finished_batches(
+) -> None:
+    with build_session() as session:
+        repository = (
+            OrderReconciliationBatchRepository(
+                session
+            )
+        )
+
+        unfinished = (
+            repository.create_started()
+        )
+
+        for action in (
+            "NO_CANDIDATES",
+            "RECONCILED",
+        ):
+            batch = (
+                repository.create_started()
+            )
+            repository.finish(
+                batch=batch,
+                action=action,
+                scanned=0,
+                reconciled=0,
+                skipped=0,
+                failed=0,
+            )
+
+        deleted = (
+            repository
+            .prune_finished_before(
+                batch_id=4
+            )
+        )
+
+        assert deleted == 2
+
+        remaining = repository.list_recent(
+            limit=10
+        )
+
+        assert [
+            batch.id
+            for batch in remaining
+        ] == [
+            unfinished.id
+        ]
+        assert remaining[0].action == "STARTED"
+
+        assert (
+            repository
+            .prune_finished_before(
+                batch_id=1
+            )
+            == 0
+        )

@@ -228,3 +228,61 @@ def test_unexpected_error_is_persisted_and_reraised(
         "Synthetic batch crash."
     )
     assert stored.finished_at is not None
+
+
+def test_service_prunes_finished_history(
+    session: Session,
+) -> None:
+    runner = FakeRunner(
+        result=OrderReconciliationBatchResult(
+            action="NO_CANDIDATES",
+            scanned=0,
+            reconciled=0,
+            skipped=0,
+            failed=0,
+            errors=(),
+        )
+    )
+    repository = (
+        OrderReconciliationBatchRepository(
+            session
+        )
+    )
+    service = (
+        JournaledOrderReconciliationBatchService(
+            runner=runner,
+            repository=repository,
+            history_limit=2,
+        )
+    )
+
+    first = service.run_batch()
+    second = service.run_batch()
+    third = service.run_batch()
+
+    assert first["pruned_batches"] == 0
+    assert second["pruned_batches"] == 0
+    assert third["pruned_batches"] == 1
+    assert third["history_limit"] == 2
+
+    batches = repository.list_recent(
+        limit=10
+    )
+
+    assert [
+        batch.id
+        for batch in batches
+    ] == [
+        int(third["batch_id"]),
+        int(second["batch_id"]),
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match="history limit",
+    ):
+        JournaledOrderReconciliationBatchService(
+            runner=runner,
+            repository=repository,
+            history_limit=0,
+        )
