@@ -12,6 +12,8 @@ import type {
   ExchangeAccount,
   ExchangeAccountCreate,
   PortfolioSnapshot,
+  SignalOrderPreviewPlan,
+  SignalOrderPreviewRequest,
 } from './types';
 
 const API = '/api';
@@ -331,6 +333,36 @@ export async function fetchExchangeAccountOrderRisk(
     response,
   );
 }
+
+export async function previewExchangeAccountSignalOrder(
+  token: string,
+  accountId: number,
+  signalId: number,
+  payload: SignalOrderPreviewRequest,
+): Promise<SignalOrderPreviewPlan> {
+  const path = (
+    `${API}/v3/exchange/accounts/`
+    + `${accountId}/signals/`
+    + `${signalId}/orders/preview`
+  );
+
+  const response = await fetch(
+    path,
+    {
+      method: 'POST',
+      headers: {
+        ...authHeaders(token),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  return readJson<SignalOrderPreviewPlan>(
+    response,
+  );
+}
+
 
 export async function previewExchangeAccountOrder(
   token: string,

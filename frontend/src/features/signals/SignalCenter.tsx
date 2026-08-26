@@ -24,6 +24,9 @@ import {
 import {
   SignalChart,
 } from './SignalChart';
+import {
+  SignalOrderPreview,
+} from './SignalOrderPreview';
 import type {
   SignalFilters,
   SignalScanResult,
@@ -926,6 +929,11 @@ export function SignalCenter({
             </div>
 
             <SignalChart
+              signal={selectedSignal}
+              language={language}
+            />
+
+            <SignalOrderPreview
               signal={selectedSignal}
               language={language}
             />

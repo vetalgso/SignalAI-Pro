@@ -188,6 +188,28 @@ export interface AccountOrderHistoryQuery {
 }
 
 
+export interface SignalOrderPreviewRequest {
+  quantity: number;
+}
+
+export interface SignalOrderPreviewPlan {
+  account_id: number;
+  signal_id: number;
+
+  source: 'TRADINGGPT_SIGNAL';
+  read_only: true;
+
+  signal_status: string;
+  strategy: string;
+  confidence: number;
+  risk_level: string;
+  timeframe: string;
+
+  intent: AccountOrderRequest;
+  preview: AccountOrderPreview;
+}
+
+
 export interface AccountOrderRiskStatus {
   source: 'BINANCE_TESTNET';
   execution_enabled: boolean;
