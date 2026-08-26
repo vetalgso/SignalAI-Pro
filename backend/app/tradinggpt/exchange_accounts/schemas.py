@@ -15,6 +15,7 @@ from pydantic import (
 from app.tradinggpt.orders.schemas import (
     JournalOrderExecuteRequest,
     OrderExecuteRequest,
+    OrderPreviewResponse,
 )
 
 
@@ -134,6 +135,33 @@ class ExchangeAccountOrderExecuteRequest(
         "BINANCE"
     )
     dry_run: bool = True
+
+
+class ExchangeAccountSignalOrderPreviewRequest(
+    BaseModel
+):
+    quantity: float = Field(gt=0)
+
+
+class ExchangeAccountSignalOrderPreviewResponse(
+    BaseModel
+):
+    account_id: int
+    signal_id: int
+
+    source: Literal[
+        "TRADINGGPT_SIGNAL"
+    ]
+    read_only: Literal[True]
+
+    signal_status: str
+    strategy: str
+    confidence: float
+    risk_level: str
+    timeframe: str
+
+    intent: ExchangeAccountOrderRequest
+    preview: OrderPreviewResponse
 
 
 class ExchangeAccountOrderRiskResponse(

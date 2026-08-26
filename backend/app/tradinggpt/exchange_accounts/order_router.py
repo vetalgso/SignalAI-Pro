@@ -22,6 +22,9 @@ from app.api.dependencies import (
 from app.core.config import settings
 from app.database.session import get_db
 from app.models.user import User
+from app.tradinggpt.signals.repository import (
+    TradingSignalRepository,
+)
 from app.tradinggpt.orders.execution_models import (
     OrderExecutionResult,
 )
@@ -54,6 +57,11 @@ from app.tradinggpt.orders.schemas import (
     OrderPreviewResponse,
     OrderStatusResponse,
 )
+from app.tradinggpt.orders.signal_order_orchestrator import (
+    SignalOrderIneligibleError,
+    SignalOrderNotFoundError,
+    SignalToOrderOrchestrator,
+)
 
 from .router import build_service
 from .schemas import (
@@ -61,6 +69,8 @@ from .schemas import (
     ExchangeAccountOrderRequest,
     ExchangeAccountOrderReconciliationStatusResponse,
     ExchangeAccountOrderRiskResponse,
+    ExchangeAccountSignalOrderPreviewRequest,
+    ExchangeAccountSignalOrderPreviewResponse,
 )
 from .service import (
     ExchangeAccountNotFoundError,
@@ -816,6 +826,119 @@ def execute_exchange_account_order(
 
     return OrderJournalResponse.model_validate(
         result
+    )
+
+
+@router.post(
+    "/{account_id}/signals/"
+    "{signal_id}/orders/preview",
+    response_model=(
+        ExchangeAccountSignalOrderPreviewResponse
+    ),
+)
+def preview_exchange_account_signal_order(
+    account_id: int,
+    signal_id: int,
+    request: (
+        ExchangeAccountSignalOrderPreviewRequest
+    ),
+    current_user: Annotated[
+        User,
+        Depends(get_current_user),
+    ],
+    db: Annotated[
+        Session,
+        Depends(get_db),
+    ],
+) -> ExchangeAccountSignalOrderPreviewResponse:
+    try:
+        execution = build_service(
+            db
+        ).order_execution_service(
+            account_id=account_id,
+            user_id=current_user.id,
+        )
+
+        risk_usage = (
+            build_order_risk_usage(
+                db,
+                execution_service=execution,
+                user_id=current_user.id,
+                account_id=account_id,
+            )
+        )
+
+        plan = SignalToOrderOrchestrator(
+            signals=TradingSignalRepository(
+                db
+            ),
+            execution_service=execution,
+            risk_policy=(
+                build_order_risk_policy()
+            ),
+        ).preview(
+            signal_id=signal_id,
+            quantity=request.quantity,
+            usage=risk_usage,
+        )
+    except (
+        ExchangeAccountNotFoundError,
+        SignalOrderNotFoundError,
+    ) as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(exc),
+        ) from exc
+    except (
+        ExchangeTradingUnavailableError,
+        LiveExchangeExecutionDisabledError,
+        UnsafeExchangePermissionsError,
+        SignalOrderIneligibleError,
+    ) as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except (
+        ExchangeConnectionError,
+        OrderRiskUsageUnavailableError,
+    ) as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_502_BAD_GATEWAY
+            ),
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(exc),
+        ) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    payload = plan.to_dict()
+
+    return (
+        ExchangeAccountSignalOrderPreviewResponse(
+            account_id=account_id,
+            source="TRADINGGPT_SIGNAL",
+            read_only=True,
+            **payload,
+        )
     )
 
 
