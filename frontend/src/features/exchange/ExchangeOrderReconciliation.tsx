@@ -16,11 +16,9 @@ import './ExchangeOrderReconciliation.css';
 
 import {
   ExchangeApiError,
-  fetchExchangeAccountOrderReconciliationHistory,
   fetchExchangeAccountOrderReconciliationStatus,
 } from './api';
 import type {
-  AccountOrderReconciliationBatch,
   AccountOrderReconciliationStatus,
   ExchangeAccount,
   Language,
@@ -68,14 +66,6 @@ const copy = {
     never: 'Ещё не выполнялась',
     noError: 'Нет',
     source: 'Источник',
-    history: 'Последние проверки',
-    noHistory: 'История пока пуста.',
-    batchId: 'Batch',
-    outcome: 'Результат',
-    finished: 'Завершён',
-    counts:
-      'Проверено / сверено / ошибок',
-    batchError: 'Ошибка',
   },
   en: {
     title: 'Journal synchronization',
@@ -111,14 +101,6 @@ const copy = {
     never: 'Not run yet',
     noError: 'None',
     source: 'Source',
-    history: 'Recent checks',
-    noHistory: 'No history yet.',
-    batchId: 'Batch',
-    outcome: 'Outcome',
-    finished: 'Finished',
-    counts:
-      'Scanned / reconciled / failed',
-    batchError: 'Error',
   },
 } as const;
 
@@ -183,13 +165,6 @@ export function ExchangeOrderReconciliation({
   >(null);
 
   const [
-    history,
-    setHistory,
-  ] = useState<
-    AccountOrderReconciliationBatch[]
-  >([]);
-
-  const [
     busy,
     setBusy,
   ] = useState(false);
@@ -214,7 +189,6 @@ export function ExchangeOrderReconciliation({
 
       if (!accountReady) {
         setStatus(null);
-        setHistory([]);
         setError(null);
         setBusy(false);
         return undefined;
@@ -228,26 +202,15 @@ export function ExchangeOrderReconciliation({
         }
 
         try {
-          const [
-            statusResult,
-            historyResult,
-          ] = await Promise.all([
-            fetchExchangeAccountOrderReconciliationStatus(
+          const result = (
+            await fetchExchangeAccountOrderReconciliationStatus(
               token,
               account.id,
-            ),
-            fetchExchangeAccountOrderReconciliationHistory(
-              token,
-              account.id,
-              {
-                limit: 8,
-              },
-            ),
-          ]);
+            )
+          );
 
           if (active) {
-            setStatus(statusResult);
-            setHistory(historyResult);
+            setStatus(result);
             setError(null);
           }
         } catch (caught) {
@@ -481,95 +444,6 @@ export function ExchangeOrderReconciliation({
               </dd>
             </div>
           </dl>
-
-          <div
-            className={
-              'exchange-order-reconciliation-history'
-            }
-          >
-            <div
-              className={
-                'exchange-order-reconciliation-history-heading'
-              }
-            >
-              <strong>{t.history}</strong>
-              <span>{history.length}</span>
-            </div>
-
-            {history.length === 0
-              ? (
-                <p
-                  className={
-                    'exchange-order-reconciliation-history-empty'
-                  }
-                >
-                  {t.noHistory}
-                </p>
-              )
-              : (
-                <div
-                  className={
-                    'exchange-order-reconciliation-history-table'
-                  }
-                >
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{t.batchId}</th>
-                        <th>{t.outcome}</th>
-                        <th>{t.finished}</th>
-                        <th>{t.counts}</th>
-                        <th>{t.batchError}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {history.map(
-                        (batch) => (
-                          <tr key={batch.batch_id}>
-                            <td>
-                              #{batch.batch_id}
-                            </td>
-                            <td>
-                              <span
-                                className={
-                                  'exchange-order-reconciliation-action '
-                                  + batch.action
-                                    .toLowerCase()
-                                    .replace(
-                                      /[^a-z0-9_-]/g,
-                                      '-',
-                                    )
-                                }
-                              >
-                                {batch.action}
-                              </span>
-                            </td>
-                            <td>
-                              {dateTime(
-                                batch.finished_at,
-                                language,
-                                t.never,
-                              )}
-                            </td>
-                            <td>
-                              {batch.scanned}
-                              {' / '}
-                              {batch.reconciled}
-                              {' / '}
-                              {batch.failed}
-                            </td>
-                            <td>
-                              {batch.error_message
-                                ?? t.noError}
-                            </td>
-                          </tr>
-                        ),
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-          </div>
         </>
       )}
     </section>

@@ -208,27 +208,6 @@ export interface AccountOrderRiskStatus {
   resets_at: string;
 }
 
-export interface AccountOrderReconciliationBatch {
-  account_id: number;
-  batch_id: number;
-  action: string;
-  source: 'BINANCE_TESTNET';
-  read_only: true;
-  scanned: number;
-  reconciled: number;
-  skipped: number;
-  failed: number;
-  errors: string[];
-  error_message: string | null;
-  started_at: string;
-  finished_at: string | null;
-}
-
-export interface AccountOrderReconciliationHistoryQuery {
-  limit?: number;
-  action?: string;
-}
-
 export interface AccountOrderReconciliationStatus {
   account_id: number;
   source: 'BINANCE_TESTNET';
