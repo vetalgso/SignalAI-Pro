@@ -90,6 +90,36 @@ class Settings(BaseSettings):
         gt=0,
         le=60,
     )
+    telegram_signal_dispatch_poll_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        le=3600,
+    )
+    telegram_signal_batch_size: int = Field(
+        default=20,
+        ge=1,
+        le=500,
+    )
+    telegram_signal_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+    )
+    telegram_signal_retry_base_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=3600,
+    )
+    telegram_signal_processing_lease_seconds: float = Field(
+        default=300.0,
+        gt=0,
+        le=86400,
+    )
+    telegram_signal_advisory_lock_key: int = Field(
+        default=2026082701,
+        ge=1,
+        le=9223372036854775807,
+    )
 
     jwt_secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
