@@ -334,12 +334,16 @@ telegram_template = (
 
 for value in (
     'define "telegram.signalai.message"',
-    "SIGNALAI ALERT",
-    "SIGNALAI RESOLVED",
-    ".GroupLabels.alertname",
+    'define "telegram.signalai.severity"',
+    "СИСТЕМНОЕ УВЕДОМЛЕНИЕ",
+    "СИСТЕМА ВОССТАНОВЛЕНА",
+    "не торговый сигнал",
+    "SignalAIE2ELastRunStale",
     ".CommonLabels.severity",
 ):
     assert value in telegram_template, value
+
+assert "GeneratorURL" not in telegram_template
 
 secret_ignore = (
     ROOT
