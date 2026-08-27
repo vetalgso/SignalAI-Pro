@@ -11,6 +11,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.pool import StaticPool
 
 from app.models.trading_signal import (
+    TelegramSignalDelivery,
     TradingSignal,
     TradingSignalEvent,
 )
@@ -39,6 +40,9 @@ def db() -> Session:
         engine
     )
     TradingSignalEvent.__table__.create(
+        engine
+    )
+    TelegramSignalDelivery.__table__.create(
         engine
     )
 

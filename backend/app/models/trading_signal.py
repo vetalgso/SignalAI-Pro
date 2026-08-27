@@ -5,13 +5,16 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -243,4 +246,96 @@ class TradingSignalEvent(Base):
         nullable=False,
         default=utc_now,
         index=True,
+    )
+
+
+class TelegramSignalDelivery(Base):
+    __tablename__ = (
+        "telegram_signal_deliveries"
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "signal_id",
+            name=(
+                "uq_telegram_signal_"
+                "deliveries_signal_id"
+            ),
+        ),
+        Index(
+            (
+                "ix_telegram_signal_deliveries_"
+                "status_next_attempt"
+            ),
+            "status",
+            "next_attempt_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+    )
+    signal_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(
+            "trading_signals.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="PENDING",
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    next_attempt_at: Mapped[
+        datetime
+    ] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    locked_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    sent_at: Mapped[
+        datetime | None
+    ] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    telegram_message_id: Mapped[
+        int | None
+    ] = mapped_column(
+        BigInteger,
+        nullable=True,
+    )
+    last_error: Mapped[
+        str | None
+    ] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
     )

@@ -272,6 +272,10 @@ class TradingSignalService:
             },
         )
 
+        self.repository.enqueue_telegram_delivery(
+            signal.id
+        )
+
         self.repository.db.commit()
         self.repository.db.refresh(signal)
 

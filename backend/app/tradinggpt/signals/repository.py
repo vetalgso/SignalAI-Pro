@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.trading_signal import (
+    TelegramSignalDelivery,
     TradingSignal,
     TradingSignalEvent,
 )
@@ -47,6 +48,19 @@ class TradingSignalRepository:
         self.db.add(signal)
         self.db.flush()
         return signal
+
+    def enqueue_telegram_delivery(
+        self,
+        signal_id: int,
+    ) -> TelegramSignalDelivery:
+        delivery = TelegramSignalDelivery(
+            signal_id=signal_id,
+        )
+
+        self.db.add(delivery)
+        self.db.flush()
+
+        return delivery
 
     def add_event(
         self,
