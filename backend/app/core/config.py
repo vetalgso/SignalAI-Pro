@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     binance_request_timeout_seconds: float = 10.0
     telegram_bot_token: str = ""
 
+    telegram_signal_enabled: bool = False
+    telegram_signal_bot_token: str = ""
+    telegram_signal_chat_id: str = ""
+    telegram_signal_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        le=60,
+    )
+
     jwt_secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
