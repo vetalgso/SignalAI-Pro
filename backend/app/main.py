@@ -22,6 +22,9 @@ from app.tradinggpt.signals.router import router as tradinggpt_signals_router
 from app.tradinggpt.signals.background import (
     signal_lifecycle_background_loop,
 )
+from app.tradinggpt.signals.scanner_background import (
+    signal_scanner_background_loop,
+)
 from app.tradinggpt.signals.telegram_background import (
     telegram_signal_background_loop,
 )
@@ -59,6 +62,7 @@ async def lifespan(
     scheduler_loop_started = False
     signal_loop_started = False
     telegram_signal_loop_started = False
+    signal_scanner_loop_started = False
     reconciliation_loop_started = False
 
     if settings.scheduler_background_loop_enabled:
@@ -88,6 +92,16 @@ async def lifespan(
 
     if getattr(
         settings,
+        "signal_scanner_background_enabled",
+        False,
+    ):
+        signal_scanner_loop_started = await (
+            signal_scanner_background_loop
+            .start()
+        )
+
+    if getattr(
+        settings,
         "order_reconciliation_background_enabled",
         False,
     ):
@@ -102,6 +116,12 @@ async def lifespan(
         if reconciliation_loop_started:
             await (
                 order_reconciliation_background_loop
+                .stop()
+            )
+
+        if signal_scanner_loop_started:
+            await (
+                signal_scanner_background_loop
                 .stop()
             )
 

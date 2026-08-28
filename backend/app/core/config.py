@@ -46,6 +46,29 @@ class Settings(BaseSettings):
         le=3600,
     )
 
+    signal_scanner_background_enabled: bool = False
+    signal_scanner_interval_seconds: float = Field(
+        default=900.0,
+        ge=60,
+        le=86400,
+    )
+    signal_scanner_risk_level: str = "medium"
+    signal_scanner_market_limit: int = Field(
+        default=10,
+        ge=1,
+        le=20,
+    )
+    signal_scanner_min_confidence: float = Field(
+        default=60.0,
+        ge=0,
+        le=100,
+    )
+    signal_scanner_advisory_lock_key: int = Field(
+        default=2026082801,
+        ge=1,
+        le=9223372036854775807,
+    )
+
     scheduler_distributed_lock_enabled: bool = True
     scheduler_advisory_lock_key: int = Field(
         default=2026080320,
