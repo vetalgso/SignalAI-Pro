@@ -13,6 +13,7 @@ import pytest
 from app.tradinggpt.signals.telegram_publisher import (
     TelegramSignalDeliveryError,
     TelegramSignalPublisher,
+    _human_reason,
     format_telegram_signal,
 )
 
@@ -71,6 +72,121 @@ def test_formatter_is_clear_and_complete() -> None:
     assert "Не финансовая рекомендация" in message
     assert "SignalAIE2E" not in message
     assert "GeneratorURL" not in message
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (
+            "Signal Engine: LONG (85%).",
+            (
+                "Технический сигнал: "
+                "рост (LONG), уверенность 85%."
+            ),
+        ),
+        (
+            "Signal Engine: SHORT (72.5%).",
+            (
+                "Технический сигнал: "
+                "снижение (SHORT), "
+                "уверенность 72.5%."
+            ),
+        ),
+        (
+            "Forecast 1H: LONG.",
+            "Прогноз на 1 час: рост (LONG).",
+        ),
+        (
+            "Forecast 4H: SHORT.",
+            (
+                "Прогноз на 4 часа: "
+                "снижение (SHORT)."
+            ),
+        ),
+        (
+            "Forecast 1D: UNCERTAIN.",
+            (
+                "Прогноз на 1 день: "
+                "неопределённость."
+            ),
+        ),
+        (
+            "Timeframe alignment: 100%.",
+            (
+                "Совпадение таймфреймов: "
+                "100%."
+            ),
+        ),
+        (
+            "Primary trend: LONG.",
+            (
+                "Основной тренд: "
+                "рост (LONG)."
+            ),
+        ),
+        (
+            "Trade style: TREND_FOLLOWING.",
+            "Стиль сделки: по тренду.",
+        ),
+        (
+            "News sentiment: NEUTRAL.",
+            "Новостной фон: нейтральный.",
+        ),
+        (
+            "Source consensus: 100%.",
+            "Согласие источников: 100%.",
+        ),
+        (
+            "Final direction: SHORT.",
+            (
+                "Итоговое направление: "
+                "снижение (SHORT)."
+            ),
+        ),
+        (
+            "Risk level: HIGH.",
+            "Уровень риска: высокий.",
+        ),
+    ],
+)
+def test_scanner_reason_is_translated(
+    source: str,
+    expected: str,
+) -> None:
+    assert _human_reason(source) == expected
+
+
+def test_real_scanner_message_is_russian() -> None:
+    message = format_telegram_signal(
+        _signal(
+            reasons=[
+                "Signal Engine: LONG (85%).",
+                "Forecast 1H: LONG.",
+                "Forecast 4H: LONG.",
+            ]
+        )
+    )
+
+    assert (
+        "Технический сигнал: "
+        "рост (LONG), уверенность 85%."
+        in message
+    )
+    assert (
+        "Прогноз на 1 час: рост (LONG)."
+        in message
+    )
+    assert (
+        "Прогноз на 4 часа: рост (LONG)."
+        in message
+    )
+
+    for forbidden in (
+        "Signal Engine:",
+        "Forecast 1H:",
+        "Forecast 4H:",
+    ):
+        assert forbidden not in message
 
 
 def test_formatter_escapes_external_text() -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import (
     datetime,
@@ -112,6 +113,25 @@ def _datetime_text(
     )
 
 
+def _direction_text(
+    value: str,
+) -> str:
+    names = {
+        "LONG": "рост (LONG)",
+        "SHORT": "снижение (SHORT)",
+        "WAIT": "ожидание",
+        "UNCERTAIN": "неопределённость",
+        "NEUTRAL": "нейтрально",
+    }
+
+    normalized = value.strip().upper()
+
+    return names.get(
+        normalized,
+        normalized,
+    )
+
+
 def _human_reason(value: str) -> str:
     normalized = value.strip()
 
@@ -124,12 +144,196 @@ def _human_reason(value: str) -> str:
             "анализ подтверждают одно "
             "направление."
         ),
+        (
+            "Technical trend confirmed."
+        ): (
+            "Технический тренд подтверждён."
+        ),
+        "Timeframes agree.": (
+            "Таймфреймы подтверждают "
+            "одно направление."
+        ),
     }
 
-    return translations.get(
-        normalized,
-        normalized,
+    translated = translations.get(
+        normalized
     )
+
+    if translated is not None:
+        return translated
+
+    match = re.fullmatch(
+        (
+            r"Signal Engine: "
+            r"(LONG|SHORT|WAIT) "
+            r"\(([0-9]+(?:\.[0-9]+)?)%\)\."
+        ),
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        return (
+            "Технический сигнал: "
+            f"{_direction_text(match.group(1))}, "
+            f"уверенность {match.group(2)}%."
+        )
+
+    match = re.fullmatch(
+        (
+            r"Forecast ([0-9]+[MHDW]): "
+            r"(LONG|SHORT|WAIT|UNCERTAIN)\."
+        ),
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        horizon_names = {
+            "15M": "15 минут",
+            "30M": "30 минут",
+            "1H": "1 час",
+            "4H": "4 часа",
+            "12H": "12 часов",
+            "1D": "1 день",
+            "1W": "1 неделю",
+        }
+        horizon = match.group(1).upper()
+
+        return (
+            "Прогноз на "
+            f"{horizon_names.get(horizon, horizon)}: "
+            f"{_direction_text(match.group(2))}."
+        )
+
+    match = re.fullmatch(
+        (
+            r"Timeframe alignment: "
+            r"([0-9]+(?:\.[0-9]+)?)%\."
+        ),
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        return (
+            "Совпадение таймфреймов: "
+            f"{match.group(1)}%."
+        )
+
+    match = re.fullmatch(
+        (
+            r"Primary trend: "
+            r"(LONG|SHORT|WAIT|UNCERTAIN)\."
+        ),
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        return (
+            "Основной тренд: "
+            f"{_direction_text(match.group(1))}."
+        )
+
+    match = re.fullmatch(
+        r"Trade style: ([A-Z_]+)\.",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        styles = {
+            "TREND_FOLLOWING": "по тренду",
+            "MEAN_REVERSION": (
+                "возврат к среднему"
+            ),
+            "RANGE_TRADING": (
+                "торговля в диапазоне"
+            ),
+            "BREAKOUT": "пробой уровня",
+        }
+        style = match.group(1).upper()
+
+        return (
+            "Стиль сделки: "
+            f"{styles.get(style, style)}."
+        )
+
+    match = re.fullmatch(
+        (
+            r"News sentiment: "
+            r"(POSITIVE|NEGATIVE|NEUTRAL)\."
+        ),
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        sentiments = {
+            "POSITIVE": "положительный",
+            "NEGATIVE": "отрицательный",
+            "NEUTRAL": "нейтральный",
+        }
+
+        return (
+            "Новостной фон: "
+            f"{sentiments[
+                match.group(1).upper()
+            ]}."
+        )
+
+    match = re.fullmatch(
+        (
+            r"Source consensus: "
+            r"([0-9]+(?:\.[0-9]+)?)%\."
+        ),
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        return (
+            "Согласие источников: "
+            f"{match.group(1)}%."
+        )
+
+    match = re.fullmatch(
+        (
+            r"Final direction: "
+            r"(LONG|SHORT|WAIT|UNCERTAIN)\."
+        ),
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        return (
+            "Итоговое направление: "
+            f"{_direction_text(match.group(1))}."
+        )
+
+    match = re.fullmatch(
+        r"Risk level: (LOW|MEDIUM|HIGH)\.",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        risks = {
+            "LOW": "низкий",
+            "MEDIUM": "средний",
+            "HIGH": "высокий",
+        }
+
+        return (
+            "Уровень риска: "
+            f"{risks[
+                match.group(1).upper()
+            ]}."
+        )
+
+    return normalized
 
 
 def format_telegram_signal(
