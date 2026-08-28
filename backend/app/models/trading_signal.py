@@ -255,10 +255,10 @@ class TelegramSignalDelivery(Base):
     )
     __table_args__ = (
         UniqueConstraint(
-            "signal_id",
+            "event_id",
             name=(
                 "uq_telegram_signal_"
-                "deliveries_signal_id"
+                "deliveries_event_id"
             ),
         ),
         Index(
@@ -282,6 +282,21 @@ class TelegramSignalDelivery(Base):
             ondelete="CASCADE",
         ),
         nullable=False,
+    )
+    delivery_type: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="SIGNAL_CREATED",
+    )
+    event_id: Mapped[
+        int | None
+    ] = mapped_column(
+        Integer,
+        ForeignKey(
+            "trading_signal_events.id",
+            ondelete="CASCADE",
+        ),
+        nullable=True,
     )
 
     status: Mapped[str] = mapped_column(

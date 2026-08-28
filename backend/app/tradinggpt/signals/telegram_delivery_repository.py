@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.models.trading_signal import (
     TelegramSignalDelivery,
     TradingSignal,
+    TradingSignalEvent,
 )
 
 
@@ -30,6 +31,7 @@ MAX_ERROR_LENGTH: Final = 1000
 class TelegramDeliveryJob:
     delivery: TelegramSignalDelivery
     signal: TradingSignal
+    event: TradingSignalEvent | None
 
 
 class TelegramDeliveryRepository:
@@ -186,11 +188,17 @@ class TelegramDeliveryRepository:
             select(
                 TelegramSignalDelivery,
                 TradingSignal,
+                TradingSignalEvent,
             )
             .join(
                 TradingSignal,
                 TradingSignal.id
                 == TelegramSignalDelivery.signal_id,
+            )
+            .outerjoin(
+                TradingSignalEvent,
+                TradingSignalEvent.id
+                == TelegramSignalDelivery.event_id,
             )
             .where(
                 TelegramSignalDelivery.status.in_(
@@ -227,7 +235,7 @@ class TelegramDeliveryRepository:
 
         jobs: list[TelegramDeliveryJob] = []
 
-        for delivery, signal in rows:
+        for delivery, signal, event in rows:
             delivery.status = (
                 DELIVERY_PROCESSING
             )
@@ -240,6 +248,7 @@ class TelegramDeliveryRepository:
                 TelegramDeliveryJob(
                     delivery=delivery,
                     signal=signal,
+                    event=event,
                 )
             )
 

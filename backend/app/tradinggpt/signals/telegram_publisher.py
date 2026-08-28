@@ -13,6 +13,7 @@ import httpx
 
 from app.models.trading_signal import (
     TradingSignal,
+    TradingSignalEvent,
 )
 
 
@@ -474,6 +475,194 @@ def format_telegram_signal(
     return "\n".join(lines)
 
 
+def format_telegram_signal_update(
+    signal: TradingSignal,
+    event: TradingSignalEvent,
+) -> str:
+    status = str(event.to_status).upper()
+
+    status_messages = {
+        "ENTRY_REACHED": (
+            "🎯",
+            "ДИАПАЗОН ВХОДА ДОСТИГНУТ",
+        ),
+        "TP1_REACHED": (
+            "✅",
+            "ЦЕЛЬ 1 ДОСТИГНУТА",
+        ),
+        "TP2_REACHED": (
+            "✅",
+            "ЦЕЛЬ 2 ДОСТИГНУТА",
+        ),
+        "TP3_REACHED": (
+            "🏆",
+            "ВСЕ ЦЕЛИ ДОСТИГНУТЫ",
+        ),
+        "STOPPED": (
+            "🛑",
+            "STOP LOSS СРАБОТАЛ",
+        ),
+        "EXPIRED": (
+            "⌛",
+            "СИГНАЛ ИСТЁК",
+        ),
+        "CANCELLED": (
+            "🚫",
+            "СИГНАЛ ОТМЕНЁН",
+        ),
+    }
+
+    icon, title = status_messages.get(
+        status,
+        (
+            "ℹ️",
+            (
+                "ОБНОВЛЕНИЕ СИГНАЛА: "
+                f"{status}"
+            ),
+        ),
+    )
+
+    side = str(signal.side).upper()
+
+    if side == "LONG":
+        direction = "🟢 LONG — ПОКУПКА"
+    elif side == "SHORT":
+        direction = "🔴 SHORT — ПРОДАЖА"
+    else:
+        direction = escape(side)
+
+    lines = [
+        f"{icon} <b>{escape(title)}</b>",
+        "",
+        (
+            f"<b>{escape(_pair_label(signal.symbol))}</b>"
+            f" · {direction}"
+        ),
+        (
+            f"ID сигнала: #{signal.id}"
+            f" · {escape(signal.timeframe)}"
+        ),
+    ]
+
+    event_price = (
+        event.price
+        if event.price is not None
+        else signal.current_price
+    )
+
+    if event_price is not None:
+        lines.append(
+            "Цена события: "
+            f"<b>{_decimal_text(event_price)}</b>"
+        )
+
+    lines.append(
+        "Время: "
+        f"{_datetime_text(event.created_at)}"
+    )
+
+    if status == "ENTRY_REACHED":
+        lines.extend(
+            [
+                "",
+                (
+                    "Следующая цель: "
+                    f"<b>{_decimal_text(
+                        signal.take_profit_1
+                    )}</b>"
+                ),
+                (
+                    "Защитный Stop Loss: "
+                    f"<b>{_decimal_text(
+                        signal.stop_loss
+                    )}</b>"
+                ),
+            ]
+        )
+    elif status == "TP1_REACHED":
+        next_target = (
+            signal.take_profit_2
+            if signal.take_profit_2 is not None
+            else signal.take_profit_3
+        )
+
+        if next_target is not None:
+            lines.extend(
+                [
+                    "",
+                    (
+                        "Следующая цель: "
+                        f"<b>{_decimal_text(
+                            next_target
+                        )}</b>"
+                    ),
+                ]
+            )
+    elif status == "TP2_REACHED":
+        if signal.take_profit_3 is not None:
+            lines.extend(
+                [
+                    "",
+                    (
+                        "Следующая цель: "
+                        f"<b>{_decimal_text(
+                            signal.take_profit_3
+                        )}</b>"
+                    ),
+                ]
+            )
+    elif status == "TP3_REACHED":
+        lines.extend(
+            [
+                "",
+                (
+                    "Сигнал завершён достижением "
+                    "всех целей."
+                ),
+            ]
+        )
+    elif status == "STOPPED":
+        lines.extend(
+            [
+                "",
+                (
+                    "Сигнал закрыт по защитному "
+                    "уровню Stop Loss."
+                ),
+            ]
+        )
+    elif status == "EXPIRED":
+        lines.extend(
+            [
+                "",
+                (
+                    "Срок действия сигнала "
+                    "завершён."
+                ),
+            ]
+        )
+    elif status == "CANCELLED":
+        lines.extend(
+            [
+                "",
+                "Сигнал больше не активен.",
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            (
+                "Это обновление ранее "
+                "опубликованного сигнала."
+            ),
+        ]
+    )
+
+    return "\n".join(lines)
+
+
 class TelegramSignalPublisher:
     def __init__(
         self,
@@ -495,6 +684,12 @@ class TelegramSignalPublisher:
     async def publish(
         self,
         signal: TradingSignal,
+        *,
+        delivery_type: str = (
+            "SIGNAL_CREATED"
+        ),
+        event: TradingSignalEvent
+        | None = None,
     ) -> TelegramPublishResult:
         if not self.enabled:
             return TelegramPublishResult(
@@ -514,6 +709,38 @@ class TelegramSignalPublisher:
                 "is not configured."
             )
 
+        if delivery_type not in {
+            "SIGNAL_CREATED",
+            "SIGNAL_STATUS_CHANGED",
+        }:
+            raise TelegramSignalConfigurationError(
+                "Unsupported Telegram signal "
+                f"delivery type: {delivery_type}."
+            )
+
+        if (
+            delivery_type
+            == "SIGNAL_STATUS_CHANGED"
+        ):
+            if event is None:
+                raise (
+                    TelegramSignalConfigurationError(
+                        "Lifecycle Telegram "
+                        "delivery has no event."
+                    )
+                )
+
+            message = (
+                format_telegram_signal_update(
+                    signal,
+                    event,
+                )
+            )
+        else:
+            message = format_telegram_signal(
+                signal
+            )
+
         endpoint = (
             "https://api.telegram.org/bot"
             f"{self.bot_token}/sendMessage"
@@ -521,9 +748,7 @@ class TelegramSignalPublisher:
 
         request_payload = {
             "chat_id": self.chat_id,
-            "text": format_telegram_signal(
-                signal
-            ),
+            "text": message,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }

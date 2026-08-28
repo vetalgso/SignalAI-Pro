@@ -52,9 +52,14 @@ class TradingSignalRepository:
     def enqueue_telegram_delivery(
         self,
         signal_id: int,
+        *,
+        delivery_type: str,
+        event_id: int | None,
     ) -> TelegramSignalDelivery:
         delivery = TelegramSignalDelivery(
             signal_id=signal_id,
+            delivery_type=delivery_type,
+            event_id=event_id,
         )
 
         self.db.add(delivery)

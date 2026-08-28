@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 from app.models.trading_signal import (
     TelegramSignalDelivery,
     TradingSignal,
+    TradingSignalEvent,
 )
 from app.tradinggpt.signals.telegram_delivery_repository import (
     DELIVERY_FAILED,
@@ -58,6 +59,9 @@ def db() -> Session:
     TradingSignal.__table__.create(
         engine
     )
+    TradingSignalEvent.__table__.create(
+        engine
+    )
     TelegramSignalDelivery.__table__.create(
         engine
     )
@@ -80,6 +84,7 @@ def enqueue(
     *,
     status: str = "ACTIVE",
     expires_at: datetime | None = None,
+    delivery_type: str = "SIGNAL_CREATED",
 ) -> TelegramSignalDelivery:
     signal = TradingSignal(
         fingerprint=(
@@ -122,8 +127,36 @@ def enqueue(
     db.add(signal)
     db.flush()
 
+    event_id: int | None = None
+
+    if (
+        delivery_type
+        == "SIGNAL_STATUS_CHANGED"
+    ):
+        event = TradingSignalEvent(
+            signal_id=signal.id,
+            event_type=(
+                "MARKET_STATUS_CHANGED"
+            ),
+            from_status="ENTRY_REACHED",
+            to_status=status,
+            price=signal.current_price,
+            note=(
+                "Signal status changed."
+            ),
+            payload={
+                "automatic": True,
+            },
+            created_at=NOW,
+        )
+        db.add(event)
+        db.flush()
+        event_id = event.id
+
     delivery = TelegramSignalDelivery(
         signal_id=signal.id,
+        delivery_type=delivery_type,
+        event_id=event_id,
         next_attempt_at=NOW,
     )
 
@@ -141,12 +174,27 @@ class RecordingPublisher:
     ) -> None:
         self.message_id = message_id
         self.signal_ids: list[int] = []
+        self.delivery_types: list[str] = []
+        self.event_statuses: list[
+            str | None
+        ] = []
 
     async def publish(
         self,
         signal: TradingSignal,
+        *,
+        delivery_type: str,
+        event: TradingSignalEvent | None,
     ) -> TelegramPublishResult:
         self.signal_ids.append(signal.id)
+        self.delivery_types.append(
+            delivery_type
+        )
+        self.event_statuses.append(
+            event.to_status
+            if event is not None
+            else None
+        )
 
         return TelegramPublishResult(
             delivered=True,
@@ -159,6 +207,9 @@ class FailingPublisher:
     async def publish(
         self,
         _: TradingSignal,
+        *,
+        delivery_type: str,
+        event: TradingSignalEvent | None,
     ) -> TelegramPublishResult:
         raise TelegramSignalDeliveryError(
             "Temporary Telegram failure."
@@ -330,3 +381,44 @@ def test_dispatcher_recovers_stale_job(
     assert result["sent"] == 1
     assert delivery.status == DELIVERY_SENT
     assert delivery.attempt_count == 2
+
+
+
+def test_dispatcher_sends_terminal_lifecycle_event(
+    db: Session,
+) -> None:
+    delivery = enqueue(
+        db,
+        status="TP1_REACHED",
+        delivery_type=(
+            "SIGNAL_STATUS_CHANGED"
+        ),
+    )
+    publisher = RecordingPublisher(
+        message_id=777
+    )
+
+    result = asyncio.run(
+        TelegramSignalDispatcher(
+            repository=(
+                TelegramDeliveryRepository(db)
+            ),
+            publisher=publisher,
+            clock=lambda: NOW,
+        ).dispatch_once()
+    )
+
+    assert result["action"] == "COMPLETED"
+    assert result["sent"] == 1
+    assert result["skipped"] == 0
+    assert publisher.delivery_types == [
+        "SIGNAL_STATUS_CHANGED"
+    ]
+    assert publisher.event_statuses == [
+        "TP1_REACHED"
+    ]
+
+    db.refresh(delivery)
+
+    assert delivery.status == DELIVERY_SENT
+    assert delivery.telegram_message_id == 777

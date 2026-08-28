@@ -255,25 +255,29 @@ class TradingSignalService:
 
         self.repository.add(signal)
 
-        self.repository.add_event(
-            signal_id=signal.id,
-            event_type="CREATED",
-            from_status=None,
-            to_status=signal.status,
-            price=signal.current_price,
-            note=(
-                "Trading signal created."
-            ),
-            payload={
-                "source": signal.source,
-                "strategy": (
-                    signal.strategy
+        created_event = (
+            self.repository.add_event(
+                signal_id=signal.id,
+                event_type="CREATED",
+                from_status=None,
+                to_status=signal.status,
+                price=signal.current_price,
+                note=(
+                    "Trading signal created."
                 ),
-            },
+                payload={
+                    "source": signal.source,
+                    "strategy": (
+                        signal.strategy
+                    ),
+                },
+            )
         )
 
         self.repository.enqueue_telegram_delivery(
-            signal.id
+            signal.id,
+            delivery_type="SIGNAL_CREATED",
+            event_id=created_event.id,
         )
 
         self.repository.db.commit()
@@ -390,14 +394,24 @@ class TradingSignalService:
         if to_status in TERMINAL_STATUSES:
             signal.closed_at = now
 
-        self.repository.add_event(
-            signal_id=signal.id,
-            event_type=event_type,
-            from_status=from_status,
-            to_status=to_status,
-            price=request.price,
-            note=request.note,
-            payload=event_payload,
+        transition_event = (
+            self.repository.add_event(
+                signal_id=signal.id,
+                event_type=event_type,
+                from_status=from_status,
+                to_status=to_status,
+                price=request.price,
+                note=request.note,
+                payload=event_payload,
+            )
+        )
+
+        self.repository.enqueue_telegram_delivery(
+            signal.id,
+            delivery_type=(
+                "SIGNAL_STATUS_CHANGED"
+            ),
+            event_id=transition_event.id,
         )
 
         self.repository.db.commit()

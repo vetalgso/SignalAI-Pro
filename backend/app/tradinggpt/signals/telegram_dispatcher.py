@@ -9,6 +9,7 @@ from typing import Protocol
 
 from app.models.trading_signal import (
     TradingSignal,
+    TradingSignalEvent,
 )
 
 from .telegram_delivery_repository import (
@@ -27,6 +28,9 @@ class SignalPublisher(Protocol):
     async def publish(
         self,
         signal: TradingSignal,
+        *,
+        delivery_type: str,
+        event: TradingSignalEvent | None,
     ) -> TelegramPublishResult:
         ...
 
@@ -158,8 +162,61 @@ class TelegramSignalDispatcher:
         for job in jobs:
             delivery = job.delivery
             signal = job.signal
+            event = job.event
 
-            if signal.status != "ACTIVE":
+            supported_types = {
+                "SIGNAL_CREATED",
+                "SIGNAL_STATUS_CHANGED",
+            }
+
+            if (
+                delivery.delivery_type
+                not in supported_types
+            ):
+                reason = (
+                    "Unsupported Telegram delivery "
+                    f"type: {delivery.delivery_type}."
+                )
+                self.repository.mark_failed(
+                    delivery=delivery,
+                    reason=reason,
+                    now=now,
+                )
+                failed += 1
+                errors.append({
+                    "signal_id": signal.id,
+                    "delivery_id": delivery.id,
+                    "reason": reason,
+                })
+                continue
+
+            if (
+                delivery.delivery_type
+                == "SIGNAL_STATUS_CHANGED"
+                and event is None
+            ):
+                reason = (
+                    "Lifecycle delivery has no "
+                    "signal event."
+                )
+                self.repository.mark_failed(
+                    delivery=delivery,
+                    reason=reason,
+                    now=now,
+                )
+                failed += 1
+                errors.append({
+                    "signal_id": signal.id,
+                    "delivery_id": delivery.id,
+                    "reason": reason,
+                })
+                continue
+
+            if (
+                delivery.delivery_type
+                == "SIGNAL_CREATED"
+                and signal.status != "ACTIVE"
+            ):
                 self.repository.mark_skipped(
                     delivery=delivery,
                     reason=(
@@ -172,7 +229,9 @@ class TelegramSignalDispatcher:
                 continue
 
             if (
-                signal.expires_at is not None
+                delivery.delivery_type
+                == "SIGNAL_CREATED"
+                and signal.expires_at is not None
                 and _aware_utc(
                     signal.expires_at
                 )
@@ -191,7 +250,13 @@ class TelegramSignalDispatcher:
 
             try:
                 result = await (
-                    self.publisher.publish(signal)
+                    self.publisher.publish(
+                        signal,
+                        delivery_type=(
+                            delivery.delivery_type
+                        ),
+                        event=event,
+                    )
                 )
             except (
                 TelegramSignalConfigurationError

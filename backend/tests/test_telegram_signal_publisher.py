@@ -15,6 +15,7 @@ from app.tradinggpt.signals.telegram_publisher import (
     TelegramSignalPublisher,
     _human_reason,
     format_telegram_signal,
+    format_telegram_signal_update,
 )
 
 
@@ -305,3 +306,141 @@ def test_delivery_error_does_not_leak_token() -> None:
 
     assert secret not in str(exc_info.value)
     assert "HTTP 500" in str(exc_info.value)
+
+
+
+def _event(
+    status: str,
+    *,
+    price: Decimal | None = Decimal("78750"),
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        to_status=status,
+        price=price,
+        created_at=datetime(
+            2026,
+            8,
+            28,
+            7,
+            30,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (
+            "ENTRY_REACHED",
+            "ДИАПАЗОН ВХОДА ДОСТИГНУТ",
+        ),
+        (
+            "TP1_REACHED",
+            "ЦЕЛЬ 1 ДОСТИГНУТА",
+        ),
+        (
+            "TP2_REACHED",
+            "ЦЕЛЬ 2 ДОСТИГНУТА",
+        ),
+        (
+            "TP3_REACHED",
+            "ВСЕ ЦЕЛИ ДОСТИГНУТЫ",
+        ),
+        (
+            "STOPPED",
+            "STOP LOSS СРАБОТАЛ",
+        ),
+        (
+            "EXPIRED",
+            "СИГНАЛ ИСТЁК",
+        ),
+        (
+            "CANCELLED",
+            "СИГНАЛ ОТМЕНЁН",
+        ),
+    ],
+)
+def test_lifecycle_formatter_is_clear(
+    status: str,
+    expected: str,
+) -> None:
+    message = (
+        format_telegram_signal_update(
+            _signal(),
+            _event(status),
+        )
+    )
+
+    assert expected in message
+    assert "BTC/USDT" in message
+    assert "ID сигнала: #42" in message
+    assert (
+        "ранее опубликованного сигнала"
+        in message
+    )
+
+
+def test_lifecycle_formatter_shows_next_target() -> None:
+    message = format_telegram_signal_update(
+        _signal(),
+        _event("TP1_REACHED"),
+    )
+
+    assert "Следующая цель" in message
+    assert "<b>79 400</b>" in message
+
+
+def test_publisher_sends_lifecycle_payload() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(
+        request: httpx.Request,
+    ) -> httpx.Response:
+        captured["payload"] = json.loads(
+            request.content.decode("utf-8")
+        )
+
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "result": {
+                    "message_id": 987,
+                },
+            },
+        )
+
+    publisher = TelegramSignalPublisher(
+        enabled=True,
+        bot_token="test-token",
+        chat_id="-100123",
+        transport=httpx.MockTransport(
+            handler
+        ),
+    )
+
+    result = asyncio.run(
+        publisher.publish(
+            _signal(),
+            delivery_type=(
+                "SIGNAL_STATUS_CHANGED"
+            ),
+            event=_event("TP1_REACHED"),
+        )
+    )
+
+    assert result.delivered is True
+    assert result.message_id == 987
+
+    payload = captured["payload"]
+
+    assert isinstance(payload, dict)
+    assert (
+        "ЦЕЛЬ 1 ДОСТИГНУТА"
+        in payload["text"]
+    )
+    assert (
+        "НОВЫЙ ТОРГОВЫЙ СИГНАЛ"
+        not in payload["text"]
+    )
