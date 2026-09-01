@@ -1,0 +1,131 @@
+groups:
+  - name: signalai-signal-pipeline
+    interval: 5s
+    rules:
+      - alert: SignalAISignalPipelineMetricsTargetDown
+        expr: up{job="signalai-signal-pipeline"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: signal-pipeline
+        annotations:
+          summary: Метрики контура торговых сигналов недоступны
+          description: Prometheus не может получить метрики scanner, Telegram dispatcher и Outbox.
+
+      - alert: SignalAISignalScannerBackgroundLoopDown
+        expr: |
+          signalai_signal_scanner_enabled == 1
+          and signalai_signal_scanner_background_running == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: signal-pipeline
+        annotations:
+          summary: Автоматический сканер рынка остановлен
+          description: Periodic Signal Scanner включён, но его фоновый цикл не работает.
+
+      - alert: SignalAISignalScannerTickFailure
+        expr: |
+          increase(
+            signalai_signal_scanner_failed_ticks_total[15m]
+          ) > 0
+        labels:
+          severity: warning
+          component: signal-pipeline
+        annotations:
+          summary: Ошибка автоматического сканирования рынка
+          description: За последние 15 минут произошла ошибка фонового scanner tick.
+
+      - alert: SignalAISignalScannerTickStale
+        expr: |
+          signalai_signal_scanner_enabled == 1
+          and signalai_signal_scanner_background_running == 1
+          and signalai_signal_scanner_last_tick_observed == 1
+          and (
+            signalai_signal_scanner_seconds_since_last_tick
+            >
+            signalai_signal_scanner_poll_interval_seconds * 3
+          )
+        for: 1m
+        labels:
+          severity: critical
+          component: signal-pipeline
+        annotations:
+          summary: Автоматическое сканирование рынка зависло
+          description: Scanner tick не завершался более трёх настроенных интервалов.
+
+      - alert: SignalAITelegramSignalDispatcherDown
+        expr: |
+          signalai_telegram_signal_dispatcher_enabled == 1
+          and signalai_telegram_signal_dispatcher_background_running == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: signal-pipeline
+        annotations:
+          summary: Telegram dispatcher торговых сигналов остановлен
+          description: Telegram Signal Publisher включён, но фоновый цикл доставки не работает.
+
+      - alert: SignalAITelegramSignalDispatcherTickFailure
+        expr: |
+          increase(
+            signalai_telegram_signal_dispatcher_failed_ticks_total[15m]
+          ) > 0
+        labels:
+          severity: warning
+          component: signal-pipeline
+        annotations:
+          summary: Ошибка Telegram dispatcher торговых сигналов
+          description: За последние 15 минут произошла ошибка фонового цикла Telegram-доставки.
+
+      - alert: SignalAITelegramSignalDispatcherTickStale
+        expr: |
+          signalai_telegram_signal_dispatcher_enabled == 1
+          and signalai_telegram_signal_dispatcher_background_running == 1
+          and signalai_telegram_signal_dispatcher_last_tick_observed == 1
+          and (
+            signalai_telegram_signal_dispatcher_seconds_since_last_tick
+            >
+            signalai_telegram_signal_dispatcher_poll_interval_seconds * 6
+          )
+        for: 30s
+        labels:
+          severity: critical
+          component: signal-pipeline
+        annotations:
+          summary: Telegram dispatcher торговых сигналов завис
+          description: Цикл доставки не завершался более шести настроенных интервалов.
+
+      - alert: SignalAITelegramSignalOutboxFailed
+        expr: signalai_telegram_signal_outbox_failed > 0
+        for: 30s
+        labels:
+          severity: critical
+          component: signal-pipeline
+        annotations:
+          summary: Telegram-доставка торгового сигнала завершилась ошибкой
+          description: В Signal Outbox присутствуют доставки со статусом FAILED.
+
+      - alert: SignalAITelegramSignalOutboxBacklog
+        expr: signalai_telegram_signal_outbox_in_flight > 20
+        for: 2m
+        labels:
+          severity: warning
+          component: signal-pipeline
+        annotations:
+          summary: Накопилась очередь Telegram-сигналов
+          description: Более 20 сообщений ожидают отправки, обрабатываются или повторяются.
+
+      - alert: SignalAITelegramSignalOutboxStale
+        expr: |
+          signalai_telegram_signal_outbox_in_flight > 0
+          and
+          signalai_telegram_signal_outbox_oldest_in_flight_age_seconds
+          > 300
+        for: 1m
+        labels:
+          severity: critical
+          component: signal-pipeline
+        annotations:
+          summary: Telegram-сообщение застряло в очереди
+          description: Самая старая незавершённая доставка ожидает более пяти минут.

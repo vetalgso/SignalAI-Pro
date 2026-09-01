@@ -60,3 +60,14 @@ scrape_configs:
         labels:
           service: signalai-api
           component: order-reconciliation
+
+
+  - job_name: signalai-signal-pipeline
+    metrics_path: /api/v3/signals/runtime/metrics
+    scrape_interval: 5s
+    static_configs:
+      - targets:
+          - api:8000
+        labels:
+          service: signalai-api
+          component: signal-pipeline

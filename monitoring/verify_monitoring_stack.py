@@ -1626,3 +1626,130 @@ print("Periodic runner recovery Grafana panels: 6")
 print("Total dashboard panels: 56")
 print("Recovery dashboard IDs: unique")
 print("Recovery observability documentation: OK")
+
+
+# Signal Pipeline observability checks
+signal_pipeline_files = (
+    "monitoring/prometheus/rules/"
+    "signal-pipeline-alerts.yml",
+    "monitoring/grafana/dashboards/"
+    "signalai-signal-pipeline.json",
+)
+
+for filename in signal_pipeline_files:
+    path = ROOT / filename
+    assert path.is_file(), filename
+    assert path.stat().st_size > 0, filename
+
+assert (
+    "job_name: signalai-signal-pipeline"
+    in prometheus
+)
+assert (
+    "metrics_path: "
+    "/api/v3/signals/runtime/metrics"
+    in prometheus
+)
+assert "component: signal-pipeline" in prometheus
+
+signal_pipeline_rules = (
+    ROOT
+    / "monitoring/prometheus/rules/"
+    "signal-pipeline-alerts.yml"
+).read_text(encoding="utf-8")
+
+signal_pipeline_alerts = (
+    "SignalAISignalPipelineMetricsTargetDown",
+    "SignalAISignalScannerBackgroundLoopDown",
+    "SignalAISignalScannerTickFailure",
+    "SignalAISignalScannerTickStale",
+    "SignalAITelegramSignalDispatcherDown",
+    "SignalAITelegramSignalDispatcherTickFailure",
+    "SignalAITelegramSignalDispatcherTickStale",
+    "SignalAITelegramSignalOutboxFailed",
+    "SignalAITelegramSignalOutboxBacklog",
+    "SignalAITelegramSignalOutboxStale",
+)
+
+for alert_name in signal_pipeline_alerts:
+    assert (
+        f"      - alert: {alert_name}"
+        in signal_pipeline_rules
+    ), alert_name
+
+assert (
+    signal_pipeline_rules.count(
+        "      - alert: "
+    )
+    == 10
+)
+
+signal_pipeline_dashboard = json.loads(
+    (
+        ROOT
+        / "monitoring/grafana/dashboards/"
+        "signalai-signal-pipeline.json"
+    ).read_text(encoding="utf-8")
+)
+
+assert (
+    signal_pipeline_dashboard["uid"]
+    == "signalai-signal-pipeline"
+)
+assert (
+    signal_pipeline_dashboard["title"]
+    == "SignalAI Signal Pipeline"
+)
+assert (
+    signal_pipeline_dashboard["refresh"]
+    == "5s"
+)
+assert (
+    len(
+        signal_pipeline_dashboard["panels"]
+    )
+    == 15
+)
+
+pipeline_panel_ids = [
+    panel["id"]
+    for panel
+    in signal_pipeline_dashboard["panels"]
+]
+
+assert (
+    len(pipeline_panel_ids)
+    == len(set(pipeline_panel_ids))
+)
+
+pipeline_dashboard_text = json.dumps(
+    signal_pipeline_dashboard,
+    ensure_ascii=False,
+)
+
+for metric in (
+    "signalai_signal_scanner_",
+    "signalai_telegram_signal_dispatcher_",
+    "signalai_telegram_signal_outbox_",
+    "signalai_trading_signals_trackable",
+    "ALERTS",
+):
+    assert metric in pipeline_dashboard_text, metric
+
+monitoring_docs = (
+    ROOT / "monitoring/README.md"
+).read_text(encoding="utf-8")
+
+for value in (
+    "## Signal Pipeline monitoring",
+    "signalai-signal-pipeline",
+    "/api/v3/signals/runtime/metrics",
+    "SignalAI Signal Pipeline",
+):
+    assert value in monitoring_docs, value
+
+print("Signal Pipeline Prometheus scrape job: OK")
+print("Signal Pipeline Prometheus alerts: 10")
+print("Signal Pipeline Grafana panels: 15")
+print("Signal Pipeline dashboard IDs: unique")
+print("Signal Pipeline monitoring documentation: OK")

@@ -598,3 +598,44 @@ Grafana dashboard UID:
 `signalai-order-reconciliation`.
 
 Мониторинг не отправляет и не отменяет ордера.
+
+
+## Signal Pipeline monitoring
+
+Prometheus собирает метрики Periodic Signal Scanner,
+Telegram Signal Dispatcher и транзакционного Outbox:
+
+    http://api:8000/api/v3/signals/runtime/metrics
+
+Scrape job:
+
+    signalai-signal-pipeline
+
+Alert rules:
+
+    monitoring/prometheus/rules/signal-pipeline-alerts.yml
+
+Контролируются:
+
+- доступность metrics endpoint;
+- работа фонового scanner;
+- ошибки и зависание scanner tick;
+- работа Telegram dispatcher;
+- ошибки и зависание Telegram delivery tick;
+- FAILED-доставки;
+- размер и возраст незавершённого Outbox;
+- количество активных сигналов, отслеживаемых lifecycle tracker.
+
+Grafana dashboard:
+
+    SignalAI Signal Pipeline
+
+Dashboard UID:
+
+    signalai-signal-pipeline
+
+Метрики не содержат symbol, signal ID, текст ошибок,
+Telegram credentials и другие high-cardinality или секретные labels.
+
+Мониторинг не создаёт торговые сигналы, не отправляет тестовые
+Telegram-сообщения и не выполняет торговые операции.

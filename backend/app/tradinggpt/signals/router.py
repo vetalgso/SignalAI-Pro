@@ -7,10 +7,12 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Response,
     status,
 )
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.database.session import get_db
 from app.tradinggpt.facade import tradinggpt
 
@@ -19,6 +21,16 @@ from .generator import (
 )
 from .lifecycle import (
     SignalLifecycleTracker,
+)
+from .runtime_metrics import (
+    PROMETHEUS_CONTENT_TYPE,
+    SignalPipelineMetricsService,
+)
+from .scanner_background import (
+    signal_scanner_background_loop,
+)
+from .telegram_background import (
+    telegram_signal_background_loop,
 )
 from .repository import (
     TradingSignalRepository,
@@ -253,6 +265,38 @@ async def refresh_signal_lifecycle(
 
     return SignalRefreshResponse.model_validate(
         result
+    )
+
+
+@router.get(
+    "/runtime/metrics",
+    response_class=Response,
+)
+def get_signal_runtime_metrics(
+    db: Session = Depends(get_db),
+) -> Response:
+    metrics = SignalPipelineMetricsService(
+        session=db,
+        scanner_enabled=(
+            settings
+            .signal_scanner_background_enabled
+        ),
+        telegram_enabled=(
+            settings.telegram_signal_enabled
+        ),
+        scanner_status_provider=(
+            signal_scanner_background_loop
+            .status
+        ),
+        telegram_status_provider=(
+            telegram_signal_background_loop
+            .status
+        ),
+    ).render()
+
+    return Response(
+        content=metrics,
+        media_type=PROMETHEUS_CONTENT_TYPE,
     )
 
 
