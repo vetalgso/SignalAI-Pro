@@ -31,3 +31,4 @@ __pycache__/
 .vscode/
 .idea/
 .env.production
+/backups/
