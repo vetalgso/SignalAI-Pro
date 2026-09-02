@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -147,6 +147,117 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+
+
+    @model_validator(mode="after")
+    def validate_production_safety(
+        self,
+    ) -> "Settings":
+        environment = (
+            self.environment
+            .strip()
+            .lower()
+        )
+
+        if environment not in {
+            "production",
+            "prod",
+        }:
+            return self
+
+        errors: list[str] = []
+
+        def is_placeholder(
+            value: str,
+        ) -> bool:
+            normalized = value.strip().lower()
+
+            return (
+                not normalized
+                or any(
+                    marker in normalized
+                    for marker in (
+                        "change-me",
+                        "replace",
+                        "placeholder",
+                        "example",
+                    )
+                )
+            )
+
+        if self.debug:
+            errors.append(
+                "DEBUG must be false"
+            )
+
+        if (
+            is_placeholder(
+                self.jwt_secret_key
+            )
+            or len(
+                self.jwt_secret_key
+            ) < 32
+        ):
+            errors.append(
+                "JWT_SECRET_KEY must be "
+                "a strong secret"
+            )
+
+        if (
+            is_placeholder(
+                self.database_url
+            )
+            or "signalai:signalai@" in (
+                self.database_url
+            )
+            or self.database_url.startswith(
+                "sqlite"
+            )
+        ):
+            errors.append(
+                "DATABASE_URL must use "
+                "production credentials"
+            )
+
+        encryption_key = (
+            self
+            .exchange_credentials_encryption_key
+        )
+
+        if (
+            is_placeholder(encryption_key)
+            or len(encryption_key) < 32
+        ):
+            errors.append(
+                "EXCHANGE_CREDENTIALS_"
+                "ENCRYPTION_KEY must be set"
+            )
+
+        if (
+            self.telegram_signal_enabled
+            and (
+                not self
+                .telegram_signal_bot_token
+                .strip()
+                or not self
+                .telegram_signal_chat_id
+                .strip()
+            )
+        ):
+            errors.append(
+                "Telegram destination is "
+                "required when publisher "
+                "is enabled"
+            )
+
+        if errors:
+            raise ValueError(
+                "Unsafe production "
+                "configuration: "
+                + "; ".join(errors)
+            )
+
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",
