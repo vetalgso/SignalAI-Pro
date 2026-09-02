@@ -8,6 +8,7 @@ from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import (
     Session,
     sessionmaker,
@@ -235,6 +236,67 @@ def test_repository_claims_due_delivery(
     assert delivery.status == DELIVERY_PROCESSING
     assert delivery.attempt_count == 1
     assert delivery.locked_at == NOW
+
+
+class EmptyRows:
+    def all(self) -> list[object]:
+        return []
+
+
+class CapturingSession:
+    def __init__(self) -> None:
+        self.statement: object | None = None
+
+    def execute(
+        self,
+        statement: object,
+    ) -> EmptyRows:
+        self.statement = statement
+        return EmptyRows()
+
+    def commit(self) -> None:
+        raise AssertionError(
+            "Empty claim must not commit."
+        )
+
+
+def test_claim_query_locks_only_delivery_table(
+) -> None:
+    session = CapturingSession()
+    repository = TelegramDeliveryRepository(
+        session
+    )
+
+    jobs = repository.claim_due(
+        now=NOW,
+        limit=10,
+        max_attempts=5,
+    )
+
+    assert jobs == []
+    assert session.statement is not None
+
+    sql = str(
+        session.statement.compile(
+            dialect=postgresql.dialect(),
+        )
+    )
+    normalized = " ".join(sql.split())
+
+    assert (
+        "FOR UPDATE OF "
+        "telegram_signal_deliveries "
+        "SKIP LOCKED"
+        in normalized
+    )
+    assert (
+        "FOR UPDATE OF trading_signal_events"
+        not in normalized
+    )
+    assert (
+        "FOR UPDATE OF trading_signals"
+        not in normalized
+    )
 
 
 def test_dispatcher_marks_sent(

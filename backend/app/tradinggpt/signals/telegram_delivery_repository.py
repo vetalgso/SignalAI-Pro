@@ -225,7 +225,8 @@ class TelegramDeliveryRepository:
             )
             .limit(limit)
             .with_for_update(
-                skip_locked=True
+                of=TelegramSignalDelivery,
+                skip_locked=True,
             )
         )
 
