@@ -84,7 +84,12 @@ jobs:
 
       - name: Validate Prometheus configuration
         run: |
-          docker run --rm             -v "$PWD/monitoring/prometheus:/etc/prometheus:ro"             prom/prometheus:v3.13.1             promtool check config             /etc/prometheus/prometheus.yml
+          docker run --rm \
+            --entrypoint promtool \
+            -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v3.13.1 \
+            check config \
+            /etc/prometheus/prometheus.yml
 
       - name: Validate production Compose
         run: |
