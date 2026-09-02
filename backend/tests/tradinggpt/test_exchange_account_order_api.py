@@ -76,6 +76,15 @@ def test_preview_uses_authenticated_account(
         "build_service",
         lambda _: service,
     )
+    monkeypatch.setattr(
+        exchange_account_router,
+        "build_order_risk_policy",
+        lambda: OrderRiskPolicy.configured(
+            execution_enabled=True,
+            max_order_notional=100.0,
+            allowed_symbols="BTCUSDT",
+        ),
+    )
 
     install_auth_overrides(db)
 
