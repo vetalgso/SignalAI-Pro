@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic import Field, model_validator
@@ -260,7 +261,11 @@ class Settings(BaseSettings):
         return self
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            ".env"
+            if os.access(".env", os.R_OK)
+            else None
+        ),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
