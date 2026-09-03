@@ -67,6 +67,24 @@ class FakeService:
         self.repository = repository
 
 
+class FakeDiscoveryRun:
+    id = 701
+
+
+class FakeDiscoveryRepository:
+    calls: list[dict[str, object]] = []
+
+    def __init__(self, session: object) -> None:
+        self.session = session
+
+    def record_completed_scan(
+        self,
+        **values: object,
+    ) -> FakeDiscoveryRun:
+        self.calls.append(values)
+        return FakeDiscoveryRun()
+
+
 class FakeGenerator:
     calls: list[dict[str, object]] = []
 
@@ -116,6 +134,7 @@ def reset_fakes(
 ) -> None:
     FakeRepository.trackable = []
     FakeGenerator.calls = []
+    FakeDiscoveryRepository.calls = []
 
     monkeypatch.setattr(
         scanner_background,
@@ -131,6 +150,11 @@ def reset_fakes(
         scanner_background,
         "TradingSignalGenerator",
         FakeGenerator,
+    )
+    monkeypatch.setattr(
+        scanner_background,
+        "SignalDiscoveryRepository",
+        FakeDiscoveryRepository,
     )
 
 
@@ -282,6 +306,8 @@ def test_scans_top_ten_and_persists(
     assert result["created_signal_ids"] == [
         101,
     ]
+    assert result["discovery_run_id"] == 701
+    assert len(FakeDiscoveryRepository.calls) == 1
     assert (
         FakeGenerator.calls[0][
             "min_confidence"

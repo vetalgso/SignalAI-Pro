@@ -165,6 +165,18 @@ def test_evaluates_full_candidate_funnel(
     }
     assert result["universe_source"] == "BINANCE_24H_QUOTE_VOLUME"
     assert result["universe_assets"] == ["BTC", "ETH"]
+    assert result["evaluations"] == [
+        {
+            "symbol": "BTCUSDT",
+            "outcome": "CREATED",
+            "signal_id": result["created"][0].id,
+        },
+        {
+            "symbol": "ETHUSDT",
+            "outcome": "REJECTED",
+            "reason": "NO_ACTIONABLE_TECHNICAL_SIGNAL",
+        },
+    ]
 
 
 def test_persists_long_scanner_signal(
@@ -257,6 +269,13 @@ def test_duplicate_scan_is_counted(
     assert first["created_count"] == 1
     assert second["created_count"] == 0
     assert second["duplicate_count"] == 1
+    assert second["evaluations"] == [
+        {
+            "symbol": "BTCUSDT",
+            "outcome": "DUPLICATE",
+            "signal_id": first["created"][0].id,
+        }
+    ]
     assert (
         second["duplicates"][0][
             "existing_signal_id"

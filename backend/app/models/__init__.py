@@ -2,6 +2,10 @@ from app.models.exchange_account import ExchangeAccount
 from app.models.order_reconciliation_batch import (
     OrderReconciliationBatch,
 )
+from app.models.signal_discovery import (
+    SignalScanCandidate,
+    SignalScanRun,
+)
 from app.models.trading_signal import (
     TelegramSignalDelivery,
     TradingSignal,
@@ -20,6 +24,8 @@ from app.models.user import User
 __all__ = [
     "ExchangeAccount",
     "OrderReconciliationBatch",
+    "SignalScanCandidate",
+    "SignalScanRun",
     "TelegramSignalDelivery",
     "TradingSignal",
     "TradingSignalEvent",

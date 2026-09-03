@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.core.config import settings
@@ -17,6 +18,7 @@ from app.tradinggpt.scheduler.distributed_lock import (
 )
 
 from .generator import TradingSignalGenerator
+from .discovery_repository import SignalDiscoveryRepository
 from .repository import TradingSignalRepository
 from .service import TradingSignalService
 
@@ -83,6 +85,7 @@ def run_signal_scanner_background_tick(
                 ),
             }
 
+        scan_started_at = datetime.now(timezone.utc)
         scan_result = asyncio.run(
             tradinggpt.scan_market(
                 assets=None,
@@ -141,6 +144,7 @@ def run_signal_scanner_background_tick(
 
             eligible = []
             active_signal_skips = 0
+            suppressed_symbols: set[str] = set()
             actionable_symbols = {
                 str(item.get("symbol", "")).upper()
                 for item in raw_opportunities
@@ -169,6 +173,7 @@ def run_signal_scanner_background_tick(
                     and symbol in actionable_symbols
                 ):
                     active_signal_skips += 1
+                    suppressed_symbols.add(symbol)
                     continue
 
                 eligible.append(opportunity)
@@ -210,6 +215,27 @@ def run_signal_scanner_background_tick(
                 for signal
                 in result["created"]
             ]
+
+            discovery_run = SignalDiscoveryRepository(
+                session
+            ).record_completed_scan(
+                scan_result=scan_result,
+                persistence_result=result,
+                risk_level=risk_level,
+                minimum_confidence=Decimal(
+                    str(
+                        settings
+                        .signal_scanner_min_confidence
+                    )
+                ),
+                requested_limit=(
+                    settings
+                    .signal_scanner_market_limit
+                ),
+                started_at=scan_started_at,
+                completed_at=datetime.now(timezone.utc),
+                suppressed_symbols=suppressed_symbols,
+            )
 
         return {
             "action": "COMPLETED",
@@ -260,6 +286,9 @@ def run_signal_scanner_background_tick(
             ),
             "created_signal_ids": (
                 created_signal_ids
+            ),
+            "discovery_run_id": int(
+                discovery_run.id
             ),
             "rejection_reasons": {
                 **result.get("rejection_reasons", {}),

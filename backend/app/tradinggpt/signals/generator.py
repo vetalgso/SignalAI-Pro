@@ -75,6 +75,9 @@ class TradingSignalGenerator:
         skipped: list[
             dict[str, str]
         ] = []
+        evaluations: list[
+            dict[str, object]
+        ] = []
 
         generated_at = utc_now()
 
@@ -86,6 +89,13 @@ class TradingSignalGenerator:
                         "reason": (
                             "INVALID_SCANNER_RESULT"
                         ),
+                    }
+                )
+                evaluations.append(
+                    {
+                        "symbol": "UNKNOWN",
+                        "outcome": "REJECTED",
+                        "reason": "INVALID_SCANNER_RESULT",
                     }
                 )
                 continue
@@ -117,6 +127,16 @@ class TradingSignalGenerator:
                         ),
                     }
                 )
+                evaluations.append(
+                    {
+                        "symbol": symbol,
+                        "outcome": "REJECTED",
+                        "reason": (
+                            reason
+                            or "NOT_ACTIONABLE"
+                        ),
+                    }
+                )
                 continue
 
             try:
@@ -132,9 +152,25 @@ class TradingSignalGenerator:
                         ),
                     }
                 )
+                evaluations.append(
+                    {
+                        "symbol": symbol,
+                        "outcome": "DUPLICATE",
+                        "signal_id": (
+                            exc.existing_signal_id
+                        ),
+                    }
+                )
                 continue
 
             created.append(signal)
+            evaluations.append(
+                {
+                    "symbol": symbol,
+                    "outcome": "CREATED",
+                    "signal_id": int(signal.id),
+                }
+            )
 
         return {
             "universe_source": scan_result.get(
@@ -185,6 +221,7 @@ class TradingSignalGenerator:
                 )
             ),
             "rejection_reasons": self._count_rejections(skipped),
+            "evaluations": evaluations,
         }
 
     @staticmethod
