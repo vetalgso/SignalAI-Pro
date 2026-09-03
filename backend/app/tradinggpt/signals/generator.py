@@ -55,8 +55,11 @@ class TradingSignalGenerator:
         min_confidence: Decimal,
     ) -> dict[str, Any]:
         opportunities = scan_result.get(
-            "opportunities",
-            [],
+            "candidates",
+            scan_result.get(
+                "opportunities",
+                [],
+            ),
         )
 
         if not isinstance(
@@ -134,6 +137,14 @@ class TradingSignalGenerator:
             created.append(signal)
 
         return {
+            "universe_source": scan_result.get(
+                "universe_source",
+                "UNKNOWN",
+            ),
+            "universe_assets": scan_result.get(
+                "universe_assets",
+                [],
+            ),
             "scanned_assets": int(
                 scan_result.get(
                     "scanned_assets",
@@ -153,8 +164,12 @@ class TradingSignalGenerator:
                 )
             ),
             "opportunities_found": len(
-                opportunities
+                scan_result.get(
+                    "opportunities",
+                    opportunities,
+                )
             ),
+            "evaluated_candidates": len(opportunities),
             "created_count": len(created),
             "duplicate_count": len(
                 duplicates
@@ -169,7 +184,20 @@ class TradingSignalGenerator:
                     [],
                 )
             ),
+            "rejection_reasons": self._count_rejections(skipped),
         }
+
+    @staticmethod
+    def _count_rejections(
+        skipped: list[dict[str, str]],
+    ) -> dict[str, int]:
+        counts: dict[str, int] = {}
+
+        for item in skipped:
+            reason = item.get("reason", "UNKNOWN")
+            counts[reason] = counts.get(reason, 0) + 1
+
+        return counts
 
     def _build_request(
         self,

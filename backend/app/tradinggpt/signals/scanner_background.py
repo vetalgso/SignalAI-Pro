@@ -116,6 +116,14 @@ def run_signal_scanner_background_tick(
         ):
             raw_opportunities = []
 
+        raw_candidates = scan_result.get(
+            "candidates",
+            raw_opportunities,
+        )
+
+        if not isinstance(raw_candidates, list):
+            raw_candidates = raw_opportunities
+
         with SessionLocal() as session:
             repository = (
                 TradingSignalRepository(
@@ -133,8 +141,13 @@ def run_signal_scanner_background_tick(
 
             eligible = []
             active_signal_skips = 0
+            actionable_symbols = {
+                str(item.get("symbol", "")).upper()
+                for item in raw_opportunities
+                if isinstance(item, dict)
+            }
 
-            for opportunity in raw_opportunities:
+            for opportunity in raw_candidates:
                 if not isinstance(
                     opportunity,
                     dict,
@@ -151,7 +164,10 @@ def run_signal_scanner_background_tick(
                     )
                 ).upper()
 
-                if symbol in active_symbols:
+                if (
+                    symbol in active_symbols
+                    and symbol in actionable_symbols
+                ):
                     active_signal_skips += 1
                     continue
 
@@ -161,8 +177,19 @@ def run_signal_scanner_background_tick(
                 scan_result
             )
             filtered_scan[
-                "opportunities"
+                "candidates"
             ] = eligible
+            filtered_scan[
+                "opportunities"
+            ] = [
+                item
+                for item in raw_opportunities
+                if not (
+                    isinstance(item, dict)
+                    and str(item.get("symbol", "")).upper()
+                    in active_symbols
+                )
+            ]
 
             result = TradingSignalGenerator(
                 TradingSignalService(
@@ -186,6 +213,14 @@ def run_signal_scanner_background_tick(
 
         return {
             "action": "COMPLETED",
+            "universe_source": scan_result.get(
+                "universe_source",
+                "UNKNOWN",
+            ),
+            "universe_assets": scan_result.get(
+                "universe_assets",
+                [],
+            ),
             "scanned_assets": int(
                 scan_result.get(
                     "scanned_assets",
@@ -208,7 +243,7 @@ def run_signal_scanner_background_tick(
                 raw_opportunities
             ),
             "eligible_opportunities": len(
-                eligible
+                filtered_scan["opportunities"]
             ),
             "active_signal_skips": (
                 active_signal_skips
@@ -226,6 +261,14 @@ def run_signal_scanner_background_tick(
             "created_signal_ids": (
                 created_signal_ids
             ),
+            "rejection_reasons": {
+                **result.get("rejection_reasons", {}),
+                **(
+                    {"ACTIVE_SIGNAL": active_signal_skips}
+                    if active_signal_skips
+                    else {}
+                ),
+            },
         }
     finally:
         if acquired:

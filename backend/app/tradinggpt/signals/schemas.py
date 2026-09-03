@@ -405,10 +405,15 @@ class SignalScanSkipped(BaseModel):
 
 
 class SignalScanResponse(BaseModel):
+    universe_source: str = "UNKNOWN"
+    universe_assets: list[str] = Field(
+        default_factory=list,
+    )
     scanned_assets: int
     successful_assets: int
     failed_assets: int
     opportunities_found: int
+    evaluated_candidates: int = 0
 
     created_count: int
     duplicate_count: int
@@ -418,6 +423,9 @@ class SignalScanResponse(BaseModel):
     duplicates: list[SignalScanDuplicate]
     skipped: list[SignalScanSkipped]
     scanner_errors: list[dict[str, str]]
+    rejection_reasons: dict[str, int] = Field(
+        default_factory=dict,
+    )
 
 
 class SignalLifecycleChange(BaseModel):

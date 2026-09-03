@@ -209,6 +209,12 @@ async def scan_and_create_signals(
         raise
 
     return SignalScanResponse(
+        universe_source=result[
+            "universe_source"
+        ],
+        universe_assets=result[
+            "universe_assets"
+        ],
         scanned_assets=(
             result["scanned_assets"]
         ),
@@ -223,6 +229,9 @@ async def scan_and_create_signals(
                 "opportunities_found"
             ]
         ),
+        evaluated_candidates=result[
+            "evaluated_candidates"
+        ],
         created_count=(
             result["created_count"]
         ),
@@ -243,6 +252,9 @@ async def scan_and_create_signals(
         scanner_errors=(
             result["scanner_errors"]
         ),
+        rejection_reasons=result[
+            "rejection_reasons"
+        ],
     )
 
 

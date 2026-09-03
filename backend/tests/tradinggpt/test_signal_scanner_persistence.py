@@ -138,6 +138,35 @@ def scan(
     }
 
 
+def test_evaluates_full_candidate_funnel(
+    db: Session,
+) -> None:
+    actionable = opportunity(symbol="BTCUSDT")
+    waiting = opportunity(symbol="ETHUSDT")
+    waiting["signal_action"] = "WAIT"
+    waiting["recommendation"] = "WAIT"
+
+    scan_result = scan(actionable)
+    scan_result["candidates"] = [actionable, waiting]
+    scan_result["universe_source"] = "BINANCE_24H_QUOTE_VOLUME"
+    scan_result["universe_assets"] = ["BTC", "ETH"]
+
+    result = generator(db).persist_scan(
+        scan_result=scan_result,
+        min_confidence=Decimal("60"),
+    )
+
+    assert result["opportunities_found"] == 1
+    assert result["evaluated_candidates"] == 2
+    assert result["created_count"] == 1
+    assert result["skipped_count"] == 1
+    assert result["rejection_reasons"] == {
+        "NO_ACTIONABLE_TECHNICAL_SIGNAL": 1,
+    }
+    assert result["universe_source"] == "BINANCE_24H_QUOTE_VOLUME"
+    assert result["universe_assets"] == ["BTC", "ETH"]
+
+
 def test_persists_long_scanner_signal(
     db: Session,
 ) -> None:

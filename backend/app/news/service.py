@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -22,7 +23,65 @@ POSITIVE = {"approve", "approval", "adoption", "launch", "upgrade", "partnership
 NEGATIVE = {"hack", "exploit", "lawsuit", "ban", "outflow", "crash", "fraud", "liquidation", "bearish", "breach", "shutdown"}
 
 class NewsService:
+    CACHE_TTL_SECONDS = 60.0
+    _feed_cache: tuple[
+        float,
+        list[dict[str, Any]],
+        list[str],
+    ] | None = None
+    _feed_load_task: asyncio.Task[
+        tuple[list[dict[str, Any]], list[str]]
+    ] | None = None
+
     async def latest(self, limit: int = 50, asset: str | None = None) -> dict[str, Any]:
+        articles, errors = await self._all_articles()
+
+        articles = list(articles)
+
+        if asset:
+            wanted = asset.upper()
+            articles = [a for a in articles if wanted in a["assets"]]
+
+        return {
+            "count": len(articles[:limit]),
+            "partial": bool(errors),
+            "articles": articles[:limit],
+        }
+
+    async def _all_articles(
+        self,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        cached = self.__class__._feed_cache
+        now = time.monotonic()
+
+        if cached is not None and now < cached[0]:
+            return cached[1], cached[2]
+
+        task = self.__class__._feed_load_task
+
+        if task is None or task.done():
+            task = asyncio.create_task(
+                self._fetch_all_articles()
+            )
+            self.__class__._feed_load_task = task
+
+        try:
+            articles, errors = await asyncio.shield(task)
+        finally:
+            if task.done() and self.__class__._feed_load_task is task:
+                self.__class__._feed_load_task = None
+
+        self.__class__._feed_cache = (
+            time.monotonic() + self.CACHE_TTL_SECONDS,
+            articles,
+            errors,
+        )
+
+        return articles, errors
+
+    async def _fetch_all_articles(
+        self,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
         results = await asyncio.gather(*(self._fetch(name, url) for name, url in FEEDS), return_exceptions=True)
         articles: list[dict[str, Any]] = []
         errors: list[str] = []
@@ -33,10 +92,7 @@ class NewsService:
                 articles.extend(result)
         unique = {a["id"]: a for a in articles}
         articles = sorted(unique.values(), key=lambda x: x["published_at"], reverse=True)
-        if asset:
-            wanted = asset.upper()
-            articles = [a for a in articles if wanted in a["assets"]]
-        return {"count": len(articles[:limit]), "partial": bool(errors), "articles": articles[:limit]}
+        return articles, errors
 
     async def _fetch(self, source: str, url: str) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=8, headers={"User-Agent": "SignalAI-Pro/2.0"}, follow_redirects=True) as client:

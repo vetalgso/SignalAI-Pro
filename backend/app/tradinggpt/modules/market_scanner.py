@@ -6,18 +6,14 @@ from typing import Any
 
 from app.tradinggpt.quality_guard import AnalysisQualityGuard
 from app.tradinggpt.scoring import ScoringEngine
+from app.tradinggpt.signals.market_universe import (
+    BinanceLiquidMarketUniverse,
+    FALLBACK_ASSETS,
+)
 
 
-DEFAULT_SCAN_ASSETS = [
-    "BTC",
-    "ETH",
-    "BNB",
-    "SOL",
-    "XRP",
-    "ADA",
-    "DOGE",
-    "AVAX",
-]
+DEFAULT_SCAN_ASSETS = FALLBACK_ASSETS
+MAX_CONCURRENT_ASSET_ANALYSES = 5
 
 
 @dataclass(slots=True)
@@ -76,8 +72,15 @@ class ScannerResult:
 
 
 class CryptoMarketScanner:
-    def __init__(self, crypto_asset_module: Any) -> None:
+    def __init__(
+        self,
+        crypto_asset_module: Any,
+        universe_provider: Any | None = None,
+    ) -> None:
         self.crypto_asset_module = crypto_asset_module
+        self.universe_provider = (
+            universe_provider or BinanceLiquidMarketUniverse()
+        )
 
     async def scan(
         self,
@@ -85,10 +88,35 @@ class CryptoMarketScanner:
         risk_level: str = "medium",
         limit: int = 5,
     ) -> dict[str, Any]:
-        normalized_assets = self._normalize_assets(assets)
+        universe_source = "EXPLICIT"
+        universe_warnings: list[str] = []
+
+        if assets:
+            normalized_assets = self._normalize_assets(assets)
+        else:
+            selection = await self.universe_provider.select(limit=limit)
+            normalized_assets = self._normalize_assets(
+                selection.assets,
+                limit=limit,
+            )
+            universe_source = selection.source
+            universe_warnings = list(selection.warnings)
+
+        semaphore = asyncio.Semaphore(
+            MAX_CONCURRENT_ASSET_ANALYSES
+        )
+
+        async def analyze_bounded(
+            asset: str,
+        ) -> ScannerResult | None:
+            async with semaphore:
+                return await self._analyze_asset(
+                    asset=asset,
+                    risk_level=risk_level,
+                )
 
         tasks = [
-            self._analyze_asset(asset=asset, risk_level=risk_level)
+            analyze_bounded(asset)
             for asset in normalized_assets
         ]
 
@@ -136,6 +164,18 @@ class CryptoMarketScanner:
             }
         ][:limit]
 
+        candidates = [item.to_dict() for item in ranked]
+
+        scanner_rejections: dict[str, int] = {}
+
+        for item in ranked:
+            reason = self._scanner_rejection_reason(item)
+
+            if reason is not None:
+                scanner_rejections[reason] = (
+                    scanner_rejections.get(reason, 0) + 1
+                )
+
         watchlist = [
             item
             for item in ranked
@@ -152,6 +192,9 @@ class CryptoMarketScanner:
         ][:limit]
 
         return {
+            "universe_source": universe_source,
+            "universe_assets": normalized_assets,
+            "universe_warnings": universe_warnings,
             "scanned_assets": len(normalized_assets),
             "successful_assets": len(results),
             "failed_assets": len(errors),
@@ -159,6 +202,9 @@ class CryptoMarketScanner:
                 item.to_dict()
                 for item in opportunities
             ],
+            "candidates": candidates,
+            "candidate_count": len(candidates),
+            "scanner_rejections": scanner_rejections,
             "watchlist": [
                 item.to_dict()
                 for item in watchlist
@@ -325,6 +371,8 @@ class CryptoMarketScanner:
     @staticmethod
     def _normalize_assets(
         assets: list[str] | None,
+        *,
+        limit: int = 100,
     ) -> list[str]:
         source = assets or DEFAULT_SCAN_ASSETS
 
@@ -336,7 +384,28 @@ class CryptoMarketScanner:
             if clean and clean not in normalized:
                 normalized.append(clean)
 
-        return normalized[:20]
+        return normalized[:max(1, min(int(limit), 100))]
+
+    @staticmethod
+    def _scanner_rejection_reason(item: ScannerResult) -> str | None:
+        if item.signal_action not in {"LONG", "SHORT"}:
+            return "NO_ACTIONABLE_TECHNICAL_SIGNAL"
+
+        if item.trade_direction != item.signal_action:
+            return "DIRECTION_CONFLICT"
+
+        if item.recommendation not in {
+            "LONG",
+            "SHORT",
+            "CAUTIOUS_BUY",
+            "CAUTIOUS_SHORT",
+        }:
+            return "RECOMMENDATION_NOT_ACTIONABLE"
+
+        if item.signal_levels is None:
+            return "LEVELS_UNAVAILABLE"
+
+        return None
 
     @staticmethod
     def _primary_forecast_direction(

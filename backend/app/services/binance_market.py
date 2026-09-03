@@ -109,6 +109,18 @@ class BinanceMarketService:
         payload = await self._get("/api/v3/ticker/price", {"symbol": symbol})
         return {"symbol": payload["symbol"], "price": payload["price"]}
 
+    async def ticker_24h(self) -> list[dict[str, Any]]:
+        """Return the public 24-hour ticker set used for universe ranking."""
+        payload = await self._get("/api/v3/ticker/24hr")
+
+        if not isinstance(payload, list):
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Binance returned an unexpected 24h ticker format",
+            )
+
+        return [item for item in payload if isinstance(item, dict)]
+
     async def klines(self, symbol: str, interval: str, limit: int) -> list[dict[str, Any]]:
         payload = await self._get(
             "/api/v3/klines",

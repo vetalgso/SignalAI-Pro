@@ -54,9 +54,9 @@ class Settings(BaseSettings):
     )
     signal_scanner_risk_level: str = "medium"
     signal_scanner_market_limit: int = Field(
-        default=10,
+        default=30,
         ge=1,
-        le=20,
+        le=100,
     )
     signal_scanner_min_confidence: float = Field(
         default=60.0,
