@@ -31,14 +31,30 @@ FALLBACK_ASSETS = [
 ]
 
 EXCLUDED_BASE_ASSETS = {
+    # Fiat-backed and synthetic USD assets.
     "USDT",
     "USDC",
+    "USDE",
+    "USDS",
     "FDUSD",
     "TUSD",
     "USDP",
+    "PYUSD",
+    "BUSD",
+    "GUSD",
     "DAI",
+    "FRAX",
+    "GHO",
+    "MIM",
+    "DOLA",
+    "VAI",
+    "UST",
+    "USTC",
+    # EUR-backed assets.
     "EUR",
     "AEUR",
+    "EURC",
+    "EURI",
 }
 
 LEVERAGED_SUFFIXES = (
@@ -141,9 +157,15 @@ class BinanceLiquidMarketUniverse:
     def _is_eligible_asset(asset: str) -> bool:
         normalized = asset.strip().upper()
 
+        looks_usd_pegged = (
+            normalized.startswith("USD")
+            or normalized.endswith("USD")
+        )
+
         return (
             bool(normalized)
             and normalized not in EXCLUDED_BASE_ASSETS
+            and not looks_usd_pegged
             and not any(
                 normalized.endswith(suffix)
                 for suffix in LEVERAGED_SUFFIXES

@@ -81,6 +81,55 @@ def test_selects_liquid_spot_usdt_assets() -> None:
     assert selection.warnings == []
 
 
+def test_excludes_fiat_pegged_assets() -> None:
+    excluded = {
+        "USDT",
+        "USDC",
+        "USDE",
+        "USDS",
+        "USD1",
+        "RLUSD",
+        "FDUSD",
+        "TUSD",
+        "USDP",
+        "PYUSD",
+        "BUSD",
+        "GUSD",
+        "DAI",
+        "FRAX",
+        "GHO",
+        "MIM",
+        "DOLA",
+        "VAI",
+        "UST",
+        "USTC",
+        "EUR",
+        "AEUR",
+        "EURC",
+        "EURI",
+        "BTCUP",
+        "ETHDOWN",
+    }
+
+    for asset in excluded:
+        assert not (
+            BinanceLiquidMarketUniverse
+            ._is_eligible_asset(asset)
+        ), asset
+
+    for asset in (
+        "BTC",
+        "ETH",
+        "SOL",
+        "PAXG",
+        "XAUT",
+    ):
+        assert (
+            BinanceLiquidMarketUniverse
+            ._is_eligible_asset(asset)
+        ), asset
+
+
 def test_uses_bounded_fallback_on_provider_failure() -> None:
     selection = asyncio.run(
         BinanceLiquidMarketUniverse(
