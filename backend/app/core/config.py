@@ -70,6 +70,47 @@ class Settings(BaseSettings):
         le=9223372036854775807,
     )
 
+    signal_ai_review_enabled: bool = False
+    signal_ai_provider: str = "openai"
+    signal_ai_base_url: str = "https://api.openai.com/v1"
+    signal_ai_model: str = "gpt-5-mini"
+    signal_ai_api_key: str = ""
+    signal_ai_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=120,
+    )
+    signal_ai_max_candidates: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+    )
+    signal_ai_min_confidence: float = Field(
+        default=60.0,
+        ge=0,
+        le=100,
+    )
+    signal_ai_min_ranking_score: float = Field(
+        default=65.0,
+        ge=0,
+        le=100,
+    )
+    signal_ai_min_consensus_score: float = Field(
+        default=90.0,
+        ge=0,
+        le=100,
+    )
+    signal_ai_min_timeframe_score: float = Field(
+        default=90.0,
+        ge=0,
+        le=100,
+    )
+    signal_ai_max_quality_penalty: int = Field(
+        default=10,
+        ge=0,
+        le=100,
+    )
+
     scheduler_distributed_lock_enabled: bool = True
     scheduler_advisory_lock_key: int = Field(
         default=2026080320,
@@ -232,6 +273,24 @@ class Settings(BaseSettings):
             errors.append(
                 "EXCHANGE_CREDENTIALS_"
                 "ENCRYPTION_KEY must be set"
+            )
+
+        if (
+            self.signal_ai_review_enabled
+            and (
+                self.signal_ai_provider.strip().lower()
+                != "openai"
+                or is_placeholder(
+                    self.signal_ai_api_key
+                )
+                or not self.signal_ai_api_key.startswith(
+                    "sk-"
+                )
+            )
+        ):
+            errors.append(
+                "A valid SIGNAL_AI_API_KEY is "
+                "required when AI Review is enabled"
             )
 
         if (
