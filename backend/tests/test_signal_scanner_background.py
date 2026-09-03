@@ -451,3 +451,14 @@ def test_main_lifecycle_contract() -> None:
         stop_call_index
         > stop_guard_index
     )
+
+def test_scanner_exposes_ai_review_result() -> None:
+    source = Path(
+        "app/tradinggpt/signals/"
+        "scanner_background.py"
+    ).read_text(encoding="utf-8")
+
+    assert "SignalAIReviewService" in source
+    assert "review_scan_run" in source
+    assert '"ai_review": ai_review_result' in source
+    assert "settings.signal_ai_review_enabled" in source

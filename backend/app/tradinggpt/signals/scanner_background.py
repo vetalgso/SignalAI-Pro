@@ -19,6 +19,7 @@ from app.tradinggpt.scheduler.distributed_lock import (
 
 from .generator import TradingSignalGenerator
 from .discovery_repository import SignalDiscoveryRepository
+from .ai_review_service import SignalAIReviewService
 from .repository import TradingSignalRepository
 from .service import TradingSignalService
 
@@ -237,6 +238,27 @@ def run_signal_scanner_background_tick(
                 suppressed_symbols=suppressed_symbols,
             )
 
+            ai_review_result: dict[str, object] = {
+                "action": "SKIPPED_DISABLED",
+                "run_id": int(discovery_run.id),
+                "eligible_candidates": 0,
+                "selected_candidates": 0,
+                "approved_count": 0,
+                "rejected_count": 0,
+                "failed_count": 0,
+                "results": [],
+            }
+
+            if settings.signal_ai_review_enabled:
+                ai_review_result = (
+                    SignalAIReviewService(
+                        db=session,
+                        settings=settings,
+                    ).review_scan_run(
+                        int(discovery_run.id)
+                    )
+                )
+
         return {
             "action": "COMPLETED",
             "universe_source": scan_result.get(
@@ -290,6 +312,7 @@ def run_signal_scanner_background_tick(
             "discovery_run_id": int(
                 discovery_run.id
             ),
+            "ai_review": ai_review_result,
             "rejection_reasons": {
                 **result.get("rejection_reasons", {}),
                 **(

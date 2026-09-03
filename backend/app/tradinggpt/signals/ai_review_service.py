@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -17,6 +18,7 @@ from app.tradinggpt.signals.ai_reviewer import (
     AIReviewError,
     AIReviewResult,
     OpenAICompatibleSignalReviewer,
+    candidate_ai_eligibility,
 )
 
 
@@ -53,6 +55,87 @@ class SignalAIReviewService:
                 settings
             )
         )
+
+    def review_scan_run(
+        self,
+        run_id: int,
+    ) -> dict[str, Any]:
+        candidates = list(
+            self.db.scalars(
+                select(
+                    SignalScanCandidate
+                )
+                .where(
+                    SignalScanCandidate.run_id
+                    == run_id,
+                    SignalScanCandidate
+                    .rejection_reason
+                    == "RECOMMENDATION_CONFLICT",
+                )
+                .order_by(
+                    SignalScanCandidate
+                    .ranking_score
+                    .desc(),
+                    SignalScanCandidate
+                    .confidence
+                    .desc(),
+                    SignalScanCandidate.id.asc(),
+                )
+            ).all()
+        )
+
+        eligible_ids: list[int] = []
+
+        for candidate in candidates:
+            payload = self._candidate_payload(
+                candidate
+            )
+            eligible, _ = (
+                candidate_ai_eligibility(
+                    payload,
+                    self.settings,
+                )
+            )
+
+            if eligible:
+                eligible_ids.append(candidate.id)
+
+        selected_ids = eligible_ids[
+            : self.settings
+            .signal_ai_max_candidates
+        ]
+
+        results = [
+            self.review_candidate(candidate_id)
+            for candidate_id in selected_ids
+        ]
+
+        return {
+            "action": "COMPLETED",
+            "run_id": run_id,
+            "eligible_candidates": len(
+                eligible_ids
+            ),
+            "selected_candidates": len(
+                selected_ids
+            ),
+            "approved_count": sum(
+                item.get("action")
+                == "APPROVED"
+                for item in results
+            ),
+            "rejected_count": sum(
+                item.get("action")
+                == "REJECTED"
+                for item in results
+            ),
+            "failed_count": sum(
+                item.get("action")
+                == "FAILED"
+                for item in results
+            ),
+            "results": results,
+        }
 
     def review_candidate(
         self,

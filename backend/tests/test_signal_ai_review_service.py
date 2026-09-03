@@ -202,3 +202,53 @@ def test_candidate_snapshot_is_normalized() -> None:
     assert payload["ranking_score"] == 70.22
     assert payload["signal_action"] == "LONG"
     assert payload["trade_direction"] == "LONG"
+
+def test_scan_run_reviews_eligible_candidates() -> None:
+    db = session()
+    item = candidate(db)
+    reviewer = ApprovingReviewer()
+    service = SignalAIReviewService(
+        db=db,
+        settings=settings(),
+        reviewer=reviewer,
+    )
+
+    result = service.review_scan_run(
+        item.run_id
+    )
+
+    assert result["action"] == "COMPLETED"
+    assert result["eligible_candidates"] == 1
+    assert result["selected_candidates"] == 1
+    assert result["approved_count"] == 1
+    assert result["rejected_count"] == 0
+    assert result["failed_count"] == 0
+    assert reviewer.calls == 1
+
+
+def test_scan_run_skips_stale_candidate() -> None:
+    from datetime import timedelta
+
+    db = session()
+    item = candidate(db)
+    item.created_at = (
+        datetime.now(timezone.utc)
+        - timedelta(minutes=10)
+    )
+    db.commit()
+
+    reviewer = ApprovingReviewer()
+    service = SignalAIReviewService(
+        db=db,
+        settings=settings(),
+        reviewer=reviewer,
+    )
+
+    result = service.review_scan_run(
+        item.run_id
+    )
+
+    assert result["eligible_candidates"] == 0
+    assert result["selected_candidates"] == 0
+    assert result["approved_count"] == 0
+    assert reviewer.calls == 0
