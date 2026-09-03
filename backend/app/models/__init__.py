@@ -39,3 +39,4 @@ __all__ = [
     "TradingOrder",
     "User",
 ]
+from app.models.signal_ai_review import SignalAIReview
