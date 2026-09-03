@@ -49,6 +49,10 @@ def ai_status() -> dict[str, object]:
             "maximum_quality_penalty": (
                 settings.signal_ai_max_quality_penalty
             ),
+            "maximum_candidate_age_seconds": (
+                settings
+                .signal_ai_max_candidate_age_seconds
+            ),
         },
         "message": (
             "AI review is active."

@@ -38,6 +38,7 @@ def candidate(**updates):
         "consensus_score": 100,
         "timeframe_consensus_score": 100,
         "quality_penalty": 5,
+        "candidate_age_seconds": 1,
         "risk": "high",
         "signal_levels": {
             "entry": "714.24",
@@ -80,6 +81,10 @@ def test_strong_near_miss_is_eligible() -> None:
         (
             {"quality_penalty": 11},
             "EXCESSIVE_QUALITY_PENALTY",
+        ),
+        (
+            {"candidate_age_seconds": 301},
+            "STALE_CANDIDATE",
         ),
         (
             {"trade_direction": "SHORT"},
@@ -138,7 +143,9 @@ def test_approved_matching_direction() -> None:
                                     "rationale": (
                                         "Aligned evidence."
                                     ),
-                                    "risk_flags": [],
+                                    "risk_flags": [
+                                        "UNCONFIRMED_NEWS"
+                                    ],
                                 }
                             )
                         }
@@ -219,3 +226,18 @@ def test_transport_failure_is_sanitized() -> None:
         asyncio.run(
             reviewer.review(candidate())
         )
+
+def test_blocking_risk_flag_is_known() -> None:
+    from app.tradinggpt.signals.ai_reviewer import (
+        BLOCKING_AI_RISK_FLAGS,
+    )
+
+    assert "STALE_MARKET_DATA" in (
+        BLOCKING_AI_RISK_FLAGS
+    )
+    assert "INVALID_LEVELS" in (
+        BLOCKING_AI_RISK_FLAGS
+    )
+    assert "UNCONFIRMED_NEWS" not in (
+        BLOCKING_AI_RISK_FLAGS
+    )

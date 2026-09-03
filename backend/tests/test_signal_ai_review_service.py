@@ -195,6 +195,9 @@ def test_candidate_snapshot_is_normalized() -> None:
     )
 
     assert payload["candidate_id"] == item.id
+    assert 0 <= payload[
+        "candidate_age_seconds"
+    ] < 10
     assert payload["confidence"] == 67
     assert payload["ranking_score"] == 70.22
     assert payload["signal_action"] == "LONG"

@@ -14,13 +14,25 @@ class AIReviewError(RuntimeError):
     """Safe AI Review failure without credential disclosure."""
 
 
+BLOCKING_AI_RISK_FLAGS = frozenset(
+    {
+        "DIRECTION_CONFLICT",
+        "EXTREME_VOLATILITY",
+        "INSUFFICIENT_DATA",
+        "INVALID_LEVELS",
+        "MARKET_MANIPULATION_RISK",
+        "STALE_MARKET_DATA",
+    }
+)
+
+
 class AIReviewVerdict(BaseModel):
     verdict: Literal["APPROVE", "REJECT"]
     direction: Literal["LONG", "SHORT"]
     confidence: int = Field(ge=0, le=100)
     rationale: str = Field(
         min_length=1,
-        max_length=600,
+        max_length=400,
     )
     risk_flags: list[str] = Field(
         default_factory=list,
@@ -102,6 +114,11 @@ def candidate_ai_eligibility(
         "consensus_score": consensus,
         "timeframe_consensus_score": timeframe,
         "quality_penalty": quality_penalty,
+        "candidate_age_seconds": decimal_value(
+            candidate.get(
+                "candidate_age_seconds"
+            )
+        ),
     }
 
     if any(
@@ -140,6 +157,19 @@ def candidate_ai_eligibility(
         str(settings.signal_ai_max_quality_penalty)
     ):
         return False, "EXCESSIVE_QUALITY_PENALTY"
+
+    candidate_age = required[
+        "candidate_age_seconds"
+    ]
+    assert candidate_age is not None
+
+    if candidate_age > Decimal(
+        str(
+            settings
+            .signal_ai_max_candidate_age_seconds
+        )
+    ):
+        return False, "STALE_CANDIDATE"
 
     levels = candidate.get("signal_levels")
 
@@ -318,6 +348,22 @@ class OpenAICompatibleSignalReviewer:
                 verdict=verdict,
             )
 
+        normalized_risk_flags = {
+            str(flag).strip().upper()
+            for flag in verdict.risk_flags
+        }
+
+        if (
+            normalized_risk_flags
+            & BLOCKING_AI_RISK_FLAGS
+        ):
+            return AIReviewResult(
+                eligible=True,
+                approved=False,
+                reason="AI_BLOCKING_RISK_FLAG",
+                verdict=verdict,
+            )
+
         return AIReviewResult(
             eligible=True,
             approved=True,
@@ -337,7 +383,10 @@ class OpenAICompatibleSignalReviewer:
             "Reject when evidence is insufficient, "
             "contradictory, stale, or risk is excessive. "
             "Do not execute trades and do not suggest "
-            "position size. Return only schema-valid JSON."
+            "position size. Explain the verdict in "
+            "one or two complete sentences no longer "
+            "than 350 characters. Return only "
+            "schema-valid JSON."
         )
 
         return {
@@ -388,7 +437,7 @@ class OpenAICompatibleSignalReviewer:
                             "rationale": {
                                 "type": "string",
                                 "minLength": 1,
-                                "maxLength": 600,
+                                "maxLength": 400,
                             },
                             "risk_flags": {
                                 "type": "array",

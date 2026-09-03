@@ -44,6 +44,10 @@ def test_ai_review_policy_is_bounded() -> None:
     assert settings.signal_ai_min_consensus_score == 90
     assert settings.signal_ai_min_timeframe_score == 90
     assert settings.signal_ai_max_quality_penalty == 10
+    assert (
+        settings.signal_ai_max_candidate_age_seconds
+        == 300
+    )
 
 
 def test_ai_status_never_returns_api_key() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
@@ -158,9 +159,27 @@ class SignalAIReviewService:
             else {}
         )
 
+        created_at = candidate.created_at
+
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(
+                tzinfo=timezone.utc
+            )
+
+        candidate_age_seconds = max(
+            0.0,
+            (
+                datetime.now(timezone.utc)
+                - created_at
+            ).total_seconds(),
+        )
+
         snapshot.update(
             {
                 "candidate_id": candidate.id,
+                "candidate_age_seconds": (
+                    candidate_age_seconds
+                ),
                 "rejection_reason": (
                     candidate.rejection_reason
                 ),

@@ -110,6 +110,11 @@ class Settings(BaseSettings):
         ge=0,
         le=100,
     )
+    signal_ai_max_candidate_age_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=3600,
+    )
 
     scheduler_distributed_lock_enabled: bool = True
     scheduler_advisory_lock_key: int = Field(
