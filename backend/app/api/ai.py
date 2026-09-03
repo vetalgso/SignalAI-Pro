@@ -34,8 +34,12 @@ def ai_status() -> dict[str, object]:
             "max_candidates": (
                 settings.signal_ai_max_candidates
             ),
-            "minimum_confidence": (
+            "minimum_candidate_confidence": (
                 settings.signal_ai_min_confidence
+            ),
+            "minimum_verdict_confidence": (
+                settings
+                .signal_ai_min_verdict_confidence
             ),
             "minimum_ranking_score": (
                 settings.signal_ai_min_ranking_score

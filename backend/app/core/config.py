@@ -90,6 +90,11 @@ class Settings(BaseSettings):
         ge=0,
         le=100,
     )
+    signal_ai_min_verdict_confidence: float = Field(
+        default=60.0,
+        ge=0,
+        le=100,
+    )
     signal_ai_min_ranking_score: float = Field(
         default=65.0,
         ge=0,

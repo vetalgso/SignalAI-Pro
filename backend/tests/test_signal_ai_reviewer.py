@@ -241,3 +241,22 @@ def test_blocking_risk_flag_is_known() -> None:
     assert "UNCONFIRMED_NEWS" not in (
         BLOCKING_AI_RISK_FLAGS
     )
+
+def test_candidate_and_verdict_thresholds_are_separate() -> None:
+    configured = settings(
+        signal_ai_min_confidence=45,
+        signal_ai_min_verdict_confidence=60,
+    )
+
+    eligible, reason = candidate_ai_eligibility(
+        candidate(confidence=45),
+        configured,
+    )
+
+    assert eligible is True
+    assert reason == "ELIGIBLE"
+    assert configured.signal_ai_min_confidence == 45
+    assert (
+        configured.signal_ai_min_verdict_confidence
+        == 60
+    )

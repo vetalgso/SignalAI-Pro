@@ -339,7 +339,8 @@ class OpenAICompatibleSignalReviewer:
             )
 
         if verdict.confidence < int(
-            self.settings.signal_ai_min_confidence
+            self.settings
+            .signal_ai_min_verdict_confidence
         ):
             return AIReviewResult(
                 eligible=True,

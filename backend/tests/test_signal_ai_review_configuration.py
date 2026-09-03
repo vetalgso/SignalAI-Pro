@@ -1,3 +1,4 @@
+import os
 from importlib.util import (
     module_from_spec,
     spec_from_file_location,
@@ -27,7 +28,16 @@ def load_ai_status():
 ai_status = load_ai_status()
 
 
-def test_ai_review_is_disabled_by_default() -> None:
+def test_ai_review_is_disabled_by_default(
+    monkeypatch,
+) -> None:
+    for name in tuple(os.environ):
+        if name.startswith("SIGNAL_AI_"):
+            monkeypatch.delenv(
+                name,
+                raising=False,
+            )
+
     settings = Settings(_env_file=None)
 
     assert settings.signal_ai_review_enabled is False
@@ -40,6 +50,10 @@ def test_ai_review_policy_is_bounded() -> None:
     settings = Settings(_env_file=None)
 
     assert settings.signal_ai_min_confidence == 60
+    assert (
+        settings.signal_ai_min_verdict_confidence
+        == 60
+    )
     assert settings.signal_ai_min_ranking_score == 65
     assert settings.signal_ai_min_consensus_score == 90
     assert settings.signal_ai_min_timeframe_score == 90

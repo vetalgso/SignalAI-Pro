@@ -195,6 +195,11 @@ def configure_enabled(
         "signal_scanner_advisory_lock_key",
         2026082801,
     )
+    monkeypatch.setattr(
+        scanner_background.settings,
+        "signal_ai_review_enabled",
+        False,
+    )
 
 
 def test_disabled_tick_does_not_scan(
