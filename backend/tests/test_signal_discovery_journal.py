@@ -105,12 +105,33 @@ def test_records_complete_candidate_funnel() -> None:
             "ETHUSDT",
             "SOLUSDT",
         ]
-        outcomes = {item.symbol: item.outcome for item in candidates}
+        outcomes = {
+            item.symbol: item.outcome
+            for item in candidates
+        }
         assert outcomes == {
             "BTCUSDT": "CREATED",
             "ETHUSDT": "REJECTED",
             "SOLUSDT": "ANALYSIS_FAILED",
         }
+
+        btc = next(
+            item
+            for item in candidates
+            if item.symbol == "BTCUSDT"
+        )
+        eth = next(
+            item
+            for item in candidates
+            if item.symbol == "ETHUSDT"
+        )
+
+        assert btc.confidence == Decimal("78")
+        assert btc.ranking_score == Decimal("81.5")
+        assert eth.confidence == Decimal("55")
+        assert eth.ranking_score == Decimal("62")
+        assert btc.snapshot["confidence"] == 78
+        assert btc.snapshot["ranking_score"] == 81.5
 
 
 def test_records_active_signal_suppression() -> None:

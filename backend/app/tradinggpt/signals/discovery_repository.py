@@ -17,15 +17,16 @@ def _decimal_or_none(value: object) -> Decimal | None:
     if value is None:
         return None
 
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
 
 def _json_safe(value: object) -> Any:
     return json.loads(
         json.dumps(value, default=str)
     )
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, TypeError, ValueError):
-        return None
 
 
 class SignalDiscoveryRepository:
