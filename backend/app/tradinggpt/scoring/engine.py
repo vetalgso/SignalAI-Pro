@@ -352,9 +352,9 @@ class ScoringEngine:
             15m, 1H, 4H, 1D
 
         timeframe_consensus_score:
-            100 = all directional horizons agree
+            100 = all supported horizons match the trade
             50 = neutral or insufficient evidence
-            0 = equally split directional conflict
+            0 = all supported horizons oppose the trade
         """
         result: dict[str, Any] = {
             "directions": {},
@@ -382,6 +382,7 @@ class ScoringEngine:
         weighted_long = 0.0
         weighted_short = 0.0
         directional_weight = 0.0
+        supported_weight = 0.0
 
         for item in items:
             try:
@@ -411,6 +412,7 @@ class ScoringEngine:
 
             result["directions"][label] = direction
             result["scores"][label] = round(directional_score, 2)
+            supported_weight += weight
 
             if direction == "LONG":
                 weighted_long += weight
@@ -427,15 +429,28 @@ class ScoringEngine:
             )
             return result
 
-        if directional_weight > 0:
-            dominant_weight = max(weighted_long, weighted_short)
-            opposing_weight = min(weighted_long, weighted_short)
+        if supported_weight > 0:
+            if trade_direction == "LONG":
+                matching_weight = weighted_long
+                opposing_weight = weighted_short
+            elif trade_direction == "SHORT":
+                matching_weight = weighted_short
+                opposing_weight = weighted_long
+            else:
+                matching_weight = max(
+                    weighted_long,
+                    weighted_short,
+                )
+                opposing_weight = min(
+                    weighted_long,
+                    weighted_short,
+                )
 
             consensus = (
                 50.0
                 + (
-                    dominant_weight - opposing_weight
-                ) / directional_weight * 50.0
+                    matching_weight - opposing_weight
+                ) / supported_weight * 50.0
             )
 
             result["timeframe_consensus_score"] = round(
