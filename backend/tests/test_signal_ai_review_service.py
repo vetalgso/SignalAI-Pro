@@ -252,3 +252,89 @@ def test_scan_run_skips_stale_candidate() -> None:
     assert result["selected_candidates"] == 0
     assert result["approved_count"] == 0
     assert reviewer.calls == 0
+
+class RecordingPromoter:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def promote(
+        self,
+        *,
+        candidate,
+        review,
+    ):
+        self.calls.append(
+            {
+                "candidate_id": candidate.id,
+                "review_id": review.id,
+            }
+        )
+
+        return {
+            "action": "CREATED",
+            "candidate_id": candidate.id,
+            "review_id": review.id,
+            "signal_id": 901,
+        }
+
+
+def test_approved_review_runs_configured_promoter() -> None:
+    db = session()
+    item = candidate(db)
+    promoter = RecordingPromoter()
+
+    service = SignalAIReviewService(
+        db=db,
+        settings=settings(),
+        reviewer=ApprovingReviewer(),
+        promoter=promoter,
+    )
+
+    result = service.review_candidate(item.id)
+
+    assert result["action"] == "APPROVED"
+    assert result["promotion"]["action"] == "CREATED"
+    assert result["promotion"]["signal_id"] == 901
+    assert promoter.calls == [
+        {
+            "candidate_id": item.id,
+            "review_id": result["review"]["id"],
+        }
+    ]
+
+
+def test_rejected_review_does_not_run_promoter() -> None:
+    db = session()
+    item = candidate(db)
+    promoter = RecordingPromoter()
+
+    class RejectingReviewer:
+        async def review(self, candidate_payload):
+            return AIReviewResult(
+                eligible=True,
+                approved=False,
+                reason="AI_REJECTED",
+                verdict=AIReviewVerdict(
+                    verdict="REJECT",
+                    direction="LONG",
+                    confidence=70,
+                    rationale="Risk is excessive.",
+                    risk_flags=[],
+                ),
+            )
+
+    service = SignalAIReviewService(
+        db=db,
+        settings=settings(),
+        reviewer=RejectingReviewer(),
+        promoter=promoter,
+    )
+
+    result = service.review_candidate(item.id)
+
+    assert result["action"] == "REJECTED"
+    assert result["promotion"] == {
+        "action": "SKIPPED_NOT_APPROVED",
+        "candidate_id": item.id,
+    }
+    assert promoter.calls == []

@@ -14,6 +14,9 @@ from app.models.signal_discovery import (
 from app.tradinggpt.signals.ai_review_repository import (
     SignalAIReviewRepository,
 )
+from app.tradinggpt.signals.ai_signal_promoter import (
+    AISignalPromotionService,
+)
 from app.tradinggpt.signals.ai_reviewer import (
     AIReviewError,
     AIReviewResult,
@@ -37,6 +40,16 @@ class CandidateReviewer(Protocol):
         ...
 
 
+class CandidatePromoter(Protocol):
+    def promote(
+        self,
+        *,
+        candidate: SignalScanCandidate,
+        review: Any,
+    ) -> dict[str, Any]:
+        ...
+
+
 class SignalAIReviewService:
     def __init__(
         self,
@@ -44,6 +57,7 @@ class SignalAIReviewService:
         db: Session,
         settings: Settings,
         reviewer: CandidateReviewer | None = None,
+        promoter: CandidatePromoter | None = None,
     ) -> None:
         self.db = db
         self.settings = settings
@@ -55,6 +69,18 @@ class SignalAIReviewService:
                 settings
             )
         )
+
+        if promoter is not None:
+            self.promoter = promoter
+        elif reviewer is None:
+            self.promoter = (
+                AISignalPromotionService(
+                    db=db,
+                    settings=settings,
+                )
+            )
+        else:
+            self.promoter = None
 
     def review_scan_run(
         self,
@@ -181,6 +207,12 @@ class SignalAIReviewService:
             return {
                 "action": "ALREADY_REVIEWED",
                 "review": review.safe_summary(),
+                "promotion": (
+                    self._promotion_result(
+                        candidate=candidate,
+                        review=review,
+                    )
+                ),
             }
 
         if (
@@ -227,7 +259,45 @@ class SignalAIReviewService:
         return {
             "action": completed.status,
             "review": completed.safe_summary(),
+            "promotion": self._promotion_result(
+                candidate=candidate,
+                review=completed,
+            ),
         }
+
+    def _promotion_result(
+        self,
+        *,
+        candidate: SignalScanCandidate,
+        review: Any,
+    ) -> dict[str, Any]:
+        if review.status != "APPROVED":
+            return {
+                "action": "SKIPPED_NOT_APPROVED",
+                "candidate_id": int(candidate.id),
+            }
+
+        if self.promoter is None:
+            return {
+                "action": "SKIPPED_NOT_CONFIGURED",
+                "candidate_id": int(candidate.id),
+            }
+
+        try:
+            return self.promoter.promote(
+                candidate=candidate,
+                review=review,
+            )
+        except Exception:
+            self.db.rollback()
+
+            return {
+                "action": "FAILED",
+                "candidate_id": int(candidate.id),
+                "reason": (
+                    "PROMOTION_INTERNAL_ERROR"
+                ),
+            }
 
     @staticmethod
     def _candidate_payload(

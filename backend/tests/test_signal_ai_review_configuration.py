@@ -46,7 +46,16 @@ def test_ai_review_is_disabled_by_default(
     assert settings.signal_ai_max_candidates == 3
 
 
-def test_ai_review_policy_is_bounded() -> None:
+def test_ai_review_policy_is_bounded(
+    monkeypatch,
+) -> None:
+    for name in tuple(os.environ):
+        if name.startswith("SIGNAL_AI_"):
+            monkeypatch.delenv(
+                name,
+                raising=False,
+            )
+
     settings = Settings(_env_file=None)
 
     assert settings.signal_ai_min_confidence == 60

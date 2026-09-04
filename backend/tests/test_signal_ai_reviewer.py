@@ -18,6 +18,14 @@ def settings(**updates):
         "_env_file": None,
         "signal_ai_review_enabled": True,
         "signal_ai_api_key": "sk-test-placeholder",
+        "signal_ai_max_candidates": 3,
+        "signal_ai_min_confidence": 60,
+        "signal_ai_min_verdict_confidence": 60,
+        "signal_ai_min_ranking_score": 65,
+        "signal_ai_min_consensus_score": 90,
+        "signal_ai_min_timeframe_score": 90,
+        "signal_ai_max_quality_penalty": 10,
+        "signal_ai_max_candidate_age_seconds": 300,
     }
     values.update(updates)
     return Settings(**values)
