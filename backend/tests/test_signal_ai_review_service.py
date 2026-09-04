@@ -67,7 +67,11 @@ def session() -> Session:
     return Session(engine)
 
 
-def candidate(db: Session) -> SignalScanCandidate:
+def candidate(
+    db: Session,
+    *,
+    risk_level: str = "HIGH",
+) -> SignalScanCandidate:
     now = datetime.now(timezone.utc)
     run = SignalScanRun(
         status="COMPLETED",
@@ -105,7 +109,7 @@ def candidate(db: Session) -> SignalScanCandidate:
         signal_action="LONG",
         trade_direction="LONG",
         confidence=67,
-        risk_level="HIGH",
+        risk_level=risk_level,
         ranking_score=70.22,
         snapshot={
             "score": 78.17,
@@ -205,7 +209,10 @@ def test_candidate_snapshot_is_normalized() -> None:
 
 def test_scan_run_reviews_eligible_candidates() -> None:
     db = session()
-    item = candidate(db)
+    item = candidate(
+        db,
+        risk_level="MEDIUM",
+    )
     reviewer = ApprovingReviewer()
     service = SignalAIReviewService(
         db=db,
@@ -219,6 +226,7 @@ def test_scan_run_reviews_eligible_candidates() -> None:
 
     assert result["action"] == "COMPLETED"
     assert result["eligible_candidates"] == 1
+    assert result["promotion_risk_skips"] == 0
     assert result["selected_candidates"] == 1
     assert result["approved_count"] == 1
     assert result["rejected_count"] == 0
@@ -230,7 +238,10 @@ def test_scan_run_skips_stale_candidate() -> None:
     from datetime import timedelta
 
     db = session()
-    item = candidate(db)
+    item = candidate(
+        db,
+        risk_level="MEDIUM",
+    )
     item.created_at = (
         datetime.now(timezone.utc)
         - timedelta(minutes=10)
@@ -252,6 +263,34 @@ def test_scan_run_skips_stale_candidate() -> None:
     assert result["selected_candidates"] == 0
     assert result["approved_count"] == 0
     assert reviewer.calls == 0
+
+def test_scan_run_does_not_spend_ai_slot_on_high_risk() -> None:
+    db = session()
+    item = candidate(
+        db,
+        risk_level="HIGH",
+    )
+    reviewer = ApprovingReviewer()
+    service = SignalAIReviewService(
+        db=db,
+        settings=settings(),
+        reviewer=reviewer,
+    )
+
+    result = service.review_scan_run(
+        item.run_id
+    )
+
+    assert result["action"] == "COMPLETED"
+    assert result["eligible_candidates"] == 0
+    assert result["promotion_risk_skips"] == 1
+    assert result["selected_candidates"] == 0
+    assert result["approved_count"] == 0
+    assert result["rejected_count"] == 0
+    assert result["failed_count"] == 0
+    assert result["results"] == []
+    assert reviewer.calls == 0
+
 
 class RecordingPromoter:
     def __init__(self) -> None:

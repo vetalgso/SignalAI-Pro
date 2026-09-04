@@ -111,6 +111,7 @@ class SignalAIReviewService:
         )
 
         eligible_ids: list[int] = []
+        promotion_risk_skips = 0
 
         for candidate in candidates:
             payload = self._candidate_payload(
@@ -123,8 +124,18 @@ class SignalAIReviewService:
                 )
             )
 
-            if eligible:
-                eligible_ids.append(candidate.id)
+            if not eligible:
+                continue
+
+            risk_level = str(
+                candidate.risk_level or ""
+            ).strip().upper()
+
+            if risk_level == "HIGH":
+                promotion_risk_skips += 1
+                continue
+
+            eligible_ids.append(candidate.id)
 
         selected_ids = eligible_ids[
             : self.settings
@@ -141,6 +152,9 @@ class SignalAIReviewService:
             "run_id": run_id,
             "eligible_candidates": len(
                 eligible_ids
+            ),
+            "promotion_risk_skips": (
+                promotion_risk_skips
             ),
             "selected_candidates": len(
                 selected_ids
