@@ -445,13 +445,32 @@ class CryptoAssetAnalysisModule:
             return "high"
 
         if signal:
-            warnings = signal["decision"].get("warnings", [])
-
-            volume_ratio = float(
-                signal.get("indicators", {})
-                .get("volume", {})
-                .get("ratio", 1)
+            decision = signal.get("decision")
+            warnings = (
+                decision.get("warnings", [])
+                if isinstance(decision, dict)
+                else []
             )
+
+            indicators = signal.get("indicators")
+            volume = (
+                indicators.get("volume")
+                if isinstance(indicators, dict)
+                else None
+            )
+            raw_ratio = (
+                volume.get("ratio")
+                if isinstance(volume, dict)
+                else None
+            )
+
+            try:
+                volume_ratio = float(raw_ratio)
+            except (TypeError, ValueError):
+                return "high"
+
+            if volume_ratio != volume_ratio:
+                return "high"
 
             if len(warnings) >= 2 or volume_ratio < 0.25:
                 return "high"
