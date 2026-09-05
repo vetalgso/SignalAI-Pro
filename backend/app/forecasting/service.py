@@ -4,8 +4,8 @@ from math import exp, sqrt
 from statistics import mean, pstdev
 from typing import Any
 
-from app.indicators.service import calculate_indicator_snapshot
-from app.services.binance_market import BinanceMarketService
+from app.tradinggpt.data import MarketDataService
+
 
 
 class ForecastService:
@@ -23,8 +23,13 @@ class ForecastService:
         (14_400, "4h", 240),
     )
 
+    def __init__(
+        self,
+        market_data: MarketDataService | None = None,
+    ) -> None:
+        self.market_data = market_data or MarketDataService()
+
     async def forecast(self, symbol: str, horizons: list[int]) -> dict[str, Any]:
-        market = BinanceMarketService()
         grouped: dict[str, tuple[int, list[int]]] = {}
         for horizon in horizons:
             interval, interval_minutes = self._interval_for_horizon(horizon)
@@ -32,21 +37,31 @@ class ForecastService:
                 grouped[interval] = (interval_minutes, [])
             grouped[interval][1].append(horizon)
 
-        candles_by_interval: dict[str, list[dict[str, Any]]] = {}
+        asset = symbol.removesuffix("USDT")
+        snapshots_by_interval = {}
+
         for interval in grouped:
-            candles_by_interval[interval] = await market.klines(symbol, interval, 500)
+            snapshots_by_interval[interval] = (
+                await self.market_data.get_market_snapshot(
+                    asset=asset,
+                    interval=interval,
+                    candle_limit=500,
+                )
+            )
 
         payload: list[dict[str, Any]] = []
         current_price = 0.0
+
         for interval, (interval_minutes, interval_horizons) in grouped.items():
-            candles = candles_by_interval[interval]
+            snapshot = snapshots_by_interval[interval]
+            candles = snapshot.candles
             closes = [float(candle["close"]) for candle in candles]
             volumes = [float(candle["volume"]) for candle in candles]
             if len(closes) < 220:
                 raise ValueError(f"Not enough {interval} candles for forecast")
 
-            indicators = calculate_indicator_snapshot(candles)
-            current = closes[-1]
+            indicators = snapshot.indicators
+            current = float(snapshot.price)
             current_price = current
             returns = [closes[index] / closes[index - 1] - 1.0 for index in range(1, len(closes))]
             bar_volatility = pstdev(returns[-120:]) if len(returns) >= 2 else 0.0

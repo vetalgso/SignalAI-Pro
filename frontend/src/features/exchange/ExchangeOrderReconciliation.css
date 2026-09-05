@@ -1,0 +1,236 @@
+.exchange-order-reconciliation {
+  margin: 16px 0;
+  border: 1px solid #1a4158;
+  border-radius: 12px;
+  background: rgba(5, 21, 31, .76);
+  padding: 15px;
+}
+
+.exchange-order-reconciliation-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 13px;
+}
+
+.exchange-order-reconciliation-header > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.exchange-order-reconciliation-header > div > svg {
+  margin-top: 1px;
+  color: #33b7ff;
+}
+
+.exchange-order-reconciliation-header h3,
+.exchange-order-reconciliation-header p {
+  margin: 0;
+}
+
+.exchange-order-reconciliation-header h3 {
+  color: #dcecf5;
+  font-size: 14px;
+}
+
+.exchange-order-reconciliation-header p {
+  margin-top: 3px;
+  color: #738d9e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.exchange-order-reconciliation-header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #24506a;
+  border-radius: 8px;
+  background: rgba(16, 47, 65, .72);
+  padding: 7px 10px;
+  color: #9dc9df;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.exchange-order-reconciliation-header button:disabled {
+  opacity: .52;
+  cursor: not-allowed;
+}
+
+.exchange-order-reconciliation-warning,
+.exchange-order-reconciliation-error,
+.exchange-order-reconciliation-loading {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 9px;
+  padding: 10px 11px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.exchange-order-reconciliation-warning {
+  border: 1px solid rgba(232, 177, 54, .32);
+  background: rgba(94, 64, 12, .2);
+  color: #e4bd63;
+}
+
+.exchange-order-reconciliation-error {
+  border: 1px solid rgba(245, 90, 90, .3);
+  background: rgba(105, 24, 31, .22);
+  color: #f19696;
+}
+
+.exchange-order-reconciliation-loading {
+  color: #82a1b3;
+}
+
+.exchange-order-reconciliation-state {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: flex-start;
+  gap: 9px;
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+
+.exchange-order-reconciliation-state.healthy {
+  border: 1px solid rgba(45, 196, 129, .3);
+  background: rgba(23, 106, 70, .18);
+  color: #57d9a0;
+}
+
+.exchange-order-reconciliation-state.degraded {
+  border: 1px solid rgba(245, 90, 90, .34);
+  background: rgba(105, 24, 31, .22);
+  color: #f19696;
+}
+
+.exchange-order-reconciliation-state.disabled {
+  border: 1px solid rgba(125, 151, 166, .28);
+  background: rgba(51, 70, 82, .22);
+  color: #93aab7;
+}
+
+.exchange-order-reconciliation-state > div {
+  display: grid;
+  gap: 3px;
+}
+
+.exchange-order-reconciliation-state strong {
+  font-size: 11px;
+}
+
+.exchange-order-reconciliation-state span {
+  color: #8da7b6;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.exchange-order-reconciliation-state small {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.exchange-order-reconciliation-metrics {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.exchange-order-reconciliation-metrics article {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #183b50;
+  border-radius: 9px;
+  background: rgba(10, 32, 45, .72);
+  padding: 9px 10px;
+}
+
+.exchange-order-reconciliation-metrics span {
+  color: #748e9f;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.exchange-order-reconciliation-metrics strong {
+  color: #d6e7f0;
+  font-size: 11px;
+}
+
+.exchange-order-reconciliation-details {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 11px 0 0;
+  overflow: hidden;
+  border: 1px solid #183b50;
+  border-radius: 10px;
+  background: #183b50;
+}
+
+.exchange-order-reconciliation-details > div {
+  min-width: 0;
+  background: rgba(8, 28, 40, .96);
+  padding: 9px 11px;
+}
+
+.exchange-order-reconciliation-details > div:last-child {
+  grid-column: 1 / -1;
+}
+
+.exchange-order-reconciliation-details dt {
+  color: #6f899a;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+.exchange-order-reconciliation-details dd {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: #c7dbe6;
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  .exchange-order-reconciliation-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .exchange-order-reconciliation-header button {
+    justify-content: center;
+  }
+
+  .exchange-order-reconciliation-state {
+    grid-template-columns: auto 1fr;
+  }
+
+  .exchange-order-reconciliation-state small {
+    grid-column: 1 / -1;
+    width: max-content;
+  }
+
+  .exchange-order-reconciliation-metrics,
+  .exchange-order-reconciliation-details {
+    grid-template-columns: 1fr;
+  }
+
+  .exchange-order-reconciliation-details > div:last-child {
+    grid-column: auto;
+  }
+}

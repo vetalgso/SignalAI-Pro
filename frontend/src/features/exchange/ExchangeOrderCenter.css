@@ -1,0 +1,323 @@
+.exchange-order-center {
+  margin-top: 18px;
+  border: 1px solid #18384f;
+  border-radius: 13px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(13, 36, 52, .97),
+      rgba(6, 18, 28, .98)
+    );
+  padding: 18px;
+  box-shadow:
+    0 15px 40px rgba(0, 0, 0, .16);
+}
+
+.exchange-order-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.exchange-order-header > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.exchange-order-header > div > svg {
+  margin-top: 1px;
+  color: #2fb2ff;
+}
+
+.exchange-order-header h3,
+.exchange-order-header p {
+  margin: 0;
+}
+
+.exchange-order-header h3 {
+  color: #dce9f2;
+  font-size: 15px;
+}
+
+.exchange-order-header p {
+  margin-top: 4px;
+  color: #728b9d;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.exchange-order-safe-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  border: 1px solid #245942;
+  border-radius: 20px;
+  background: rgba(31, 145, 91, .12);
+  padding: 5px 9px;
+  color: #72d8a7;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.exchange-order-safety,
+.exchange-order-warning,
+.exchange-order-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  padding: 10px 11px;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.exchange-order-safety {
+  border: 1px solid #20543d;
+  background: rgba(27, 143, 90, .09);
+  color: #72d8a7;
+}
+
+.exchange-order-warning {
+  border: 1px solid #654d22;
+  background: rgba(155, 109, 23, .11);
+  color: #e3bd72;
+}
+
+.exchange-order-error {
+  border: 1px solid #65303a;
+  background: rgba(158, 45, 62, .12);
+  color: #ff969f;
+}
+
+.exchange-order-safety svg,
+.exchange-order-warning svg,
+.exchange-order-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.exchange-order-form {
+  border: 1px solid #17354b;
+  border-radius: 10px;
+  background: rgba(5, 16, 25, .72);
+  padding: 14px;
+}
+
+.exchange-order-fields {
+  display: grid;
+  grid-template-columns:
+    repeat(5, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.exchange-order-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exchange-order-fields label span {
+  color: #8da4b6;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.exchange-order-fields input,
+.exchange-order-fields select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #1b3a52;
+  border-radius: 8px;
+  outline: none;
+  background: #07131e;
+  padding: 10px 11px;
+  color: #d7e4ed;
+  font-size: 12px;
+}
+
+.exchange-order-fields input:focus,
+.exchange-order-fields select:focus {
+  border-color: #248fd0;
+  box-shadow:
+    0 0 0 2px rgba(36, 143, 208, .12);
+}
+
+.exchange-order-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.exchange-order-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 155px;
+  border: 1px solid #218bd0;
+  border-radius: 8px;
+  background: #167ab7;
+  padding: 9px 12px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.exchange-order-actions button.exchange-order-dry-run {
+  border-color: #2a694d;
+  background: #1a704c;
+}
+
+.exchange-order-actions button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+.exchange-order-result,
+.exchange-order-journal {
+  margin-top: 13px;
+  border: 1px solid #20543d;
+  border-radius: 10px;
+  background: rgba(19, 78, 54, .09);
+  padding: 14px;
+}
+
+.exchange-order-result.invalid {
+  border-color: #65303a;
+  background: rgba(158, 45, 62, .08);
+}
+
+.exchange-order-result-title,
+.exchange-order-journal > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.exchange-order-result.valid
+  .exchange-order-result-title > svg,
+.exchange-order-journal > div:first-child > svg {
+  color: #55d493;
+}
+
+.exchange-order-result.invalid
+  .exchange-order-result-title > svg {
+  color: #ff8f99;
+}
+
+.exchange-order-result h4,
+.exchange-order-journal h4 {
+  margin: 0;
+  color: #dce9f2;
+  font-size: 13px;
+}
+
+.exchange-order-result-title span {
+  display: block;
+  margin-top: 2px;
+  color: #7f9bae;
+  font-size: 9px;
+}
+
+.exchange-order-result dl,
+.exchange-order-journal dl {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(120px, 1fr));
+  gap: 9px;
+  margin: 13px 0 0;
+}
+
+.exchange-order-result dl > div,
+.exchange-order-journal dl > div {
+  min-width: 0;
+  border: 1px solid #17354b;
+  border-radius: 8px;
+  background: rgba(4, 15, 23, .64);
+  padding: 9px;
+}
+
+.exchange-order-result dt,
+.exchange-order-journal dt {
+  margin-bottom: 5px;
+  color: #6f8799;
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.exchange-order-result dd,
+.exchange-order-journal dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #d4e4ed;
+  font-size: 11px;
+}
+
+.exchange-order-messages {
+  margin-top: 11px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.exchange-order-messages.warning {
+  background: rgba(155, 109, 23, .11);
+  color: #e3bd72;
+}
+
+.exchange-order-messages.error {
+  background: rgba(158, 45, 62, .12);
+  color: #ff969f;
+}
+
+.exchange-order-messages ul {
+  margin: 5px 0 0;
+  padding-left: 17px;
+}
+
+@media (max-width: 1050px) {
+  .exchange-order-fields {
+    grid-template-columns:
+      repeat(3, minmax(130px, 1fr));
+  }
+
+  .exchange-order-result dl,
+  .exchange-order-journal dl {
+    grid-template-columns:
+      repeat(2, minmax(130px, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .exchange-order-header {
+    flex-direction: column;
+  }
+
+  .exchange-order-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .exchange-order-actions {
+    flex-direction: column;
+  }
+
+  .exchange-order-actions button {
+    width: 100%;
+  }
+
+  .exchange-order-result dl,
+  .exchange-order-journal dl {
+    grid-template-columns: 1fr;
+  }
+}

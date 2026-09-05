@@ -1,0 +1,376 @@
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timezone
+from typing import Any, Protocol
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.config import Settings
+from app.models.signal_discovery import (
+    SignalScanCandidate,
+)
+from app.tradinggpt.signals.ai_review_repository import (
+    SignalAIReviewRepository,
+)
+from app.tradinggpt.signals.ai_signal_promoter import (
+    AISignalPromotionService,
+)
+from app.tradinggpt.signals.ai_reviewer import (
+    AIReviewError,
+    AIReviewResult,
+    OpenAICompatibleSignalReviewer,
+    candidate_ai_eligibility,
+)
+
+
+TERMINAL_REVIEW_STATUSES = {
+    "APPROVED",
+    "REJECTED",
+    "FAILED",
+}
+
+
+class CandidateReviewer(Protocol):
+    async def review(
+        self,
+        candidate: dict[str, Any],
+    ) -> AIReviewResult:
+        ...
+
+
+class CandidatePromoter(Protocol):
+    def promote(
+        self,
+        *,
+        candidate: SignalScanCandidate,
+        review: Any,
+    ) -> dict[str, Any]:
+        ...
+
+
+class SignalAIReviewService:
+    def __init__(
+        self,
+        *,
+        db: Session,
+        settings: Settings,
+        reviewer: CandidateReviewer | None = None,
+        promoter: CandidatePromoter | None = None,
+    ) -> None:
+        self.db = db
+        self.settings = settings
+        self.repository = (
+            SignalAIReviewRepository(db)
+        )
+        self.reviewer = reviewer or (
+            OpenAICompatibleSignalReviewer(
+                settings
+            )
+        )
+
+        if promoter is not None:
+            self.promoter = promoter
+        elif reviewer is None:
+            self.promoter = (
+                AISignalPromotionService(
+                    db=db,
+                    settings=settings,
+                )
+            )
+        else:
+            self.promoter = None
+
+    def review_scan_run(
+        self,
+        run_id: int,
+    ) -> dict[str, Any]:
+        candidates = list(
+            self.db.scalars(
+                select(
+                    SignalScanCandidate
+                )
+                .where(
+                    SignalScanCandidate.run_id
+                    == run_id,
+                    SignalScanCandidate
+                    .rejection_reason
+                    == "RECOMMENDATION_CONFLICT",
+                )
+                .order_by(
+                    SignalScanCandidate
+                    .ranking_score
+                    .desc(),
+                    SignalScanCandidate
+                    .confidence
+                    .desc(),
+                    SignalScanCandidate.id.asc(),
+                )
+            ).all()
+        )
+
+        eligible_ids: list[int] = []
+        promotion_risk_skips = 0
+
+        for candidate in candidates:
+            payload = self._candidate_payload(
+                candidate
+            )
+            eligible, _ = (
+                candidate_ai_eligibility(
+                    payload,
+                    self.settings,
+                )
+            )
+
+            if not eligible:
+                continue
+
+            risk_level = str(
+                candidate.risk_level or ""
+            ).strip().upper()
+
+            if risk_level == "HIGH":
+                promotion_risk_skips += 1
+                continue
+
+            eligible_ids.append(candidate.id)
+
+        selected_ids = eligible_ids[
+            : self.settings
+            .signal_ai_max_candidates
+        ]
+
+        results = [
+            self.review_candidate(candidate_id)
+            for candidate_id in selected_ids
+        ]
+
+        return {
+            "action": "COMPLETED",
+            "run_id": run_id,
+            "eligible_candidates": len(
+                eligible_ids
+            ),
+            "promotion_risk_skips": (
+                promotion_risk_skips
+            ),
+            "selected_candidates": len(
+                selected_ids
+            ),
+            "approved_count": sum(
+                item.get("action")
+                == "APPROVED"
+                for item in results
+            ),
+            "rejected_count": sum(
+                item.get("action")
+                == "REJECTED"
+                for item in results
+            ),
+            "failed_count": sum(
+                item.get("action")
+                == "FAILED"
+                for item in results
+            ),
+            "results": results,
+        }
+
+    def review_candidate(
+        self,
+        candidate_id: int,
+    ) -> dict[str, Any]:
+        candidate = self.db.get(
+            SignalScanCandidate,
+            candidate_id,
+        )
+
+        if candidate is None:
+            return {
+                "action": "NOT_FOUND",
+                "candidate_id": candidate_id,
+            }
+
+        payload = self._candidate_payload(
+            candidate
+        )
+
+        review, created = (
+            self.repository.create_pending(
+                candidate_id=candidate.id,
+                provider=(
+                    self.settings
+                    .signal_ai_provider
+                ),
+                model=(
+                    self.settings
+                    .signal_ai_model
+                ),
+                requested_direction=str(
+                    candidate.signal_action or ""
+                ),
+            )
+        )
+
+        if (
+            not created
+            and review.status
+            in TERMINAL_REVIEW_STATUSES
+        ):
+            return {
+                "action": "ALREADY_REVIEWED",
+                "review": review.safe_summary(),
+                "promotion": (
+                    self._promotion_result(
+                        candidate=candidate,
+                        review=review,
+                    )
+                ),
+            }
+
+        if (
+            not created
+            and review.status == "PROCESSING"
+        ):
+            return {
+                "action": "ALREADY_PROCESSING",
+                "review": review.safe_summary(),
+            }
+
+        self.repository.mark_processing(
+            review
+        )
+
+        try:
+            result = asyncio.run(
+                self.reviewer.review(payload)
+            )
+        except AIReviewError:
+            failed = self.repository.fail(
+                review,
+                error_code="PROVIDER_ERROR",
+            )
+            return {
+                "action": "FAILED",
+                "review": failed.safe_summary(),
+            }
+        except Exception:
+            failed = self.repository.fail(
+                review,
+                error_code="INTERNAL_ERROR",
+            )
+            return {
+                "action": "FAILED",
+                "review": failed.safe_summary(),
+            }
+
+        completed = self.repository.complete(
+            review,
+            result,
+        )
+
+        return {
+            "action": completed.status,
+            "review": completed.safe_summary(),
+            "promotion": self._promotion_result(
+                candidate=candidate,
+                review=completed,
+            ),
+        }
+
+    def _promotion_result(
+        self,
+        *,
+        candidate: SignalScanCandidate,
+        review: Any,
+    ) -> dict[str, Any]:
+        if review.status != "APPROVED":
+            return {
+                "action": "SKIPPED_NOT_APPROVED",
+                "candidate_id": int(candidate.id),
+            }
+
+        if self.promoter is None:
+            return {
+                "action": "SKIPPED_NOT_CONFIGURED",
+                "candidate_id": int(candidate.id),
+            }
+
+        try:
+            return self.promoter.promote(
+                candidate=candidate,
+                review=review,
+            )
+        except Exception:
+            self.db.rollback()
+
+            return {
+                "action": "FAILED",
+                "candidate_id": int(candidate.id),
+                "reason": (
+                    "PROMOTION_INTERNAL_ERROR"
+                ),
+            }
+
+    @staticmethod
+    def _candidate_payload(
+        candidate: SignalScanCandidate,
+    ) -> dict[str, Any]:
+        snapshot = (
+            dict(candidate.snapshot)
+            if isinstance(
+                candidate.snapshot,
+                dict,
+            )
+            else {}
+        )
+
+        created_at = candidate.created_at
+
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(
+                tzinfo=timezone.utc
+            )
+
+        candidate_age_seconds = max(
+            0.0,
+            (
+                datetime.now(timezone.utc)
+                - created_at
+            ).total_seconds(),
+        )
+
+        snapshot.update(
+            {
+                "candidate_id": candidate.id,
+                "candidate_age_seconds": (
+                    candidate_age_seconds
+                ),
+                "rejection_reason": (
+                    candidate.rejection_reason
+                ),
+                "symbol": candidate.symbol,
+                "signal_action": (
+                    candidate.signal_action
+                ),
+                "trade_direction": (
+                    candidate.trade_direction
+                ),
+                "confidence": (
+                    float(candidate.confidence)
+                    if candidate.confidence
+                    is not None
+                    else None
+                ),
+                "ranking_score": (
+                    float(candidate.ranking_score)
+                    if candidate.ranking_score
+                    is not None
+                    else None
+                ),
+                "risk": candidate.risk_level,
+            }
+        )
+
+        return snapshot

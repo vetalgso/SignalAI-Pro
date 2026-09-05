@@ -1,0 +1,119 @@
+name: SignalAI CI
+
+on:
+  push:
+    branches:
+      - main
+      - feature/tradinggpt-core-v3
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signalai-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      ENVIRONMENT: test
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg2://signalai:signalai@127.0.0.1:5432/signalai
+      REDIS_URL: redis://127.0.0.1:6379/0
+      JWT_SECRET_KEY: ci-only-jwt-secret-not-used-in-production-000000000000
+      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ci-only-encryption-key-000000000000000000000000
+      SCHEDULER_BACKGROUND_LOOP_ENABLED: "false"
+      SIGNAL_TRACKING_ENABLED: "false"
+      SIGNAL_SCANNER_BACKGROUND_ENABLED: "false"
+      ORDER_RECONCILIATION_BACKGROUND_ENABLED: "false"
+      TESTNET_ORDER_EXECUTION_ENABLED: "false"
+      ENABLE_BINANCE_EXECUTION: "false"
+      ENABLE_REAL_TRADING: "false"
+      TELEGRAM_SIGNAL_ENABLED: "false"
+      TELEGRAM_SIGNAL_BOT_TOKEN: ""
+      TELEGRAM_SIGNAL_CHAT_ID: ""
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Start PostgreSQL and Redis
+        run: |
+          : > backend/.env
+          docker compose up -d --wait db redis
+
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Apply database migrations
+        working-directory: backend
+        run: python -m alembic upgrade head
+
+      - name: Run backend tests
+        working-directory: backend
+        run: python -m pytest -q
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify monitoring configuration
+        run: python monitoring/verify_monitoring_stack.py
+
+      - name: Validate Prometheus configuration
+        run: |
+          docker run --rm \
+            --entrypoint promtool \
+            -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v3.13.1 \
+            check config \
+            /etc/prometheus/prometheus.yml
+
+      - name: Validate production Compose
+        run: |
+          docker compose             --env-file .env.production.example             -f docker-compose.yml             -f docker-compose.prod.yml             --profile monitoring             config --quiet
+
+      - name: Validate production scripts
+        run: |
+          bash -n scripts/production/backup_postgres.sh
+          bash -n scripts/production/verify_postgres_backup.sh
+          bash -n scripts/production/restore_postgres.sh
+
+      - name: Build production API image
+        run: |
+          docker build             -f backend/Dockerfile             -t signalai-pro-api:ci             .
+
+          test "$(
+            docker image inspect               signalai-pro-api:ci               --format '{{.Config.User}}'
+          )" = "signalai"
+
+      - name: Confirm generated files are reproducible
+        run: git diff --exit-code
+
+      - name: Stop CI services
+        if: always()
+        run: |
+          : > backend/.env
+          docker compose down --volumes

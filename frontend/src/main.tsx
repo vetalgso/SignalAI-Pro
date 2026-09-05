@@ -13,22 +13,25 @@ import {
   Settings,
   Star,
   TrendingUp,
+  WalletCards,
 } from 'lucide-react';
+import { ExchangeCenter } from './features/exchange/ExchangeCenter';
+import { SignalCenter } from './features/signals/SignalCenter';
 import './styles.css';
 
 const API = '/api';
 const FORECAST_HORIZONS = [15, 30, 60, 120, 240, 1440, 2880, 7200, 14400];
 
 type Pair = { symbol: string; base_asset: string; quote_asset: string };
-type Page = 'dashboard' | 'markets' | 'signals' | 'future' | 'news' | 'analytics' | 'settings';
+type Page = 'dashboard' | 'markets' | 'signals' | 'portfolio' | 'future' | 'news' | 'analytics' | 'settings';
 type Language = 'ru' | 'en';
 
 const dictionary = {
   ru: {
-    dashboard: 'Обзор', markets: 'Рынки', signals: 'Сигналы', future: 'Будущие сигналы',
+    dashboard: 'Обзор', markets: 'Рынки', signals: 'Сигналы', portfolio: 'Портфель', future: 'Будущие сигналы',
     news: 'Новости', analytics: 'Аналитика', settings: 'Настройки', pair: 'Торговая пара',
     timeframe: 'Таймфрейм', refresh: 'Обновить', current: 'Текущий сигнал',
-    forecast: 'Прогноз движения', latest: 'Последние новости', confidence: 'Уверенность',
+    forecast: 'Прогноз движения', forecastLoading: 'Загрузка прогноза', latest: 'Последние новости', confidence: 'Уверенность',
     search: 'Поиск пары', entry: 'Вход', stop: 'Стоп-лосс', take: 'Тейк-профит',
     minute: 'мин', hour: 'ч', day: 'день', days: 'дня', noNews: 'Нет доступных новостей или источники временно недоступны.',
     sourceImpact: 'влияние', marketOverview: 'Обзор выбранного рынка',
@@ -41,10 +44,10 @@ const dictionary = {
     long: 'ПОКУПКА', short: 'ПРОДАЖА', wait: 'ОЖИДАНИЕ', neutral: 'НЕЙТРАЛЬНО',
   },
   en: {
-    dashboard: 'Dashboard', markets: 'Markets', signals: 'Signals', future: 'Future signals',
+    dashboard: 'Dashboard', markets: 'Markets', signals: 'Signals', portfolio: 'Portfolio', future: 'Future signals',
     news: 'News', analytics: 'Analytics', settings: 'Settings', pair: 'Trading pair',
     timeframe: 'Timeframe', refresh: 'Refresh', current: 'Current signal',
-    forecast: 'Movement forecast', latest: 'Latest news', confidence: 'Confidence',
+    forecast: 'Movement forecast', forecastLoading: 'Loading forecast', latest: 'Latest news', confidence: 'Confidence',
     search: 'Search pair', entry: 'Entry', stop: 'Stop loss', take: 'Take profit',
     minute: 'min', hour: 'h', day: 'day', days: 'days', noNews: 'No news is available or the sources are temporarily unavailable.',
     sourceImpact: 'impact', marketOverview: 'Selected market overview',
@@ -92,12 +95,14 @@ function App() {
   const [loading, setLoading] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const loadRequestRef = useRef(0);
   const t = dictionary[lang];
 
   const navigation = [
     { id: 'dashboard' as Page, icon: LayoutDashboard, label: t.dashboard },
     { id: 'markets' as Page, icon: TrendingUp, label: t.markets },
     { id: 'signals' as Page, icon: Activity, label: t.signals },
+    { id: 'portfolio' as Page, icon: WalletCards, label: t.portfolio },
     { id: 'future' as Page, icon: BarChart3, label: t.future },
     { id: 'news' as Page, icon: Newspaper, label: t.news },
     { id: 'analytics' as Page, icon: Globe2, label: t.analytics },
@@ -112,20 +117,69 @@ function App() {
   }, []);
 
   async function load() {
+    const requestId =
+      loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
+
+    const requestedSymbol = symbol;
+    const requestedInterval = interval;
+
     setLoading(true);
+    setData({});
+    setNews([]);
+
     try {
-      const asset = symbol.replace(/USDT$|USDC$|BUSD$|FDUSD$/, '');
-      const horizons = FORECAST_HORIZONS.join(',');
-      const [klines, signal, forecast, newsPayload] = await Promise.all([
-        fetch(`${API}/v1/market/klines?symbol=${symbol}&interval=${interval}&limit=500`).then((response) => response.json()),
-        fetch(`${API}/v1/signal-engine/analyze?symbol=${symbol}&interval=${interval}&limit=250`).then((response) => response.json()),
-        fetch(`${API}/v2/forecasts/current?symbol=${symbol}&horizons=${horizons}`).then((response) => response.json()),
-        fetch(`${API}/v2/news?limit=20&asset=${asset}`).then((response) => response.json()),
+      const asset = requestedSymbol.replace(
+        /USDT$|USDC$|BUSD$|FDUSD$/,
+        '',
+      );
+      const horizons =
+        FORECAST_HORIZONS.join(',');
+
+      const [
+        klines,
+        signal,
+        forecast,
+        newsPayload,
+      ] = await Promise.all([
+        fetch(
+          `${API}/v1/market/klines?symbol=${requestedSymbol}&interval=${requestedInterval}&limit=500`,
+        ).then((response) => response.json()),
+        fetch(
+          `${API}/v1/signal-engine/analyze?symbol=${requestedSymbol}&interval=${requestedInterval}&limit=250`,
+        ).then((response) => response.json()),
+        fetch(
+          `${API}/v2/forecasts/current?symbol=${requestedSymbol}&horizons=${horizons}`,
+        ).then((response) => response.json()),
+        fetch(
+          `${API}/v2/news?limit=20&asset=${asset}`,
+        ).then((response) => response.json()),
       ]);
-      setData({ k: klines, s: signal, f: forecast });
-      setNews(newsPayload.articles || []);
+
+      if (
+        requestId
+        !== loadRequestRef.current
+      ) {
+        return;
+      }
+
+      setData({
+        symbol: requestedSymbol,
+        interval: requestedInterval,
+        k: klines,
+        s: signal,
+        f: forecast,
+      });
+      setNews(
+        newsPayload.articles || [],
+      );
     } finally {
-      setLoading(false);
+      if (
+        requestId
+        === loadRequestRef.current
+      ) {
+        setLoading(false);
+      }
     }
   }
 
@@ -161,8 +215,29 @@ function App() {
     [pairs, query],
   );
   const action = String(data.s?.action || 'WAIT').toUpperCase();
-  const forecasts = data.f?.forecasts || [];
-  const baseAsset = symbol.replace(/USDT$|USDC$|BUSD$|FDUSD$/, '');
+  const dataMatchesSelection =
+    data.symbol === symbol
+    && data.interval === interval;
+
+  const forecasts = dataMatchesSelection
+    ? data.f?.forecasts || []
+    : [];
+
+  const baseAsset = symbol.replace(
+    /USDT$|USDC$|BUSD$|FDUSD$/,
+    '',
+  );
+
+  const selectedPair = pairs.find(
+    (pair) => pair.symbol === symbol,
+  );
+
+  const pairLabel = selectedPair
+    ? (
+      `${selectedPair.base_asset}`
+      + `/${selectedPair.quote_asset}`
+    )
+    : symbol;
 
   const translateDirection = (value: string) => {
     const key = value.toLowerCase() as keyof typeof t;
@@ -216,17 +291,68 @@ function App() {
   );
 
   const forecastPanel = (
-    <section className="forecasts">
-      <h2>{t.forecast}</h2>
+    <section
+      className="forecasts"
+      aria-busy={loading}
+    >
+      <h2>
+        {t.forecast} · {pairLabel}
+      </h2>
+
       <div className="forecast-grid">
-        {forecasts.map((forecast: any) => (
-          <article key={forecast.horizon_minutes} className={`forecast-card ${String(forecast.direction).toLowerCase()}`}>
-            <div><span>{formatHorizon(forecast.horizon_minutes, lang)}</span><b>{translateDirection(forecast.direction)}</b></div>
-            <strong>{forecast.confidence}%</strong>
-            <p>{formatPercent(forecast.expected_change_percent)}</p>
-            <small>{formatMoney(forecast.price_range.low)} — {formatMoney(forecast.price_range.high)}</small>
+        {loading ? (
+          <article className="forecast-card">
+            <div>
+              <span>{t.forecastLoading}</span>
+              <b>{pairLabel}</b>
+            </div>
+            <strong>…</strong>
           </article>
-        ))}
+        ) : (
+          forecasts.map((forecast: any) => (
+            <article
+              key={forecast.horizon_minutes}
+              className={
+                `forecast-card ${
+                  String(forecast.direction)
+                    .toLowerCase()
+                }`
+              }
+            >
+              <div>
+                <span>
+                  {formatHorizon(
+                    forecast.horizon_minutes,
+                    lang,
+                  )}
+                </span>
+                <b>
+                  {translateDirection(
+                    forecast.direction,
+                  )}
+                </b>
+              </div>
+              <strong>
+                {forecast.confidence}%
+              </strong>
+              <p>
+                {formatPercent(
+                  forecast
+                    .expected_change_percent,
+                )}
+              </p>
+              <small>
+                {formatMoney(
+                  forecast.price_range.low,
+                )}
+                {' — '}
+                {formatMoney(
+                  forecast.price_range.high,
+                )}
+              </small>
+            </article>
+          ))
+        )}
       </div>
     </section>
   );
@@ -262,11 +388,12 @@ function App() {
           <div className="header-actions"><Bell /><select value={lang} onChange={(event) => { const value = event.target.value as Language; setLang(value); localStorage.setItem('lang', value); }}><option value="ru">Русский</option><option value="en">English</option></select></div>
         </header>
 
-        {(page === 'dashboard' || page === 'markets' || page === 'signals' || page === 'future' || page === 'news') && controls}
+        {(page === 'dashboard' || page === 'markets' || page === 'future' || page === 'news') && controls}
 
         {page === 'dashboard' && <><section className="grid">{marketPanel}{signalPanel}</section>{forecastPanel}{newsPanel}</>}
         {page === 'markets' && <><h2 className="section-heading">{t.marketOverview}</h2>{marketPanel}</>}
-        {page === 'signals' && <><h2 className="section-heading">{t.signalDetails}</h2><section className="single-column">{signalPanel}</section></>}
+        {page === 'signals' && <SignalCenter language={lang} />}
+        {page === 'portfolio' && <ExchangeCenter language={lang} />}
         {page === 'future' && <><h2 className="section-heading">{t.forecastDetails}</h2>{forecastPanel}</>}
         {page === 'news' && <><h2 className="section-heading">{t.newsMonitor}</h2>{newsPanel}</>}
         {page === 'analytics' && <section className="page-panel"><h2>{t.analyticsTitle}</h2><div className="stats-grid"><article><span>{t.activePair}</span><strong>{symbol}</strong></article><article><span>{t.activeTimeframe}</span><strong>{interval}</strong></article><article><span>{t.forecastsCount}</span><strong>{forecasts.length}</strong></article><article><span>{t.newsCount}</span><strong>{news.length}</strong></article></div></section>}
