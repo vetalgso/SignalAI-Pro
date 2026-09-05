@@ -121,6 +121,22 @@ class Settings(BaseSettings):
         le=3600,
     )
 
+    signal_ai_min_stop_distance_percent: float = Field(
+        default=0.25,
+        ge=0,
+        le=100,
+    )
+    signal_ai_min_target_distance_percent: float = Field(
+        default=0.50,
+        ge=0,
+        le=100,
+    )
+    signal_ai_min_risk_reward_ratio: float = Field(
+        default=1.5,
+        ge=1,
+        le=10,
+    )
+
     scheduler_distributed_lock_enabled: bool = True
     scheduler_advisory_lock_key: int = Field(
         default=2026080320,

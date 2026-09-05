@@ -63,6 +63,113 @@ def decimal_value(
         return None
 
 
+
+def candidate_trade_geometry_eligibility(
+    candidate: dict[str, Any],
+    settings: Settings,
+) -> tuple[bool, str]:
+    levels = candidate.get("signal_levels")
+
+    if not isinstance(levels, dict):
+        return False, "INVALID_TRADE_GEOMETRY"
+
+    entry = decimal_value(levels.get("entry"))
+    stop_loss = decimal_value(
+        levels.get("stop_loss")
+    )
+    take_profit = decimal_value(
+        levels.get("take_profit")
+    )
+
+    prices = (
+        entry,
+        stop_loss,
+        take_profit,
+    )
+
+    if any(
+        value is None
+        or not value.is_finite()
+        or value <= 0
+        for value in prices
+    ):
+        return False, "INVALID_TRADE_GEOMETRY"
+
+    assert entry is not None
+    assert stop_loss is not None
+    assert take_profit is not None
+
+    direction = str(
+        candidate.get("trade_direction", "")
+    ).strip().upper()
+
+    if direction == "LONG":
+        correctly_ordered = (
+            stop_loss < entry < take_profit
+        )
+    elif direction == "SHORT":
+        correctly_ordered = (
+            take_profit < entry < stop_loss
+        )
+    else:
+        correctly_ordered = False
+
+    if not correctly_ordered:
+        return False, "INVALID_TRADE_GEOMETRY"
+
+    stop_distance = abs(
+        entry - stop_loss
+    )
+    target_distance = abs(
+        take_profit - entry
+    )
+
+    stop_percent = (
+        stop_distance
+        / entry
+        * Decimal("100")
+    )
+    target_percent = (
+        target_distance
+        / entry
+        * Decimal("100")
+    )
+
+    minimum_stop = Decimal(
+        str(
+            settings
+            .signal_ai_min_stop_distance_percent
+        )
+    )
+    minimum_target = Decimal(
+        str(
+            settings
+            .signal_ai_min_target_distance_percent
+        )
+    )
+    minimum_risk_reward = Decimal(
+        str(
+            settings
+            .signal_ai_min_risk_reward_ratio
+        )
+    )
+
+    if stop_percent < minimum_stop:
+        return False, "STOP_DISTANCE_TOO_TIGHT"
+
+    if target_percent < minimum_target:
+        return False, "TARGET_DISTANCE_TOO_TIGHT"
+
+    risk_reward = (
+        target_distance
+        / stop_distance
+    )
+
+    if risk_reward < minimum_risk_reward:
+        return False, "LOW_RISK_REWARD"
+
+    return True, "ELIGIBLE"
+
 def candidate_ai_eligibility(
     candidate: dict[str, Any],
     settings: Settings,
@@ -91,6 +198,17 @@ def candidate_ai_eligibility(
 
     if action != direction:
         return False, "DIRECTION_CONFLICT"
+
+    (
+        geometry_eligible,
+        geometry_reason,
+    ) = candidate_trade_geometry_eligibility(
+        candidate,
+        settings,
+    )
+
+    if not geometry_eligible:
+        return False, geometry_reason
 
     confidence = decimal_value(
         candidate.get("confidence")

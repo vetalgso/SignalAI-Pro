@@ -377,3 +377,41 @@ def test_rejected_review_does_not_run_promoter() -> None:
         "candidate_id": item.id,
     }
     assert promoter.calls == []
+
+
+def test_scan_run_does_not_spend_ai_slot_on_tight_geometry(
+) -> None:
+    db = session()
+    item = candidate(
+        db,
+        risk_level="MEDIUM",
+    )
+
+    snapshot = dict(item.snapshot)
+    snapshot["signal_levels"] = {
+        "entry": "100",
+        "stop_loss": "99.80",
+        "take_profit": "101",
+    }
+    item.snapshot = snapshot
+    db.commit()
+
+    reviewer = ApprovingReviewer()
+    service = SignalAIReviewService(
+        db=db,
+        settings=settings(),
+        reviewer=reviewer,
+    )
+
+    result = service.review_scan_run(
+        item.run_id
+    )
+
+    assert result["action"] == "COMPLETED"
+    assert result["eligible_candidates"] == 0
+    assert result["selected_candidates"] == 0
+    assert result["approved_count"] == 0
+    assert result["rejected_count"] == 0
+    assert result["failed_count"] == 0
+    assert result["results"] == []
+    assert reviewer.calls == 0

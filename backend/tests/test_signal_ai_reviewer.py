@@ -268,3 +268,117 @@ def test_candidate_and_verdict_thresholds_are_separate() -> None:
         configured.signal_ai_min_verdict_confidence
         == 60
     )
+
+
+def test_trade_geometry_policy_defaults() -> None:
+    configured = settings()
+
+    assert (
+        configured
+        .signal_ai_min_stop_distance_percent
+        == 0.25
+    )
+    assert (
+        configured
+        .signal_ai_min_target_distance_percent
+        == 0.50
+    )
+    assert (
+        configured
+        .signal_ai_min_risk_reward_ratio
+        == 1.5
+    )
+
+
+@pytest.mark.parametrize(
+    ("signal_levels", "reason"),
+    [
+        (
+            None,
+            "INVALID_TRADE_GEOMETRY",
+        ),
+        (
+            {
+                "entry": "not-a-number",
+                "stop_loss": "99",
+                "take_profit": "102",
+            },
+            "INVALID_TRADE_GEOMETRY",
+        ),
+        (
+            {
+                "entry": "100",
+                "stop_loss": "101",
+                "take_profit": "102",
+            },
+            "INVALID_TRADE_GEOMETRY",
+        ),
+        (
+            {
+                "entry": "100",
+                "stop_loss": "99.80",
+                "take_profit": "101",
+            },
+            "STOP_DISTANCE_TOO_TIGHT",
+        ),
+        (
+            {
+                "entry": "100",
+                "stop_loss": "99.50",
+                "take_profit": "100.49",
+            },
+            "TARGET_DISTANCE_TOO_TIGHT",
+        ),
+        (
+            {
+                "entry": "100",
+                "stop_loss": "99.50",
+                "take_profit": "100.60",
+            },
+            "LOW_RISK_REWARD",
+        ),
+    ],
+)
+def test_trade_geometry_gate_rejects_unsafe_levels(
+    signal_levels,
+    reason,
+) -> None:
+    assert candidate_ai_eligibility(
+        candidate(signal_levels=signal_levels),
+        settings(),
+    ) == (False, reason)
+
+
+@pytest.mark.parametrize(
+    ("direction", "signal_levels"),
+    [
+        (
+            "LONG",
+            {
+                "entry": "100",
+                "stop_loss": "99.75",
+                "take_profit": "100.50",
+            },
+        ),
+        (
+            "SHORT",
+            {
+                "entry": "100",
+                "stop_loss": "100.25",
+                "take_profit": "99.50",
+            },
+        ),
+    ],
+)
+def test_trade_geometry_boundary_is_eligible(
+    direction,
+    signal_levels,
+) -> None:
+    assert candidate_ai_eligibility(
+        candidate(
+            signal_action=direction,
+            trade_direction=direction,
+            signal_levels=signal_levels,
+        ),
+        settings(),
+    ) == (True, "ELIGIBLE")
