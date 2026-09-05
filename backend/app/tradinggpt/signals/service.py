@@ -147,6 +147,7 @@ class TradingSignalService:
     def _risk_reward(
         request: SignalCreateRequest,
     ) -> Decimal:
+        """Return reward-to-risk for take_profit_1."""
         midpoint = (
             request.entry_min
             + request.entry_max

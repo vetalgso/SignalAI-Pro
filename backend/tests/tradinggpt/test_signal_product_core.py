@@ -141,7 +141,7 @@ def test_create_product_signal(
     assert signal.side == "LONG"
     assert signal.status == "ACTIVE"
     assert signal.risk_level == "MEDIUM"
-    assert signal.risk_reward > 0
+    assert signal.risk_reward == Decimal("1.0769")
     assert len(signal.fingerprint) == 64
 
     events = (
