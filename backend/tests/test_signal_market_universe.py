@@ -169,3 +169,41 @@ def test_scanner_uses_dynamic_universe() -> None:
     assert result["universe_source"] == "TEST_VOLUME"
     assert result["universe_assets"] == ["BTC", "ETH", "SOL"]
     assert result["scanned_assets"] == 3
+
+
+def test_excludes_one_letter_u_pegged_asset() -> None:
+    assert (
+        BinanceLiquidMarketUniverse
+        ._is_eligible_asset("U")
+        is False
+    )
+
+
+def test_u_pegged_asset_does_not_take_ranked_slot() -> None:
+    assets = BinanceLiquidMarketUniverse._rank_assets(
+        pairs=[
+            {
+                "symbol": "UUSDT",
+                "base_asset": "U",
+                "quote_asset": "USDT",
+            },
+            {
+                "symbol": "BTCUSDT",
+                "base_asset": "BTC",
+                "quote_asset": "USDT",
+            },
+        ],
+        tickers=[
+            {
+                "symbol": "UUSDT",
+                "quoteVolume": "999999999",
+            },
+            {
+                "symbol": "BTCUSDT",
+                "quoteVolume": "1000000",
+            },
+        ],
+        limit=1,
+    )
+
+    assert assets == ["BTC"]

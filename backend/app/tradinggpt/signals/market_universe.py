@@ -48,6 +48,9 @@ EXCLUDED_BASE_ASSETS = {
     "MIM",
     "DOLA",
     "VAI",
+    # United Stables U is USD-pegged despite
+    # its one-letter base asset symbol.
+    "U",
     "UST",
     "USTC",
     # EUR-backed assets.
