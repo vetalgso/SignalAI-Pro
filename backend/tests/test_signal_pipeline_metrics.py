@@ -9,6 +9,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.models.signal_discovery import (
+    SignalScanRun,
+)
 from app.models.trading_signal import (
     TelegramSignalDelivery,
     TradingSignal,
@@ -69,6 +72,7 @@ def _session():
         poolclass=StaticPool,
     )
 
+    SignalScanRun.__table__.create(engine)
     TradingSignal.__table__.create(engine)
     TradingSignalEvent.__table__.create(
         engine
@@ -164,6 +168,61 @@ def test_signal_pipeline_metrics() -> None:
                 ),
             ]
         )
+        session.add(
+            SignalScanRun(
+                status="COMPLETED",
+                universe_source="TEST",
+                risk_level="MEDIUM",
+                minimum_confidence=Decimal("60"),
+                requested_limit=3,
+                universe_assets=[
+                    "BTC",
+                    "ETH",
+                    "SOL",
+                ],
+                scanned_assets=3,
+                successful_assets=1,
+                failed_assets=2,
+                opportunities_found=0,
+                created_count=0,
+                duplicate_count=0,
+                skipped_count=1,
+                rejection_reasons={},
+                scanner_errors=[
+                    {
+                        "asset": "ETH",
+                        "error": "TimeoutError",
+                        "error_code": (
+                            "UPSTREAM_TIMEOUT"
+                        ),
+                        "stage": "ASSET_ANALYSIS",
+                        "location": (
+                            "provider.py:load:42"
+                        ),
+                    },
+                    {
+                        "asset": "SOL",
+                        "error": "CustomFailure",
+                        "error_code": (
+                            "ARBITRARY_UNBOUNDED_CODE"
+                        ),
+                        "stage": "ASSET_ANALYSIS",
+                        "location": (
+                            "scanner.py:analyze:77"
+                        ),
+                    },
+                ],
+                started_at=(
+                    NOW - timedelta(seconds=15)
+                ),
+                completed_at=(
+                    NOW - timedelta(seconds=3)
+                ),
+                created_at=(
+                    NOW - timedelta(seconds=15)
+                ),
+            )
+        )
         session.commit()
 
         metrics = SignalPipelineMetricsService(
@@ -238,10 +297,38 @@ def test_signal_pipeline_metrics() -> None:
                 "signalai_trading_signals_"
                 "trackable 1"
             ),
+            (
+                "signalai_signal_scanner_"
+                "latest_run_observed 1"
+            ),
+            (
+                "signalai_signal_scanner_"
+                "latest_run_failed_assets 2"
+            ),
+            (
+                "signalai_signal_scanner_"
+                "latest_run_errors"
+                '{error_code="UPSTREAM_TIMEOUT"} 1'
+            ),
+            (
+                "signalai_signal_scanner_"
+                "latest_run_errors"
+                '{error_code="UNKNOWN"} 1'
+            ),
+            (
+                "signalai_signal_scanner_"
+                "latest_run_errors"
+                '{error_code="INVALID_ANALYSIS_PAYLOAD"} 0'
+            ),
         )
 
         for value in required:
             assert value in metrics, value
+
+        assert (
+            "ARBITRARY_UNBOUNDED_CODE"
+            not in metrics
+        )
     finally:
         session.close()
         engine.dispose()

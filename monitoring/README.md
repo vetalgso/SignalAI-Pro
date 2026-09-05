@@ -620,6 +620,7 @@ Alert rules:
 - доступность metrics endpoint;
 - работа фонового scanner;
 - ошибки и зависание scanner tick;
+- ошибки анализа отдельных активов с безопасным bounded error code;
 - работа Telegram dispatcher;
 - ошибки и зависание Telegram delivery tick;
 - FAILED-доставки;
@@ -633,6 +634,15 @@ Grafana dashboard:
 Dashboard UID:
 
     signalai-signal-pipeline
+
+Панель `Scanner Failed Assets` показывает число ошибок
+анализа в последнем завершённом scanner run. Панель
+`Scanner Errors by Code` группирует их только по
+фиксированным значениям `error_code`.
+
+Alert:
+
+    SignalAISignalScannerAssetAnalysisFailure
 
 Метрики не содержат symbol, signal ID, текст ошибок,
 Telegram credentials и другие high-cardinality или секретные labels.

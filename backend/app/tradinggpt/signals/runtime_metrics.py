@@ -7,6 +7,9 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.models.signal_discovery import (
+    SignalScanRun,
+)
 from app.models.trading_signal import (
     TelegramSignalDelivery,
     TradingSignal,
@@ -55,6 +58,13 @@ ALLOWED_ACTIONS = {
     "SKIPPED_LOCKED",
     "LOOP_ERROR",
 }
+SCANNER_ERROR_CODES = (
+    "UPSTREAM_TIMEOUT",
+    "UPSTREAM_CONNECTION_ERROR",
+    "INVALID_ANALYSIS_PAYLOAD",
+    "UNEXPECTED_ANALYSIS_ERROR",
+    "UNKNOWN",
+)
 
 
 class SignalPipelineMetricsService:
@@ -129,6 +139,70 @@ class SignalPipelineMetricsService:
             status=telegram_status,
             now=now,
         )
+
+        (
+            latest_run_observed,
+            latest_run_failed_assets,
+            latest_run_error_counts,
+        ) = self._latest_scanner_errors()
+
+        self._append_metric(
+            lines,
+            name=(
+                "signalai_signal_scanner_"
+                "latest_run_observed"
+            ),
+            metric_type="gauge",
+            help_text=(
+                "Whether a completed scanner run "
+                "has been persisted."
+            ),
+            value=latest_run_observed,
+        )
+        self._append_metric(
+            lines,
+            name=(
+                "signalai_signal_scanner_"
+                "latest_run_failed_assets"
+            ),
+            metric_type="gauge",
+            help_text=(
+                "Failed asset analyses in the "
+                "latest completed scanner run."
+            ),
+            value=latest_run_failed_assets,
+        )
+
+        lines.extend(
+            [
+                (
+                    "# HELP "
+                    "signalai_signal_scanner_"
+                    "latest_run_errors "
+                    "Errors in the latest completed "
+                    "scanner run by bounded code."
+                ),
+                (
+                    "# TYPE "
+                    "signalai_signal_scanner_"
+                    "latest_run_errors gauge"
+                ),
+            ]
+        )
+
+        for error_code in SCANNER_ERROR_CODES:
+            value = latest_run_error_counts.get(
+                error_code,
+                0,
+            )
+            lines.append(
+                (
+                    "signalai_signal_scanner_"
+                    "latest_run_errors"
+                    f'{{error_code="{error_code}"}} '
+                    f"{value}"
+                )
+            )
 
         counts = self._delivery_counts()
 
@@ -262,6 +336,101 @@ class SignalPipelineMetricsService:
         )
 
         return "\n".join(lines) + "\n"
+
+    def _latest_scanner_errors(
+        self,
+    ) -> tuple[
+        bool,
+        int,
+        dict[str, int],
+    ]:
+        run = self._session.scalar(
+            select(
+                SignalScanRun
+            )
+            .where(
+                SignalScanRun.status
+                == "COMPLETED"
+            )
+            .order_by(
+                SignalScanRun.id.desc()
+            )
+            .limit(1)
+        )
+
+        if run is None:
+            return False, 0, {}
+
+        counts: dict[str, int] = {}
+
+        for raw_error in (
+            run.scanner_errors or []
+        ):
+            if not isinstance(raw_error, dict):
+                error_code = "UNKNOWN"
+            else:
+                raw_code = str(
+                    raw_error.get(
+                        "error_code",
+                        "",
+                    )
+                ).upper()
+
+                if raw_code in (
+                    SCANNER_ERROR_CODES[:-1]
+                ):
+                    error_code = raw_code
+                else:
+                    error_code = (
+                        self
+                        ._legacy_scanner_error_code(
+                            raw_error.get("error")
+                        )
+                    )
+
+            counts[error_code] = (
+                counts.get(error_code, 0)
+                + 1
+            )
+
+        return (
+            True,
+            int(run.failed_assets),
+            counts,
+        )
+
+    @staticmethod
+    def _legacy_scanner_error_code(
+        raw_error: object,
+    ) -> str:
+        error_name = str(raw_error or "")
+
+        if error_name in {
+            "TimeoutError",
+            "ReadTimeout",
+            "ConnectTimeout",
+            "PoolTimeout",
+        }:
+            return "UPSTREAM_TIMEOUT"
+
+        if error_name in {
+            "ConnectionError",
+            "ConnectError",
+            "NetworkError",
+            "RemoteProtocolError",
+        }:
+            return "UPSTREAM_CONNECTION_ERROR"
+
+        if error_name in {
+            "TypeError",
+            "ValueError",
+            "KeyError",
+            "IndexError",
+            "AttributeError",
+        }:
+            return "INVALID_ANALYSIS_PAYLOAD"
+
+        return "UNKNOWN"
 
     def _delivery_counts(
         self,

@@ -36,6 +36,17 @@ groups:
           summary: Ошибка автоматического сканирования рынка
           description: За последние 15 минут произошла ошибка фонового scanner tick.
 
+      - alert: SignalAISignalScannerAssetAnalysisFailure
+        expr: |
+          signalai_signal_scanner_latest_run_errors > 0
+        for: 30s
+        labels:
+          severity: warning
+          component: signal-pipeline
+        annotations:
+          summary: Ошибка анализа актива в последнем scanner run
+          description: Последний scanner run содержит {{ $value }} ошибок анализа с кодом {{ $labels.error_code }}.
+
       - alert: SignalAISignalScannerTickStale
         expr: |
           signalai_signal_scanner_enabled == 1

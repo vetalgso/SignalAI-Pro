@@ -867,6 +867,112 @@
           "sort": "desc"
         }
       }
+    },
+    {
+      "id": 16,
+      "title": "Scanner Failed Assets",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "signalai-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "signalai_signal_scanner_latest_run_failed_assets",
+          "legendFormat": "Failed assets",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "description": "Failed asset analyses in the latest completed scanner run."
+    },
+    {
+      "id": 17,
+      "title": "Scanner Errors by Code",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "signalai-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "signalai_signal_scanner_latest_run_errors",
+          "legendFormat": "{{error_code}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Latest completed scanner run failures grouped by a bounded error code."
     }
   ],
   "refresh": "5s",
@@ -886,5 +992,5 @@
   "timezone": "browser",
   "title": "SignalAI Signal Pipeline",
   "uid": "signalai-signal-pipeline",
-  "version": 1
+  "version": 2
 }
