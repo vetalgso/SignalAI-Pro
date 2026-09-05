@@ -131,10 +131,10 @@ class CryptoMarketScanner:
         for asset, result in zip(normalized_assets, raw_results, strict=True):
             if isinstance(result, Exception):
                 errors.append(
-                    {
-                        "asset": asset,
-                        "error": result.__class__.__name__,
-                    }
+                    self._scanner_error(
+                        asset,
+                        result,
+                    )
                 )
                 continue
 
@@ -367,6 +367,68 @@ class CryptoMarketScanner:
             signal_strategy=signal_strategy,
             signal_levels=signal_levels,
         )
+
+    @staticmethod
+    def _scanner_error(
+        asset: str,
+        error: Exception,
+    ) -> dict[str, str]:
+        error_name = error.__class__.__name__
+
+        if error_name in {
+            "TimeoutError",
+            "ReadTimeout",
+            "ConnectTimeout",
+            "PoolTimeout",
+        }:
+            error_code = "UPSTREAM_TIMEOUT"
+        elif error_name in {
+            "ConnectionError",
+            "ConnectError",
+            "NetworkError",
+            "RemoteProtocolError",
+        }:
+            error_code = "UPSTREAM_CONNECTION_ERROR"
+        elif error_name in {
+            "TypeError",
+            "ValueError",
+            "KeyError",
+            "IndexError",
+            "AttributeError",
+        }:
+            error_code = "INVALID_ANALYSIS_PAYLOAD"
+        else:
+            error_code = "UNEXPECTED_ANALYSIS_ERROR"
+
+        location = "UNKNOWN"
+        traceback = error.__traceback__
+
+        while (
+            traceback is not None
+            and traceback.tb_next is not None
+        ):
+            traceback = traceback.tb_next
+
+        if traceback is not None:
+            code = traceback.tb_frame.f_code
+            filename = (
+                code.co_filename
+                .rsplit("/", 1)[-1]
+                .rsplit("\\", 1)[-1]
+            )
+            location = (
+                f"{filename}:"
+                f"{code.co_name}:"
+                f"{traceback.tb_lineno}"
+            )
+
+        return {
+            "asset": asset,
+            "error": error_name,
+            "error_code": error_code,
+            "stage": "ASSET_ANALYSIS",
+            "location": location,
+        }
 
     @staticmethod
     def _normalize_assets(

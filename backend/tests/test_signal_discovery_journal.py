@@ -55,7 +55,15 @@ def test_records_complete_candidate_funnel() -> None:
                     },
                 ],
                 "errors": [
-                    {"asset": "SOL", "error": "TimeoutError"}
+                    {
+                        "asset": "SOL",
+                        "error": "TimeoutError",
+                        "error_code": "UPSTREAM_TIMEOUT",
+                        "stage": "ASSET_ANALYSIS",
+                        "location": (
+                            "market_data.py:load:77"
+                        ),
+                    }
                 ],
             },
             persistence_result={
@@ -125,7 +133,28 @@ def test_records_complete_candidate_funnel() -> None:
             for item in candidates
             if item.symbol == "ETHUSDT"
         )
+        sol = next(
+            item
+            for item in candidates
+            if item.symbol == "SOLUSDT"
+        )
 
+        expected_error = {
+            "asset": "SOL",
+            "error": "TimeoutError",
+            "error_code": "UPSTREAM_TIMEOUT",
+            "stage": "ASSET_ANALYSIS",
+            "location": "market_data.py:load:77",
+        }
+
+        assert run.scanner_errors == [
+            expected_error
+        ]
+        assert (
+            sol.rejection_reason
+            == "TimeoutError"
+        )
+        assert sol.snapshot == expected_error
         assert btc.confidence == Decimal("78")
         assert btc.ranking_score == Decimal("81.5")
         assert eth.confidence == Decimal("55")
