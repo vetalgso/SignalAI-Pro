@@ -152,6 +152,104 @@ def test_candidate_is_reviewed_once() -> None:
     assert first["review"]["candidate_id"] == item.id
 
 
+def test_blocked_promotion_reason_is_persisted_without_second_review():
+    from app.tradinggpt.signals.ai_signal_promoter import AISignalPromotionService
+
+    db = session()
+    try:
+        item = candidate(db, risk_level="HIGH")
+        item_id = item.id
+        reviewer = ApprovingReviewer()
+        service = SignalAIReviewService(
+            db=db, settings=settings(), reviewer=reviewer,
+            promoter=AISignalPromotionService(db=db, settings=settings()),
+        )
+        first = service.review_candidate(item_id)
+        assert first["action"] == "APPROVED"
+        assert first["promotion"]["action"] == "BLOCKED"
+        assert first["promotion"]["diagnostic_persisted"] is True
+        db.expire_all()
+        saved = db.get(SignalScanCandidate, item_id)
+        attempt = saved.snapshot["ai_promotion_attempt"]
+        assert attempt["reason"] == "PROMOTION_HIGH_RISK"
+        assert attempt["review_id"] == first["review"]["id"]
+        assert attempt["action"] == "BLOCKED"
+        assert datetime.fromisoformat(attempt["recorded_at"]).tzinfo is not None
+        assert saved.signal_id is None
+        assert saved.snapshot["score"] == 78.17
+        second = service.review_candidate(item_id)
+        assert second["action"] == "ALREADY_REVIEWED"
+        assert second["promotion"]["diagnostic_persisted"] is True
+        assert reviewer.calls == 1
+    finally:
+        db.close()
+
+
+def test_failed_promotion_rolls_back_and_preserves_approved_review():
+    import json
+    from app.models.signal_ai_review import SignalAIReview
+
+    db = session()
+    try:
+        item = candidate(db)
+        item_id = item.id
+
+        class ExplodingPromoter:
+            def promote(self, *, candidate, review):
+                candidate.snapshot = {"private": "exception-private-value"}
+                db.flush()
+                raise RuntimeError("exception-private-value")
+
+        service = SignalAIReviewService(
+            db=db, settings=settings(), reviewer=ApprovingReviewer(),
+            promoter=ExplodingPromoter(),
+        )
+        result = service.review_candidate(item_id)
+        assert result["action"] == "APPROVED"
+        assert result["promotion"]["action"] == "FAILED"
+        assert result["promotion"]["diagnostic_persisted"] is True
+        db.expire_all()
+        saved = db.get(SignalScanCandidate, item_id)
+        assert saved.snapshot["score"] == 78.17
+        assert saved.snapshot["ai_promotion_attempt"]["reason"] == (
+            "PROMOTION_INTERNAL_ERROR"
+        )
+        assert "exception-private-value" not in json.dumps(saved.snapshot)
+        assert "exception-private-value" not in str(result)
+        review = db.get(SignalAIReview, result["review"]["id"])
+        assert review.status == "APPROVED"
+        assert review.result_reason == "AI_APPROVED"
+    finally:
+        db.close()
+
+
+def test_promotion_diagnostic_preserves_success_and_filters_reason():
+    db = session()
+    try:
+        item = candidate(db)
+        success = {"action": "CREATED", "signal_id": 901, "review_id": 1}
+        item.snapshot = {**item.snapshot, "ai_promotion": success}
+        db.commit()
+        service = SignalAIReviewService(
+            db=db, settings=settings(), reviewer=ApprovingReviewer(),
+        )
+        for raw_reason, expected_reason in (
+            ("private-value", "PROMOTION_UNKNOWN_REASON"),
+            ("PROMOTION_REQUEST_REJECTED:private-value", "PROMOTION_REQUEST_REJECTED"),
+        ):
+            assert service._record_promotion_failure(
+                candidate_id=item.id, review_id=2,
+                result={"action": "BLOCKED", "reason": raw_reason},
+            )
+            db.refresh(item)
+            assert item.snapshot["ai_promotion"] == success
+            attempt = item.snapshot["ai_promotion_attempt"]
+            assert attempt["reason"] == expected_reason
+            assert "private-value" not in str(attempt)
+    finally:
+        db.close()
+
+
 def test_missing_candidate_is_not_reviewed() -> None:
     db = session()
     reviewer = ApprovingReviewer()

@@ -298,20 +298,81 @@ class SignalAIReviewService:
             }
 
         try:
-            return self.promoter.promote(
+            result = self.promoter.promote(
                 candidate=candidate,
                 review=review,
             )
         except Exception:
             self.db.rollback()
 
-            return {
+            result = {
                 "action": "FAILED",
                 "candidate_id": int(candidate.id),
                 "reason": (
                     "PROMOTION_INTERNAL_ERROR"
                 ),
             }
+
+        if result.get("action") in {"BLOCKED", "FAILED"}:
+            result = dict(result)
+            result["diagnostic_persisted"] = self._record_promotion_failure(
+                candidate_id=int(candidate.id),
+                review_id=int(review.id),
+                result=result,
+            )
+        return result
+
+    def _record_promotion_failure(
+        self,
+        *,
+        candidate_id: int,
+        review_id: int,
+        result: dict[str, Any],
+    ) -> bool:
+        from sqlalchemy.exc import SQLAlchemyError
+
+        allowed_reasons = {
+            "AI_REVIEW_NOT_APPROVED",
+            "PROMOTION_DIRECTION_CONFLICT",
+            "PROMOTION_HIGH_RISK",
+            "PROMOTION_TIMEFRAMES_UNAVAILABLE",
+            "PROMOTION_TIMEFRAME_CONFLICT",
+            "PROMOTION_BLOCKING_RISK",
+            "PROMOTION_INTERNAL_ERROR",
+        }
+        reason = result.get("reason")
+        if isinstance(reason, str) and reason.startswith(
+            "PROMOTION_REQUEST_REJECTED:"
+        ):
+            # Do not persist an unchecked generator-provided suffix.
+            reason = "PROMOTION_REQUEST_REJECTED"
+        elif not isinstance(reason, str) or reason not in allowed_reasons:
+            reason = "PROMOTION_UNKNOWN_REASON"
+
+        try:
+            # Refresh under a row lock to preserve concurrent snapshot updates.
+            item = self.db.get(
+                SignalScanCandidate,
+                candidate_id,
+                populate_existing=True,
+                with_for_update=True,
+            )
+            if item is None:
+                self.db.rollback()
+                return False
+            snapshot = dict(item.snapshot) if isinstance(item.snapshot, dict) else {}
+            snapshot["ai_promotion_attempt"] = {
+                "action": result["action"],
+                "reason": reason,
+                "review_id": review_id,
+                "recorded_at": datetime.now(timezone.utc).isoformat(),
+            }
+            item.snapshot = snapshot
+            self.db.commit()
+            return True
+        except SQLAlchemyError:
+            self.db.rollback()
+            return False
 
     @staticmethod
     def _candidate_payload(
