@@ -80,6 +80,11 @@ AI_PROMOTION_STATUSES = (
 )
 
 
+AI_REVIEW_STATUSES = (
+    "PENDING", "PROCESSING", "APPROVED", "REJECTED", "FAILED", "UNKNOWN",
+)
+
+
 class SignalPipelineMetricsService:
     def __init__(
         self,
@@ -348,6 +353,26 @@ class SignalPipelineMetricsService:
             value=self._trackable_signals(),
         )
 
+        review_counts = self._ai_review_counts()
+        self._append_metric(
+            lines,
+            name="signalai_signal_ai_reviews",
+            metric_type="gauge",
+            help_text="Current persisted AI review journal rows.",
+            value=sum(review_counts.values()),
+        )
+        lines.extend([
+            "# HELP signalai_signal_ai_reviews_by_status "
+            "Current AI review rows by bounded processing status.",
+            "# TYPE signalai_signal_ai_reviews_by_status gauge",
+        ])
+        for status in AI_REVIEW_STATUSES:
+            value = review_counts.get(status, 0)
+            lines.append(
+                "signalai_signal_ai_reviews_by_status"
+                f'{{status="{status}"}} {value}'
+            )
+
         promotion_counts = self._ai_promotion_counts()
         self._append_metric(
             lines,
@@ -554,6 +579,21 @@ class SignalPipelineMetricsService:
             ).total_seconds(),
             0.0,
         )
+
+    def _ai_review_counts(self) -> dict[str, int]:
+        from app.models.signal_ai_review import SignalAIReview
+
+        statement = (
+            select(SignalAIReview.status, func.count(SignalAIReview.id))
+            .group_by(SignalAIReview.status)
+        )
+        counts: dict[str, int] = {}
+        for raw_status, total in self._session.execute(statement).all():
+            status = str(raw_status).upper()
+            if status not in AI_REVIEW_STATUSES:
+                status = "UNKNOWN"
+            counts[status] = counts.get(status, 0) + int(total)
+        return counts
 
     def _ai_promotion_counts(self) -> dict[str, int]:
         statement = (

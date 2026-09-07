@@ -651,6 +651,29 @@ Telegram credentials и другие high-cardinality или секретные 
 Мониторинг не создаёт торговые сигналы, не отправляет тестовые
 Telegram-сообщения и не выполняет торговые операции.
 
+### AI Review status metrics
+
+Endpoint `/api/v3/signals/runtime/metrics` публикует:
+
+- `signalai_signal_ai_reviews` — количество сохранённых записей AI Review;
+- `signalai_signal_ai_reviews_by_status` — количество записей по статусам.
+
+Обе метрики имеют тип gauge. Фиксированный label `status` принимает
+PENDING, PROCESSING, APPROVED, REJECTED, FAILED или UNKNOWN.
+Нулевые серии публикуются; неизвестные статусы объединяются в UNKNOWN.
+
+Это текущий состав журнала, не накопительный счётчик вызовов OpenAI.
+При смене статуса запись перемещается между группами, при удалении
+записи общее количество уменьшается. Кандидаты, отсеянные до создания
+AI Review, в эти метрики не входят.
+
+APPROVED означает успешное прохождение AI Review. Создание сигнала
+зависит также от последующих promotion-проверок и учитывается отдельно
+в `signalai_signal_ai_promotions`.
+
+Метрики не публикуют candidate ID, provider, model, rationale,
+текст ошибок или credentials. Дополнительные alerts не добавляются.
+
 ### AI promotion status metrics
 
 Панель `AI Promotions` показывает количество сохранённых сигналов

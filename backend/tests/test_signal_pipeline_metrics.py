@@ -72,7 +72,10 @@ def _session():
         poolclass=StaticPool,
     )
 
+    from app.models.signal_ai_review import SignalAIReview
+
     SignalScanRun.__table__.create(engine)
+    SignalAIReview.__table__.create(engine)
     TradingSignal.__table__.create(engine)
     TradingSignalEvent.__table__.create(
         engine
@@ -441,6 +444,86 @@ def test_ai_promotion_metrics_current_state_and_bounded_labels() -> None:
         session.commit()
         expected["ACTIVE"] = 0
         expected["STOPPED"] = 2
+        check(expected)
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_ai_review_metrics_status_transitions_and_unknowns() -> None:
+    from app.models.signal_ai_review import SignalAIReview
+
+    engine, session = _session()
+    statuses = (
+        "PENDING", "PROCESSING", "APPROVED",
+        "REJECTED", "FAILED", "UNKNOWN",
+    )
+    service = SignalPipelineMetricsService(
+        session=session,
+        scanner_enabled=False,
+        telegram_enabled=False,
+        scanner_status_provider=lambda: _status(action="IDLE"),
+        telegram_status_provider=lambda: _status(action="IDLE"),
+        now_provider=lambda: NOW,
+    )
+
+    def check(expected):
+        metrics = service.render()
+        lines = metrics.splitlines()
+        assert (
+            f"signalai_signal_ai_reviews {sum(expected.values())}" in lines
+        )
+        actual = {
+            line for line in lines
+            if line.startswith("signalai_signal_ai_reviews_by_status{")
+        }
+        assert actual == {
+            "signalai_signal_ai_reviews_by_status"
+            f'{{status="{status}"}} {expected.get(status, 0)}'
+            for status in statuses
+        }
+        assert "# TYPE signalai_signal_ai_reviews gauge" in lines
+        assert "# TYPE signalai_signal_ai_reviews_by_status gauge" in lines
+        for private_value in (
+            "CUSTOM_A", "CUSTOM_B", "private-provider",
+            "private-model", "private-rationale", "private-error",
+        ):
+            assert private_value not in metrics
+
+    try:
+        check({})
+        rows = []
+        for index, status in enumerate((*statuses[:-1], "CUSTOM_A", "CUSTOM_B")):
+            row = SignalAIReview(
+                candidate_id=index + 1,
+                status=status,
+                provider="private-provider",
+                model="private-model",
+                requested_direction="LONG",
+                rationale="private-rationale",
+                error_code="private-error",
+                risk_flags=[],
+            )
+            session.add(row)
+            rows.append(row)
+        session.commit()
+        expected = {status: 1 for status in statuses[:-1]}
+        expected["UNKNOWN"] = 2
+        check(expected)
+
+        rows[0].status = "PROCESSING"
+        session.commit()
+        expected.update(PENDING=0, PROCESSING=2)
+        check(expected)
+
+        rows[0].status = "APPROVED"
+        session.commit()
+        expected.update(PROCESSING=1, APPROVED=2)
+        check(expected)
+
+        session.delete(rows[0])
+        session.commit()
+        expected["APPROVED"] = 1
         check(expected)
     finally:
         session.close()
