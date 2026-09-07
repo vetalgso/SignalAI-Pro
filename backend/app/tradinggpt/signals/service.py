@@ -185,10 +185,62 @@ class TradingSignalService:
             rounding=ROUND_HALF_UP,
         )
 
+    def _active_ai_duplicate(
+        self,
+        request: SignalCreateRequest,
+    ) -> TradingSignal | None:
+        from sqlalchemy import select, text
+
+        scope = {
+            "exchange": request.exchange,
+            "market_type": request.market_type.value,
+            "symbol": request.symbol,
+            "side": request.side.value,
+            "timeframe": request.timeframe,
+            "strategy": request.strategy,
+        }
+        db = self.repository.db
+        if db.get_bind().dialect.name == "postgresql":
+            # Serialize cooperating AI creators until commit or rollback.
+            encoded = json.dumps(
+                scope, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")
+            lock_key = int.from_bytes(
+                hashlib.sha256(b"active-ai-signal:" + encoded).digest()[:8],
+                byteorder="big",
+                signed=True,
+            )
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_key)"),
+                {"lock_key": lock_key},
+            )
+
+        statement = (
+            select(TradingSignal)
+            .where(
+                TradingSignal.source == "AI_REVIEW",
+                TradingSignal.status.in_(
+                    ("ACTIVE", "ENTRY_REACHED", "TP1_REACHED", "TP2_REACHED")
+                ),
+                *[
+                    getattr(TradingSignal, field) == value
+                    for field, value in scope.items()
+                ],
+            )
+            .order_by(TradingSignal.id.asc())
+            .limit(1)
+        )
+        return db.scalar(statement)
+
     def create(
         self,
         request: SignalCreateRequest,
     ) -> TradingSignal:
+        if request.source == "AI_REVIEW":
+            existing_ai = self._active_ai_duplicate(request)
+            if existing_ai is not None:
+                raise DuplicateSignalError(existing_ai.id)
+
         fingerprint = self._fingerprint(
             request
         )

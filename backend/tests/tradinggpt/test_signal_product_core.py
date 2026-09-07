@@ -174,6 +174,168 @@ def test_duplicate_signal_is_rejected(
     )
 
 
+@pytest.mark.parametrize(
+    "status", ["ACTIVE", "ENTRY_REACHED", "TP1_REACHED", "TP2_REACHED"],
+)
+def test_ai_active_signal_blocks_changed_levels_and_hour(db, status):
+    service = make_service(db)
+    first = service.create(make_request(source="AI_REVIEW"))
+    first.status = status
+    db.commit()
+    before = [
+        db.query(model).count()
+        for model in (TradingSignal, TradingSignalEvent, TelegramSignalDelivery)
+    ]
+    with pytest.raises(DuplicateSignalError) as error:
+        service.create(make_request(
+            source="AI_REVIEW",
+            stop_loss=Decimal("62790"),
+            take_profit_1=Decimal("65510"),
+            generated_at=make_request().generated_at + timedelta(hours=2),
+        ))
+    assert error.value.existing_signal_id == first.id
+    assert before == [
+        db.query(model).count()
+        for model in (TradingSignal, TradingSignalEvent, TelegramSignalDelivery)
+    ]
+    assert first.stop_loss == Decimal("62800")
+
+
+@pytest.mark.parametrize(
+    "status", ["TP3_REACHED", "STOPPED", "EXPIRED", "CANCELLED"],
+)
+def test_ai_terminal_signal_allows_new_setup(db, status):
+    service = make_service(db)
+    first = service.create(make_request(source="AI_REVIEW"))
+    first.status = status
+    db.commit()
+    second = service.create(make_request(
+        source="AI_REVIEW",
+        generated_at=make_request().generated_at + timedelta(hours=2),
+    ))
+    assert second.id != first.id
+
+
+@pytest.mark.parametrize("change", [
+    {"exchange": "OTHER"},
+    {"market_type": "SPOT"},
+    {"symbol": "ETHUSDT"},
+    {"timeframe": "4H"},
+    {"strategy": "another strategy"},
+    {
+        "side": "SHORT",
+        "stop_loss": Decimal("66000"),
+        "take_profit_1": Decimal("63000"),
+        "take_profit_2": Decimal("62000"),
+        "take_profit_3": Decimal("61000"),
+    },
+])
+def test_ai_deduplication_scope_is_separate(db, change):
+    service = make_service(db)
+    first = service.create(make_request(source="AI_REVIEW"))
+    second = service.create(make_request(source="AI_REVIEW", **change))
+    assert second.id != first.id
+
+
+def test_non_ai_signal_does_not_block_ai_scope(db):
+    service = make_service(db)
+    first = service.create(make_request())
+    second = service.create(make_request(
+        source="AI_REVIEW",
+        generated_at=make_request().generated_at + timedelta(hours=2),
+    ))
+    assert second.id != first.id
+
+
+def test_active_ai_duplicate_promotion_persists_link_without_outbox(db):
+    from types import SimpleNamespace
+    from app.models.signal_discovery import SignalScanRun, SignalScanCandidate
+    from app.tradinggpt.signals.ai_signal_promoter import AISignalPromotionService
+
+    SignalScanRun.__table__.create(db.get_bind())
+    SignalScanCandidate.__table__.create(db.get_bind())
+    service = make_service(db)
+    original = make_request(source="AI_REVIEW")
+    existing = service.create(original)
+    existing.status = "ENTRY_REACHED"
+
+    run = SignalScanRun(
+        status="COMPLETED",
+        universe_source="TEST",
+        risk_level="MEDIUM",
+        minimum_confidence=Decimal("45"),
+        requested_limit=1,
+        started_at=original.generated_at,
+        completed_at=original.generated_at,
+    )
+    db.add(run)
+    db.flush()
+    candidate = SignalScanCandidate(
+        run_id=run.id,
+        symbol=original.symbol,
+        asset="BTC",
+        outcome="REJECTED",
+        rejection_reason="RECOMMENDATION_CONFLICT",
+        signal_action="LONG",
+        trade_direction="LONG",
+        risk_level="medium",
+        snapshot={
+            "timeframe_directions": {
+                "1H": "LONG", "4H": "LONG", "1D": "LONG",
+            },
+        },
+    )
+    db.add(candidate)
+    db.commit()
+    candidate_id, signal_id = candidate.id, existing.id
+
+    changed_request = make_request(
+        source="MARKET_SCANNER",
+        generated_at=original.generated_at + timedelta(hours=2),
+        stop_loss=Decimal("62790"),
+        take_profit_1=Decimal("65510"),
+    )
+    review = SimpleNamespace(
+        id=901, status="APPROVED", verdict="APPROVE",
+        requested_direction="LONG", verdict_direction="LONG",
+        ai_confidence=Decimal("70"), risk_flags=[], rationale="Test",
+    )
+    promoter = AISignalPromotionService(
+        db=db,
+        settings=SimpleNamespace(signal_ai_min_confidence=45),
+        generator=SimpleNamespace(
+            service=service,
+            _build_request=lambda *args, **kwargs: (changed_request, None),
+        ),
+    )
+    before = [
+        db.query(model).count()
+        for model in (TradingSignal, TradingSignalEvent, TelegramSignalDelivery)
+    ]
+    result = promoter.promote(candidate=candidate, review=review)
+    assert result["action"] == "DUPLICATE"
+    assert result["signal_id"] == signal_id
+
+    db.expire_all()
+    persisted = db.get(SignalScanCandidate, candidate_id)
+    assert persisted.signal_id == signal_id
+    assert persisted.snapshot["ai_promotion"] == {
+        "action": "DUPLICATE",
+        "signal_id": signal_id,
+        "review_id": 901,
+        "policy": "STRICT_ALIGNED_V1",
+    }
+    repeated = promoter.promote(candidate=persisted, review=review)
+    assert repeated["action"] == "ALREADY_PROMOTED"
+    assert repeated["signal_id"] == signal_id
+    assert before == [
+        db.query(model).count()
+        for model in (TradingSignal, TradingSignalEvent, TelegramSignalDelivery)
+    ]
+    assert db.get(TradingSignal, signal_id).status == "ENTRY_REACHED"
+    assert db.get(TradingSignal, signal_id).stop_loss == original.stop_loss
+
+
 def test_signal_list_filters(
     db: Session,
 ) -> None:
