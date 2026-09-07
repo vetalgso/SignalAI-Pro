@@ -67,6 +67,19 @@ SCANNER_ERROR_CODES = (
 )
 
 
+AI_PROMOTION_STATUSES = (
+    "ACTIVE",
+    "ENTRY_REACHED",
+    "TP1_REACHED",
+    "TP2_REACHED",
+    "TP3_REACHED",
+    "STOPPED",
+    "EXPIRED",
+    "CANCELLED",
+    "UNKNOWN",
+)
+
+
 class SignalPipelineMetricsService:
     def __init__(
         self,
@@ -335,6 +348,26 @@ class SignalPipelineMetricsService:
             value=self._trackable_signals(),
         )
 
+        promotion_counts = self._ai_promotion_counts()
+        self._append_metric(
+            lines,
+            name="signalai_signal_ai_promotions",
+            metric_type="gauge",
+            help_text="Current persisted AI-reviewed promoted signals.",
+            value=sum(promotion_counts.values()),
+        )
+        lines.extend([
+            "# HELP signalai_signal_ai_promotions_by_status "
+            "Current AI-promoted signals by bounded lifecycle status.",
+            "# TYPE signalai_signal_ai_promotions_by_status gauge",
+        ])
+        for status in AI_PROMOTION_STATUSES:
+            value = promotion_counts.get(status, 0)
+            lines.append(
+                "signalai_signal_ai_promotions_by_status"
+                f'{{status="{status}"}} {value}'
+            )
+
         return "\n".join(lines) + "\n"
 
     def _latest_scanner_errors(
@@ -521,6 +554,20 @@ class SignalPipelineMetricsService:
             ).total_seconds(),
             0.0,
         )
+
+    def _ai_promotion_counts(self) -> dict[str, int]:
+        statement = (
+            select(TradingSignal.status, func.count(TradingSignal.id))
+            .where(TradingSignal.source == "AI_REVIEW")
+            .group_by(TradingSignal.status)
+        )
+        counts: dict[str, int] = {}
+        for raw_status, total in self._session.execute(statement).all():
+            status = str(raw_status).upper()
+            if status not in AI_PROMOTION_STATUSES:
+                status = "UNKNOWN"
+            counts[status] = counts.get(status, 0) + int(total)
+        return counts
 
     def _trackable_signals(self) -> int:
         value = self._session.scalar(

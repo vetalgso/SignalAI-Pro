@@ -1709,7 +1709,7 @@ assert (
     len(
         signal_pipeline_dashboard["panels"]
     )
-    == 17
+    == 19
 )
 
 pipeline_panel_ids = [
@@ -1741,6 +1741,8 @@ for metric in (
     "signalai_telegram_signal_dispatcher_",
     "signalai_telegram_signal_outbox_",
     "signalai_trading_signals_trackable",
+    "signalai_signal_ai_promotions",
+    "signalai_signal_ai_promotions_by_status",
     "ALERTS",
 ):
     assert metric in pipeline_dashboard_text, metric
@@ -1755,6 +1757,8 @@ for value in (
     "/api/v3/signals/runtime/metrics",
     "SignalAI Signal Pipeline",
     "Scanner Errors by Code",
+    "AI Promotions",
+    "AI Promotions by Status",
     (
         "SignalAISignalScanner"
         "AssetAnalysisFailure"
@@ -1764,6 +1768,6 @@ for value in (
 
 print("Signal Pipeline Prometheus scrape job: OK")
 print("Signal Pipeline Prometheus alerts: 11")
-print("Signal Pipeline Grafana panels: 17")
+print("Signal Pipeline Grafana panels: 19")
 print("Signal Pipeline dashboard IDs: unique")
 print("Signal Pipeline monitoring documentation: OK")

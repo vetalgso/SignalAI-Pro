@@ -973,6 +973,112 @@
         }
       },
       "description": "Latest completed scanner run failures grouped by a bounded error code."
+    },
+    {
+      "id": 18,
+      "title": "AI Promotions",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "signalai-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "signalai_signal_ai_promotions",
+          "legendFormat": "AI promotions",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "description": "Current persisted signals with source AI_REVIEW. Not executed orders or realized profit."
+    },
+    {
+      "id": 19,
+      "title": "AI Promotions by Status",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "signalai-prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 32,
+        "w": 18,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "signalai_signal_ai_promotions_by_status",
+          "legendFormat": "{{status}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "signalai-prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Current AI-promoted signal counts by lifecycle status. Snapshots, not cumulative transition counts or win rate."
     }
   ],
   "refresh": "5s",
@@ -992,5 +1098,5 @@
   "timezone": "browser",
   "title": "SignalAI Signal Pipeline",
   "uid": "signalai-signal-pipeline",
-  "version": 2
+  "version": 3
 }

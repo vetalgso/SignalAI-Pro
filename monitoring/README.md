@@ -625,7 +625,8 @@ Alert rules:
 - ошибки и зависание Telegram delivery tick;
 - FAILED-доставки;
 - размер и возраст незавершённого Outbox;
-- количество активных сигналов, отслеживаемых lifecycle tracker.
+- количество активных сигналов, отслеживаемых lifecycle tracker;
+- количество AI-promoted сигналов и их текущие lifecycle-статусы.
 
 Grafana dashboard:
 
@@ -649,3 +650,21 @@ Telegram credentials и другие high-cardinality или секретные 
 
 Мониторинг не создаёт торговые сигналы, не отправляет тестовые
 Telegram-сообщения и не выполняет торговые операции.
+
+### AI promotion status metrics
+
+Панель `AI Promotions` показывает количество сохранённых сигналов
+с `source=AI_REVIEW` через gauge `signalai_signal_ai_promotions`.
+
+Панель `AI Promotions by Status` использует gauge
+`signalai_signal_ai_promotions_by_status` с фиксированным label `status`:
+ACTIVE, ENTRY_REACHED, TP1_REACHED, TP2_REACHED, TP3_REACHED,
+STOPPED, EXPIRED, CANCELLED и UNKNOWN.
+
+Неизвестные статусы объединяются в UNKNOWN. Нулевые серии также
+публикуются. При переходе статуса сигнал перемещается между группами;
+общее количество не увеличивается.
+
+Это текущие количества сохранённых сигналов, не накопительные счётчики
+событий, не win rate и не прибыль исполненных сделок. Удаление сигнала
+из БД уменьшает количество. Новые alerts не добавляются.

@@ -366,6 +366,87 @@ def test_metric_labels_are_bounded() -> None:
         engine.dispose()
 
 
+def test_ai_promotion_metrics_current_state_and_bounded_labels() -> None:
+    engine, session = _session()
+    statuses = (
+        "ACTIVE", "ENTRY_REACHED", "TP1_REACHED", "TP2_REACHED",
+        "TP3_REACHED", "STOPPED", "EXPIRED", "CANCELLED", "UNKNOWN",
+    )
+    service = SignalPipelineMetricsService(
+        session=session,
+        scanner_enabled=False,
+        telegram_enabled=False,
+        scanner_status_provider=lambda: _status(action="IDLE"),
+        telegram_status_provider=lambda: _status(action="IDLE"),
+        now_provider=lambda: NOW,
+    )
+
+    def check(expected: dict[str, int]) -> None:
+        metrics = service.render()
+        lines = metrics.splitlines()
+        assert (
+            f"signalai_signal_ai_promotions {sum(expected.values())}"
+            in lines
+        )
+        actual = {
+            line for line in lines
+            if line.startswith("signalai_signal_ai_promotions_by_status{")
+        }
+        wanted = {
+            'signalai_signal_ai_promotions_by_status'
+            f'{{status="{status}"}} {expected.get(status, 0)}'
+            for status in statuses
+        }
+        assert actual == wanted
+        assert "UNBOUNDED_STATUS" not in metrics
+        assert "OTHER_STATUS" not in metrics
+        assert "BTCUSDT" not in metrics
+        assert "# TYPE signalai_signal_ai_promotions gauge" in lines
+        assert (
+            "# TYPE signalai_signal_ai_promotions_by_status gauge"
+            in lines
+        )
+
+    try:
+        check({})
+
+        # Non-AI signals must not contribute.
+        manual = _signal()
+        session.add(manual)
+        session.commit()
+        check({})
+
+        promoted = []
+        for index, status in enumerate(statuses[:-1]):
+            signal = _signal()
+            signal.fingerprint = f"ai-metrics-{index}"
+            signal.source = "AI_REVIEW"
+            signal.status = status
+            session.add(signal)
+            promoted.append(signal)
+        for index, status in enumerate(("UNBOUNDED_STATUS", "OTHER_STATUS")):
+            signal = _signal()
+            signal.fingerprint = f"ai-unknown-{index}"
+            signal.source = "AI_REVIEW"
+            signal.status = status
+            session.add(signal)
+        session.commit()
+
+        expected = {status: 1 for status in statuses[:-1]}
+        expected["UNKNOWN"] = 2
+        check(expected)
+
+        # A lifecycle transition moves a row, not the total.
+        promoted[0].status = "STOPPED"
+        session.commit()
+        expected["ACTIVE"] = 0
+        expected["STOPPED"] = 2
+        check(expected)
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_metrics_endpoint_contract() -> None:
     from pathlib import Path
 
