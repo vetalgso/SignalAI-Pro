@@ -1,0 +1,11 @@
+.ai-review-journal { margin-top: 28px; padding: 20px; border: 1px solid #334155; border-radius: 14px; }
+.ai-review-journal__heading, .ai-review-journal__pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.ai-review-journal h3 { margin: 0; }
+.ai-review-journal p { opacity: .8; line-height: 1.6; }
+.ai-review-journal__scroll { overflow-x: auto; margin: 16px 0; }
+.ai-review-journal table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ai-review-journal th, .ai-review-journal td { padding: 12px; border-bottom: 1px solid #334155; text-align: left; min-width: 110px; vertical-align: top; }
+.ai-review-journal__pagination { margin-top: 16px; }
+.ai-review-journal__pagination button { background: transparent; color: inherit; border: 1px solid #64748b; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+.ai-review-journal button:disabled { opacity: .45; cursor: default; }
+.ai-review-journal button:focus-visible, .ai-review-journal__scroll:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }

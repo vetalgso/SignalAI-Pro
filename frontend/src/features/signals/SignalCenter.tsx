@@ -24,6 +24,7 @@ import {
 import {
   SignalChart,
 } from './SignalChart';
+import { AIReviewJournal } from './AIReviewJournal';
 import {
   SignalOrderPreview,
 } from './SignalOrderPreview';
@@ -871,6 +872,8 @@ export function SignalCenter({
           )}
         </div>
       )}
+
+      <AIReviewJournal language={language} />
 
       {selectedSignal && (
         <div

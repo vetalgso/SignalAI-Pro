@@ -16,6 +16,8 @@ from app.core.config import settings
 from app.database.session import get_db
 from app.tradinggpt.facade import tradinggpt
 
+from .ai_review_read import router as ai_review_read_router
+
 from .generator import (
     TradingSignalGenerator,
 )
@@ -57,6 +59,8 @@ router = APIRouter(
     prefix="/signals",
     tags=["TradingGPT Signals"],
 )
+
+router.include_router(ai_review_read_router)
 
 
 def _service(

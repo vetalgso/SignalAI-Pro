@@ -185,3 +185,89 @@ def test_ai_review_model_is_registered() -> None:
     assert SignalAIReview.__tablename__ == (
         "signal_ai_reviews"
     )
+
+
+def test_review_projection_preserves_success_over_old_failure() -> None:
+    from app.tradinggpt.signals.ai_review_read import review_row
+
+    db = session()
+    item = candidate(db)
+    review, _ = SignalAIReviewRepository(db).create_pending(
+        candidate_id=item.id, provider="openai", model="test", requested_direction="LONG",
+    )
+    item.signal_id = 42
+    item.snapshot = {
+        "ai_promotion": {"action": "DUPLICATE", "review_id": review.id, "signal_id": 42},
+        "ai_promotion_attempt": {"action": "FAILED", "reason": "PROMOTION_INTERNAL_ERROR", "review_id": review.id},
+    }
+    row = review_row(review, item)
+    assert row.promotion_action == "DUPLICATE"
+    assert row.promotion_reason is None
+    assert row.signal_id == 42
+    item.snapshot = {}
+    assert review_row(review, item).promotion_action == "LINKED"
+    db.close()
+
+
+def test_review_projection_missing_malformed_and_private_diagnostics() -> None:
+    from app.tradinggpt.signals.ai_review_read import review_row
+
+    db = session()
+    item = candidate(db)
+    review, _ = SignalAIReviewRepository(db).create_pending(
+        candidate_id=item.id, provider="openai", model="test", requested_direction="LONG",
+    )
+    for snapshot in (None, [], {}, {"ai_promotion_attempt": "private payload"}):
+        item.snapshot = snapshot
+        assert review_row(review, item).promotion_action == "NOT_RECORDED"
+    item.snapshot = {"ai_promotion_attempt": {
+        "action": "BLOCKED", "reason": "PROMOTION_HIGH_RISK", "review_id": review.id,
+    }}
+    assert review_row(review, item).promotion_reason == "PROMOTION_HIGH_RISK"
+    item.snapshot = {"ai_promotion_attempt": {
+        "action": "FAILED", "reason": "private exception message", "review_id": review.id,
+    }, "credentials": "private credential"}
+    row = review_row(review, item)
+    assert row.promotion_reason == "PROMOTION_UNKNOWN_REASON"
+    assert "private" not in row.model_dump_json()
+    item.snapshot = {"ai_promotion_attempt": {
+        "action": "FAILED", "reason": "PROMOTION_INTERNAL_ERROR", "review_id": review.id + 1,
+    }}
+    assert review_row(review, item).promotion_action == "NOT_RECORDED"
+    db.close()
+
+
+def test_review_endpoint_pagination_and_validation() -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.pool import StaticPool
+    from app.database.session import get_db
+    from app.tradinggpt.signals.router import router
+
+    engine = create_engine("sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    db = Session(engine)
+    review_ids = []
+    for _ in range(2):
+        item = candidate(db)
+        review, _ = SignalAIReviewRepository(db).create_pending(
+            candidate_id=item.id, provider="openai", model="test", requested_direction="LONG",
+        )
+        review_ids.append(review.id)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_db] = lambda: db
+    with TestClient(app) as client:
+        response = client.get("/signals/ai-reviews?limit=1")
+        assert response.status_code == 200
+        assert response.json()["total"] == 2
+        assert response.json()["items"][0]["id"] == review_ids[1]
+        assert response.json()["items"][0]["promotion_action"] == "NOT_RECORDED"
+        assert client.get("/signals/ai-reviews?limit=1&offset=1").json()["items"][0]["id"] == review_ids[0]
+        assert client.get("/signals/ai-reviews?offset=2").json()["items"] == []
+        assert client.get("/signals/ai-reviews?limit=101").status_code == 422
+        assert client.get("/signals/ai-reviews?offset=-1").status_code == 422
+    assert db.query(SignalAIReview).count() == 2
+    db.close()
+    engine.dispose()
