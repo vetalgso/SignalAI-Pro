@@ -1,0 +1,16 @@
+.signal-quality { margin-top: 28px; padding: 20px; border: 1px solid #334155; border-radius: 14px; }
+.signal-quality__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; }
+.signal-quality h3 { margin: 0; flex: 1 1 240px; }
+.signal-quality p { line-height: 1.6; opacity: .85; font-size: 13px; }
+.signal-quality button, .signal-quality select { background: #0f172a; color: #f1f5f9; border: 1px solid #64748b; border-radius: 8px; padding: 8px 12px; }
+.signal-quality button { cursor: pointer; }
+.signal-quality button:disabled { opacity: .45; cursor: default; }
+.signal-quality__cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; margin: 20px 0; }
+.signal-quality__cards > div { border: 1px solid #334155; border-radius: 8px; padding: 12px; }
+.signal-quality__cards span { font-size: 12px; }
+.signal-quality__cards strong { display: block; font-size: 24px; margin-top: 8px; }
+.signal-quality__scroll { overflow-x: auto; margin: 16px 0; }
+.signal-quality table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.signal-quality th, .signal-quality td { text-align: left; padding: 12px; border-bottom: 1px solid #334155; vertical-align: top; min-width: 80px; }
+.signal-quality td small { display: block; margin-top: 6px; white-space: nowrap; opacity: .75; }
+.signal-quality button:focus-visible, .signal-quality select:focus-visible, .signal-quality__scroll:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }

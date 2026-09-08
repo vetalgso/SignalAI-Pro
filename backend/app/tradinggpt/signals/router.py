@@ -17,6 +17,7 @@ from app.database.session import get_db
 from app.tradinggpt.facade import tradinggpt
 
 from .ai_review_read import router as ai_review_read_router
+from .quality_report import router as quality_report_router
 
 from .generator import (
     TradingSignalGenerator,
@@ -61,6 +62,7 @@ router = APIRouter(
 )
 
 router.include_router(ai_review_read_router)
+router.include_router(quality_report_router)
 
 
 def _service(
