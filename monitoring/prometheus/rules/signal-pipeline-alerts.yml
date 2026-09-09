@@ -140,3 +140,51 @@ groups:
         annotations:
           summary: Telegram-сообщение застряло в очереди
           description: Самая старая незавершённая доставка ожидает более пяти минут.
+
+      - alert: SignalAISignalLifecycleMissing
+        expr: |
+          (signalai_signal_lifecycle_latest_completed_observed == 0)
+          and signalai_signal_lifecycle_enabled == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: signal-pipeline
+        annotations:
+          summary: Нет завершённых lifecycle-циклов
+          description: Tracking включён, но журнал не содержит завершённых циклов.
+
+      - alert: SignalAISignalLifecycleStale
+        expr: |
+          (signalai_signal_lifecycle_seconds_since_last_completion > clamp_min(3 * signalai_signal_lifecycle_poll_interval_seconds, 180))
+          and signalai_signal_lifecycle_enabled == 1
+        for: 1m
+        labels:
+          severity: warning
+          component: signal-pipeline
+        annotations:
+          summary: Задержка lifecycle-цикла
+          description: Возраст последнего завершения превышает три интервала (минимум 180 секунд). Проверьте журнал и процесс API.
+
+      - alert: SignalAISignalLifecycleErrors
+        expr: |
+          (signalai_signal_lifecycle_latest_errors > 0)
+          and signalai_signal_lifecycle_enabled == 1
+        for: 0s
+        labels:
+          severity: warning
+          component: signal-pipeline
+        annotations:
+          summary: Ошибки последнего lifecycle-цикла
+          description: Последний завершённый цикл содержит ошибки. Это снимок журнала, не накопительный счётчик.
+
+      - alert: SignalAISignalLifecycleSlow
+        expr: |
+          (signalai_signal_lifecycle_latest_duration_seconds > clamp_min(signalai_signal_lifecycle_poll_interval_seconds, 60))
+          and signalai_signal_lifecycle_enabled == 1
+        for: 1m
+        labels:
+          severity: warning
+          component: signal-pipeline
+        annotations:
+          summary: Медленный lifecycle-цикл
+          description: Длительность последнего завершённого цикла превышает интервал (минимум 60 секунд).

@@ -295,6 +295,8 @@ def get_signal_runtime_metrics(
 ) -> Response:
     metrics = SignalPipelineMetricsService(
         session=db,
+        lifecycle_enabled=settings.signal_tracking_enabled,
+        lifecycle_interval_seconds=settings.signal_tracking_interval_seconds,
         scanner_enabled=(
             settings
             .signal_scanner_background_enabled

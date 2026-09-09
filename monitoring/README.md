@@ -691,3 +691,43 @@ STOPPED, EXPIRED, CANCELLED и UNKNOWN.
 Это текущие количества сохранённых сигналов, не накопительные счётчики
 событий, не win rate и не прибыль исполненных сделок. Удаление сигнала
 из БД уменьшает количество. Новые alerts не добавляются.
+
+### Lifecycle journal monitoring
+
+Endpoint /api/v3/signals/runtime/metrics читает signal_lifecycle_cycles
+(миграция 20260909_0021). Дополнительных миграций нет.
+Шесть gauge-метрик с префиксом signalai_signal_lifecycle_:
+
+- enabled: настройка tracking, а не доказательство живого worker.
+- poll_interval_seconds: текущая задержка после обработки цикла.
+- latest_completed_observed: есть ли завершённая запись.
+- seconds_since_last_completion: возраст последнего завершения.
+- latest_duration_seconds: длительность этого цикла.
+- latest_errors: количество ошибок этого цикла, не counter.
+
+Завершённые статусы: COMPLETED, PARTIAL, FAILED, CANCELLED.
+Выбор по completed_at DESC, id DESC, по всем worker в общей БД.
+RUNNING не вытесняет завершённую запись и не объявляется осиротевшим.
+Если завершений нет, observed=0, возраст/длительность/ошибки отсутствуют;
+NULL duration/errors также не заменяются нулями. Будущее время даёт возраст 0.
+Нет меток worker_id, cycle_id, symbol или текстов исключений.
+Ошибка чтения БД не превращается в успешную пустую выборку.
+
+Четыре предупреждения включены только при enabled=1:
+
+- SignalAISignalLifecycleMissing: observed=0 непрерывно 5 минут.
+- SignalAISignalLifecycleStale: возраст > max(3 * interval, 180s) в течение минуты.
+- SignalAISignalLifecycleErrors: latest_errors > 0, без дополнительной выдержки.
+- SignalAISignalLifecycleSlow: duration > max(interval, 60s) в течение минуты.
+
+Последняя ошибка сохраняется до следующего завершения; это не история
+всех ошибок. Несколько циклов между scrape могут скрыть краткую ошибку.
+Для полной истории используйте БД. Свежий цикл одного worker не доказывает
+исправность остальных. Для недоступного endpoint остаётся MetricsTargetDown.
+
+Панели Lifecycle Completion Age, Lifecycle Cycle Duration, Lifecycle Cycle Errors
+показывают сохранённые данные даже при выключенном tracking. Пустота означает
+отсутствие данных, не здоровье. Signal Pipeline теперь содержит 22 панели и 15 alerts.
+Проверка: python monitoring/verify_monitoring_stack.py; promtool test rules
+monitoring/prometheus/tests/signal-lifecycle-alerts.test.yml.
+Эти проверки не вызывают scanner, lifecycle, Telegram или execution вручную.

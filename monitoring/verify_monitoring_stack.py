@@ -1659,6 +1659,10 @@ signal_pipeline_rules = (
 ).read_text(encoding="utf-8")
 
 signal_pipeline_alerts = (
+    "SignalAISignalLifecycleMissing",
+    "SignalAISignalLifecycleStale",
+    "SignalAISignalLifecycleErrors",
+    "SignalAISignalLifecycleSlow",
     "SignalAISignalPipelineMetricsTargetDown",
     "SignalAISignalScannerBackgroundLoopDown",
     "SignalAISignalScannerTickFailure",
@@ -1682,7 +1686,7 @@ assert (
     signal_pipeline_rules.count(
         "      - alert: "
     )
-    == 11
+    == 15
 )
 
 signal_pipeline_dashboard = json.loads(
@@ -1709,7 +1713,7 @@ assert (
     len(
         signal_pipeline_dashboard["panels"]
     )
-    == 19
+    == 22
 )
 
 pipeline_panel_ids = [
@@ -1743,6 +1747,9 @@ for metric in (
     "signalai_trading_signals_trackable",
     "signalai_signal_ai_promotions",
     "signalai_signal_ai_promotions_by_status",
+    "signalai_signal_lifecycle_seconds_since_last_completion",
+    "signalai_signal_lifecycle_latest_duration_seconds",
+    "signalai_signal_lifecycle_latest_errors",
     "ALERTS",
 ):
     assert metric in pipeline_dashboard_text, metric
@@ -1759,6 +1766,9 @@ for value in (
     "Scanner Errors by Code",
     "AI Promotions",
     "AI Promotions by Status",
+    "Lifecycle Completion Age",
+    "Lifecycle Cycle Duration",
+    "Lifecycle Cycle Errors",
     (
         "SignalAISignalScanner"
         "AssetAnalysisFailure"
@@ -1767,7 +1777,7 @@ for value in (
     assert value in monitoring_docs, value
 
 print("Signal Pipeline Prometheus scrape job: OK")
-print("Signal Pipeline Prometheus alerts: 11")
-print("Signal Pipeline Grafana panels: 19")
+print("Signal Pipeline Prometheus alerts: 15")
+print("Signal Pipeline Grafana panels: 22")
 print("Signal Pipeline dashboard IDs: unique")
 print("Signal Pipeline monitoring documentation: OK")

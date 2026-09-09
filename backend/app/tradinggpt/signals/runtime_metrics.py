@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.tradinggpt.signals.lifecycle_metrics import render_lifecycle_metrics
+
 from app.models.signal_discovery import (
     SignalScanRun,
 )
@@ -100,12 +102,16 @@ class SignalPipelineMetricsService:
             [],
             SchedulerBackgroundLoopStatus,
         ],
+        lifecycle_enabled: bool = False,
+        lifecycle_interval_seconds: float = 60.0,
         now_provider: Callable[
             [],
             datetime,
         ] | None = None,
     ) -> None:
         self._session = session
+        self._lifecycle_enabled = lifecycle_enabled
+        self._lifecycle_interval_seconds = lifecycle_interval_seconds
         self._scanner_enabled = (
             scanner_enabled
         )
@@ -138,7 +144,10 @@ class SignalPipelineMetricsService:
             self._telegram_status_provider()
         )
 
-        lines: list[str] = []
+        lines: list[str] = render_lifecycle_metrics(
+            self._session, enabled=self._lifecycle_enabled,
+            interval_seconds=self._lifecycle_interval_seconds, now=now,
+        )
 
         self._append_loop_metrics(
             lines,

@@ -74,6 +74,9 @@ def _session():
 
     from app.models.signal_ai_review import SignalAIReview
 
+    from app.models.signal_lifecycle_cycle import SignalLifecycleCycle
+
+    SignalLifecycleCycle.__table__.create(engine)
     SignalScanRun.__table__.create(engine)
     SignalAIReview.__table__.create(engine)
     TradingSignal.__table__.create(engine)
@@ -364,6 +367,8 @@ def test_metric_labels_are_bounded() -> None:
             in metrics
         )
         assert "UNBOUNDED_ACTION" not in metrics
+        assert "signalai_signal_lifecycle_latest_completed_observed 0" in metrics
+        assert "signalai_signal_lifecycle_seconds_since_last_completion" not in metrics
     finally:
         session.close()
         engine.dispose()
