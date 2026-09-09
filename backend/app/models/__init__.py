@@ -1,4 +1,5 @@
 from app.models.exchange_account import ExchangeAccount
+from app.models.signal_lifecycle_cycle import SignalLifecycleCycle
 from app.models.order_reconciliation_batch import (
     OrderReconciliationBatch,
 )
@@ -22,6 +23,7 @@ from app.models.signal import Signal
 from app.models.user import User
 
 __all__ = [
+    "SignalLifecycleCycle",
     "ExchangeAccount",
     "OrderReconciliationBatch",
     "SignalScanCandidate",

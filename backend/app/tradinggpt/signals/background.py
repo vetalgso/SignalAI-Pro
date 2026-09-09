@@ -12,6 +12,7 @@ from .lifecycle import (
 from .repository import (
     TradingSignalRepository,
 )
+from .lifecycle_journal import LifecycleJournal, safe_error_code
 
 
 logger = logging.getLogger(__name__)
@@ -19,14 +20,22 @@ logger = logging.getLogger(__name__)
 
 async def refresh_product_signals(
 ) -> dict[str, object]:
-    with SessionLocal() as session:
-        tracker = SignalLifecycleTracker(
-            TradingSignalRepository(
-                session
+    journal = LifecycleJournal(SessionLocal, settings.signal_tracking_interval_seconds)
+    journal.begin()
+    try:
+        with SessionLocal() as session:
+            tracker = SignalLifecycleTracker(
+                TradingSignalRepository(session)
             )
-        )
-
-        return await tracker.refresh_all()
+            result = await tracker.refresh_all()
+    except asyncio.CancelledError:
+        journal.cancel()
+        raise
+    except Exception as exc:
+        journal.fail(exc)
+        raise
+    journal.complete(result)
+    return result
 
 
 class SignalLifecycleBackgroundLoop:
@@ -104,10 +113,10 @@ class SignalLifecycleBackgroundLoop:
                             "transition_count"
                         ],
                     )
-            except Exception:
-                logger.exception(
-                    "Signal lifecycle refresh "
-                    "failed."
+            except Exception as exc:
+                logger.error(
+                    "Signal lifecycle refresh failed; code=%s",
+                    safe_error_code(exc),
                 )
 
             try:
