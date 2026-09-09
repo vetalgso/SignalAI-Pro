@@ -1,0 +1,539 @@
+from __future__ import annotations
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    status,
+)
+from fastapi.responses import (
+    JSONResponse,
+    Response,
+)
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.database.session import get_db
+from app.tradinggpt.engine.router import (
+    analyze_and_execute,
+)
+from app.tradinggpt.risk.models import (
+    AccountRiskContext,
+    RiskLimits,
+)
+
+from .background_registry import (
+    scheduler_background_loop,
+)
+from .schemas import (
+    SafeSchedulerCycleRequest,
+    SafeSchedulerCycleResponse,
+    SchedulerStateResponse,
+    SchedulerStateUpdateRequest,
+    SchedulerRunnerStatusResponse,
+    SchedulerRunnerTickRequest,
+    SchedulerRunnerTickResponse,
+    SchedulerPayloadResponse,
+    SchedulerPayloadUpsertRequest,
+    SchedulerBackgroundLoopStatusResponse,
+    SchedulerObservabilityResponse,
+    SchedulerReadinessResponse,
+)
+from .service import SafeSchedulerCycleService
+from .journal_service import (
+    JournaledSchedulerCycleService,
+)
+from .repository import SchedulerCycleRepository
+from .state_repository import (
+    SchedulerStateRepository,
+)
+from .state_service import SchedulerStateService
+from .payload_repository import (
+    SchedulerPayloadRepository,
+)
+from .metrics import (
+    PROMETHEUS_CONTENT_TYPE,
+    SchedulerMetricsService,
+)
+from .observability import (
+    SchedulerObservabilityService,
+)
+from .readiness import (
+    SchedulerReadinessService,
+)
+from .payload_service import SchedulerPayloadService
+from .runner_registry import (
+    create_scheduler_runner,
+)
+
+
+router = APIRouter(
+    prefix="/scheduler",
+    tags=["TradingGPT Scheduler"],
+)
+
+
+def _create_observability_service(
+    db: Session,
+) -> SchedulerObservabilityService:
+    return SchedulerObservabilityService(
+        state_service=SchedulerStateService(
+            SchedulerStateRepository(db)
+        ),
+        payload_service=SchedulerPayloadService(
+            SchedulerPayloadRepository(db)
+        ),
+        cycle_repository=SchedulerCycleRepository(
+            db
+        ),
+        background_status_provider=lambda: (
+            scheduler_background_loop
+            .status()
+            .to_dict()
+        ),
+        background_loop_enabled=(
+            settings.scheduler_background_loop_enabled
+        ),
+        distributed_lock_enabled=(
+            settings
+            .scheduler_distributed_lock_enabled
+        ),
+        distributed_lock_backend=(
+            "postgresql_advisory"
+        ),
+        advisory_lock_key=(
+            settings.scheduler_advisory_lock_key
+        ),
+    )
+
+
+@router.post(
+    "/cycle",
+    response_model=SafeSchedulerCycleResponse,
+)
+def run_scheduler_cycle(
+    request: SafeSchedulerCycleRequest,
+    db: Session = Depends(get_db),
+) -> SafeSchedulerCycleResponse:
+    risk_request = request.runtime_risk
+
+    account = AccountRiskContext(
+        equity=risk_request.equity,
+        peak_equity=risk_request.peak_equity,
+        daily_pnl=risk_request.daily_pnl,
+        open_positions=(
+            risk_request.open_positions
+        ),
+        current_exposure_value=(
+            risk_request.current_exposure_value
+        ),
+        correlated_exposure_value=(
+            risk_request
+            .correlated_exposure_value
+        ),
+    )
+
+    limits = RiskLimits(
+        max_daily_loss_percent=(
+            risk_request
+            .max_daily_loss_percent
+        ),
+        max_drawdown_percent=(
+            risk_request
+            .max_drawdown_percent
+        ),
+        max_total_exposure_percent=(
+            risk_request
+            .max_total_exposure_percent
+        ),
+        max_correlated_exposure_percent=(
+            risk_request
+            .max_correlated_exposure_percent
+        ),
+        max_open_positions=(
+            risk_request.max_open_positions
+        ),
+        minimum_position_value=(
+            risk_request
+            .minimum_position_value
+        ),
+    )
+
+    def execute_callback(
+        dry_run: bool,
+    ) -> dict[str, object]:
+        safe_request = (
+            request.analysis.model_copy(
+                update={"dry_run": dry_run}
+            )
+        )
+
+        response = analyze_and_execute(
+            request=safe_request,
+            db=db,
+        )
+
+        return response.model_dump(
+            mode="json"
+        )
+
+    cycle_service = SafeSchedulerCycleService(
+        execute_callback=execute_callback,
+    )
+    service = JournaledSchedulerCycleService(
+        cycle_service=cycle_service,
+        repository=SchedulerCycleRepository(db),
+        state_repository=(
+            SchedulerStateRepository(db)
+        ),
+    )
+
+    try:
+        result = service.run(
+            account=account,
+            limits=limits,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+    return (
+        SafeSchedulerCycleResponse
+        .model_validate(result)
+    )
+
+
+@router.get(
+    "/cycles",
+    response_model=list[SafeSchedulerCycleResponse],
+)
+def list_scheduler_cycles(
+    cycle_status: str | None = Query(
+        default=None,
+        alias="status",
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=1000,
+    ),
+    db: Session = Depends(get_db),
+) -> list[SafeSchedulerCycleResponse]:
+    service = JournaledSchedulerCycleService(
+        cycle_service=SafeSchedulerCycleService(
+            execute_callback=lambda dry_run: {}
+        ),
+        repository=SchedulerCycleRepository(db),
+    )
+
+    return [
+        SafeSchedulerCycleResponse.model_validate(
+            item
+        )
+        for item in service.list_recent(
+            status=cycle_status,
+            limit=limit,
+        )
+    ]
+
+
+@router.get(
+    "/cycles/{cycle_id}",
+    response_model=SafeSchedulerCycleResponse,
+)
+def get_scheduler_cycle(
+    cycle_id: int,
+    db: Session = Depends(get_db),
+) -> SafeSchedulerCycleResponse:
+    service = JournaledSchedulerCycleService(
+        cycle_service=SafeSchedulerCycleService(
+            execute_callback=lambda dry_run: {}
+        ),
+        repository=SchedulerCycleRepository(db),
+    )
+
+    result = service.get(cycle_id)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "Scheduler cycle not found: "
+                f"{cycle_id}."
+            ),
+        )
+
+    return SafeSchedulerCycleResponse.model_validate(
+        result
+    )
+
+
+@router.get(
+    "/state",
+    response_model=SchedulerStateResponse,
+)
+def get_scheduler_state(
+    db: Session = Depends(get_db),
+) -> SchedulerStateResponse:
+    service = SchedulerStateService(
+        SchedulerStateRepository(db)
+    )
+
+    return SchedulerStateResponse.model_validate(
+        service.get()
+    )
+
+
+@router.patch(
+    "/state",
+    response_model=SchedulerStateResponse,
+)
+def update_scheduler_state(
+    request: SchedulerStateUpdateRequest,
+    db: Session = Depends(get_db),
+) -> SchedulerStateResponse:
+    service = SchedulerStateService(
+        SchedulerStateRepository(db)
+    )
+
+    try:
+        result = service.update(
+            enabled=request.enabled,
+            interval_seconds=(
+                request.interval_seconds
+            ),
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return SchedulerStateResponse.model_validate(
+        result
+    )
+
+
+@router.post(
+    "/runner/tick",
+    response_model=SchedulerRunnerTickResponse,
+)
+def run_scheduler_runner_tick(
+    request: SchedulerRunnerTickRequest,
+    db: Session = Depends(get_db),
+) -> SchedulerRunnerTickResponse:
+    runner = create_scheduler_runner(db)
+
+    result = runner.tick(
+        force=request.force
+    )
+
+    return (
+        SchedulerRunnerTickResponse
+        .model_validate(result)
+    )
+
+
+@router.get(
+    "/runner/status",
+    response_model=SchedulerRunnerStatusResponse,
+)
+def get_scheduler_runner_status(
+    db: Session = Depends(get_db),
+) -> SchedulerRunnerStatusResponse:
+    runner = create_scheduler_runner(db)
+
+    return (
+        SchedulerRunnerStatusResponse
+        .model_validate(
+            runner.status().to_dict()
+        )
+    )
+
+
+@router.get(
+    "/payload",
+    response_model=SchedulerPayloadResponse,
+)
+def get_scheduler_payload(
+    db: Session = Depends(get_db),
+) -> SchedulerPayloadResponse:
+    service = SchedulerPayloadService(
+        SchedulerPayloadRepository(db)
+    )
+
+    return SchedulerPayloadResponse.model_validate(
+        service.get()
+    )
+
+
+@router.put(
+    "/payload",
+    response_model=SchedulerPayloadResponse,
+)
+def save_scheduler_payload(
+    request: SchedulerPayloadUpsertRequest,
+    db: Session = Depends(get_db),
+) -> SchedulerPayloadResponse:
+    service = SchedulerPayloadService(
+        SchedulerPayloadRepository(db)
+    )
+
+    result = service.save(
+        runtime_risk_payload=(
+            request.runtime_risk.model_dump(
+                mode="json"
+            )
+        ),
+        analysis_payload=(
+            request.analysis.model_dump(
+                mode="json"
+            )
+        ),
+    )
+
+    return SchedulerPayloadResponse.model_validate(
+        result
+    )
+
+
+@router.delete(
+    "/payload",
+    response_model=SchedulerPayloadResponse,
+)
+def clear_scheduler_payload(
+    db: Session = Depends(get_db),
+) -> SchedulerPayloadResponse:
+    service = SchedulerPayloadService(
+        SchedulerPayloadRepository(db)
+    )
+
+    return SchedulerPayloadResponse.model_validate(
+        service.clear()
+    )
+
+
+@router.get(
+    "/runner/background/status",
+    response_model=(
+        SchedulerBackgroundLoopStatusResponse
+    ),
+)
+def get_scheduler_background_status(
+) -> SchedulerBackgroundLoopStatusResponse:
+    return (
+        SchedulerBackgroundLoopStatusResponse
+        .model_validate(
+            scheduler_background_loop
+            .status()
+            .to_dict()
+        )
+    )
+
+
+@router.get(
+    "/observability",
+    response_model=SchedulerObservabilityResponse,
+)
+def get_scheduler_observability(
+    db: Session = Depends(get_db),
+) -> SchedulerObservabilityResponse:
+    service = _create_observability_service(db)
+
+    return SchedulerObservabilityResponse.model_validate(
+        service.get()
+    )
+
+
+@router.get(
+    "/readiness",
+    response_model=SchedulerReadinessResponse,
+    responses={
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "model": SchedulerReadinessResponse,
+            "description": (
+                "Scheduler runtime is not ready."
+            ),
+        },
+    },
+)
+def get_scheduler_readiness(
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    service = SchedulerReadinessService(
+        observability_provider=lambda: (
+            _create_observability_service(db).get()
+        ),
+        background_loop_enabled=(
+            settings.scheduler_background_loop_enabled
+        ),
+    )
+
+    result = SchedulerReadinessResponse.model_validate(
+        service.get()
+    )
+
+    response_status = (
+        status.HTTP_200_OK
+        if result.ready
+        else status.HTTP_503_SERVICE_UNAVAILABLE
+    )
+
+    return JSONResponse(
+        status_code=response_status,
+        content=result.model_dump(mode="json"),
+    )
+
+
+@router.get(
+    "/metrics",
+    response_class=Response,
+    responses={
+        status.HTTP_200_OK: {
+            "description": (
+                "Prometheus scheduler metrics."
+            ),
+            "content": {
+                "text/plain": {
+                    "schema": {
+                        "type": "string",
+                    },
+                },
+            },
+        },
+    },
+)
+def get_scheduler_metrics(
+    db: Session = Depends(get_db),
+) -> Response:
+    observability = (
+        _create_observability_service(db).get()
+    )
+
+    readiness = SchedulerReadinessService(
+        observability_provider=lambda: (
+            observability
+        ),
+        background_loop_enabled=(
+            settings.scheduler_background_loop_enabled
+        ),
+    ).get()
+
+    metrics = SchedulerMetricsService(
+        observability_provider=lambda: (
+            observability
+        ),
+        readiness_provider=lambda: readiness,
+        cycle_counts_provider=(
+            SchedulerCycleRepository(
+                db
+            ).count_by_status
+        ),
+    ).render()
+
+    return Response(
+        content=metrics,
+        media_type=PROMETHEUS_CONTENT_TYPE,
+    )

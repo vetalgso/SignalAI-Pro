@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from app.tradinggpt.decision import FinalTradeDecision
+from app.tradinggpt.execution import ExecutionPlan
+from app.tradinggpt.explanation import TradingExplanation
+from app.tradinggpt.orders import OrderIntent
+from app.tradinggpt.pipeline import TradingPipelineResult
+from app.tradinggpt.risk import RiskDecision
+
+
+@dataclass(frozen=True, slots=True)
+class TradingGPTAnalysisResult:
+    pipeline: TradingPipelineResult
+    explanation: TradingExplanation
+    execution_plan: ExecutionPlan | None = None
+    risk_decision: RiskDecision | None = None
+    decision: FinalTradeDecision | None = None
+    order_intent: OrderIntent | None = None
+
+    @property
+    def scoring(self):
+        return self.pipeline.scoring
+
+    @property
+    def market_regime(self):
+        return self.pipeline.market_regime
+
+    @property
+    def portfolio(self):
+        return self.pipeline.portfolio
+
+    @property
+    def conviction(self):
+        return self.pipeline.conviction
+
+    def to_dict(self) -> dict[str, object]:
+        payload = self.pipeline.to_dict()
+        payload["explanation"] = self.explanation.to_dict()
+        payload["execution_plan"] = (
+            self.execution_plan.to_dict()
+            if self.execution_plan is not None
+            else None
+        )
+        payload["risk_decision"] = (
+            self.risk_decision.to_dict()
+            if self.risk_decision is not None
+            else None
+        )
+        payload["decision"] = (
+            self.decision.to_dict()
+            if self.decision is not None
+            else None
+        )
+        payload["order_intent"] = (
+            self.order_intent.to_dict()
+            if self.order_intent is not None
+            else None
+        )
+        return payload

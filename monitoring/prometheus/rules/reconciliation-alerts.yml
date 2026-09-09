@@ -1,0 +1,89 @@
+groups:
+  - name: signalai-order-reconciliation
+    interval: 5s
+    rules:
+      - alert: SignalAIOrderReconciliationMetricsTargetDown
+        expr: up{job="signalai-order-reconciliation"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: order-reconciliation
+        annotations:
+          summary: Order reconciliation metrics target is unavailable
+          description: Prometheus cannot scrape the reconciliation metrics endpoint.
+
+      - alert: SignalAIOrderReconciliationBackgroundLoopDown
+        expr: |
+          signalai_order_reconciliation_enabled == 1
+          and signalai_order_reconciliation_background_running == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: order-reconciliation
+        annotations:
+          summary: Order reconciliation background loop is down
+          description: Automatic reconciliation is enabled but its background loop is not running.
+
+      - alert: SignalAIOrderReconciliationBackgroundLoopStopping
+        expr: |
+          signalai_order_reconciliation_enabled == 1
+          and signalai_order_reconciliation_background_stopping == 1
+        for: 30s
+        labels:
+          severity: warning
+          component: order-reconciliation
+        annotations:
+          summary: Order reconciliation loop is stopping
+          description: The enabled reconciliation loop remains in stopping state.
+
+      - alert: SignalAIOrderReconciliationBackgroundTickFailure
+        expr: |
+          increase(
+            signalai_order_reconciliation_failed_ticks_total[5m]
+          ) > 0
+        labels:
+          severity: warning
+          component: order-reconciliation
+        annotations:
+          summary: Order reconciliation tick failed
+          description: A reconciliation background tick failed during the last five minutes.
+
+      - alert: SignalAIOrderReconciliationLatestTickFailed
+        expr: signalai_order_reconciliation_last_tick_failed == 1
+        for: 30s
+        labels:
+          severity: critical
+          component: order-reconciliation
+        annotations:
+          summary: Latest order reconciliation tick failed
+          description: The latest automatic reconciliation tick is in failed state.
+
+      - alert: SignalAIOrderReconciliationTickStale
+        expr: |
+          signalai_order_reconciliation_enabled == 1
+          and signalai_order_reconciliation_background_running == 1
+          and signalai_order_reconciliation_last_tick_observed == 1
+          and (
+            signalai_order_reconciliation_seconds_since_last_tick
+            >
+            signalai_order_reconciliation_poll_interval_seconds * 3
+          )
+        for: 30s
+        labels:
+          severity: critical
+          component: order-reconciliation
+        annotations:
+          summary: Order reconciliation tick is stale
+          description: No completed reconciliation tick was observed within three configured poll intervals.
+
+      - alert: SignalAIOrderReconciliationReadOnlyInvariant
+        expr: |
+          signalai_order_reconciliation_enabled == 1
+          and signalai_order_reconciliation_read_only == 0
+        for: 5s
+        labels:
+          severity: critical
+          component: order-reconciliation
+        annotations:
+          summary: Order reconciliation read-only invariant failed
+          description: Automatic reconciliation is enabled without the required read-only safety invariant.

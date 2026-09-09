@@ -1,0 +1,221 @@
+.exchange-order-risk {
+  margin: 16px 0;
+  border: 1px solid #1a4158;
+  border-radius: 12px;
+  background: rgba(5, 21, 31, .76);
+  padding: 15px;
+}
+
+.exchange-order-risk-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 13px;
+}
+
+.exchange-order-risk-header > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.exchange-order-risk-header > div > svg {
+  margin-top: 1px;
+  color: #33b7ff;
+}
+
+.exchange-order-risk-header h3,
+.exchange-order-risk-header p {
+  margin: 0;
+}
+
+.exchange-order-risk-header h3 {
+  color: #dcecf5;
+  font-size: 14px;
+}
+
+.exchange-order-risk-header p {
+  margin-top: 3px;
+  color: #738d9e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.exchange-order-risk-header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #24506a;
+  border-radius: 8px;
+  background: rgba(16, 47, 65, .72);
+  padding: 7px 10px;
+  color: #9dc9df;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.exchange-order-risk-header button:disabled {
+  opacity: .52;
+  cursor: not-allowed;
+}
+
+.exchange-order-risk-warning,
+.exchange-order-risk-error,
+.exchange-order-risk-loading {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 9px;
+  padding: 10px 11px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.exchange-order-risk-warning {
+  border: 1px solid rgba(232, 177, 54, .32);
+  background: rgba(94, 64, 12, .2);
+  color: #e4bd63;
+}
+
+.exchange-order-risk-error {
+  border: 1px solid rgba(245, 90, 90, .3);
+  background: rgba(105, 24, 31, .22);
+  color: #f19696;
+}
+
+.exchange-order-risk-loading {
+  color: #82a1b3;
+}
+
+.exchange-order-risk-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+
+.exchange-order-risk-status.available {
+  border: 1px solid rgba(45, 196, 129, .3);
+  background: rgba(23, 106, 70, .18);
+  color: #57d9a0;
+}
+
+.exchange-order-risk-status.blocked {
+  border: 1px solid rgba(245, 90, 90, .34);
+  background: rgba(105, 24, 31, .22);
+  color: #f19696;
+}
+
+.exchange-order-risk-status div {
+  display: grid;
+  gap: 3px;
+}
+
+.exchange-order-risk-status strong {
+  font-size: 11px;
+}
+
+.exchange-order-risk-status span {
+  color: #8da7b6;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.exchange-order-risk-metrics {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 11px;
+}
+
+.exchange-order-risk-metrics article {
+  border: 1px solid #183b50;
+  border-radius: 10px;
+  background: rgba(10, 32, 45, .72);
+  padding: 11px;
+}
+
+.exchange-order-risk-metrics article > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.exchange-order-risk-metrics span,
+.exchange-order-risk-metrics small {
+  color: #748e9f;
+  font-size: 9px;
+}
+
+.exchange-order-risk-metrics strong {
+  color: #d6e7f0;
+  font-size: 11px;
+}
+
+.exchange-order-risk-progress {
+  height: 5px;
+  margin: 10px 0 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #102c3d;
+}
+
+.exchange-order-risk-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, #25a9f3, #55d7a0);
+}
+
+.exchange-order-risk-details {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 11px 0 0;
+  overflow: hidden;
+  border: 1px solid #183b50;
+  border-radius: 10px;
+  background: #183b50;
+}
+
+.exchange-order-risk-details > div {
+  min-width: 0;
+  background: rgba(8, 28, 40, .96);
+  padding: 9px 11px;
+}
+
+.exchange-order-risk-details dt {
+  color: #6f899a;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+.exchange-order-risk-details dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: #c7dbe6;
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  .exchange-order-risk-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .exchange-order-risk-header button {
+    justify-content: center;
+  }
+
+  .exchange-order-risk-metrics,
+  .exchange-order-risk-details {
+    grid-template-columns: 1fr;
+  }
+}

@@ -36,11 +36,23 @@ class AnalysisQualityGuard:
         if not signal:
             return 10
 
-        volume_ratio = float(
-            signal.get("indicators", {})
-            .get("volume", {})
-            .get("ratio", 1)
-        )
+        indicators = signal.get("indicators")
+        if not isinstance(indicators, dict):
+            return 10
+
+        volume = indicators.get("volume")
+        if not isinstance(volume, dict):
+            return 10
+
+        raw_ratio = volume.get("ratio")
+
+        try:
+            volume_ratio = float(raw_ratio)
+        except (TypeError, ValueError):
+            return 10
+
+        if volume_ratio != volume_ratio:
+            return 10
 
         if volume_ratio < 0.25:
             return 15

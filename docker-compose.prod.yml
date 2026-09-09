@@ -1,0 +1,110 @@
+services:
+  db:
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:?POSTGRES_USER is required}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+      POSTGRES_DB: "${POSTGRES_DB:?POSTGRES_DB is required}"
+    ports: !reset []
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready
+          -U "$${POSTGRES_USER}"
+          -d "$${POSTGRES_DB}"
+
+  redis:
+    ports: !reset []
+
+  api:
+    env_file: !reset []
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required}"
+      REDIS_URL: "redis://redis:6379/0"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}"
+      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: "${EXCHANGE_CREDENTIALS_ENCRYPTION_KEY:?EXCHANGE_CREDENTIALS_ENCRYPTION_KEY is required}"
+
+      SCHEDULER_BACKGROUND_LOOP_ENABLED: "${SCHEDULER_BACKGROUND_LOOP_ENABLED:-false}"
+      SIGNAL_TRACKING_ENABLED: "${SIGNAL_TRACKING_ENABLED:-true}"
+      SIGNAL_SCANNER_BACKGROUND_ENABLED: "${SIGNAL_SCANNER_BACKGROUND_ENABLED:-false}"
+      ORDER_RECONCILIATION_BACKGROUND_ENABLED: "${ORDER_RECONCILIATION_BACKGROUND_ENABLED:-false}"
+
+      TESTNET_ORDER_EXECUTION_ENABLED: "${TESTNET_ORDER_EXECUTION_ENABLED:-false}"
+      ENABLE_BINANCE_EXECUTION: "${ENABLE_BINANCE_EXECUTION:-false}"
+      BINANCE_TESTNET: "true"
+      ENABLE_REAL_TRADING: "false"
+
+      TELEGRAM_SIGNAL_ENABLED: "${TELEGRAM_SIGNAL_ENABLED:-false}"
+      TELEGRAM_SIGNAL_BOT_TOKEN: "${TELEGRAM_SIGNAL_BOT_TOKEN:-}"
+      TELEGRAM_SIGNAL_CHAT_ID: "${TELEGRAM_SIGNAL_CHAT_ID:-}"
+
+    command:
+      - sh
+      - -c
+      - >-
+        alembic upgrade head &&
+        exec uvicorn app.main:app
+        --host 0.0.0.0
+        --port 8000
+        --workers 1
+        --proxy-headers
+        --forwarded-allow-ips=*
+    volumes: !reset []
+    ports: !reset []
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    init: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          from urllib.request import urlopen;
+          assert urlopen(
+          'http://127.0.0.1:8000/health',
+          timeout=3).status == 200
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    ports: !override
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  alertmanager:
+    ports: !override
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+
+  e2e-exporter:
+    ports: !reset []
+
+  prometheus:
+    ports: !override
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      api:
+        condition: service_healthy
+      alertmanager:
+        condition: service_started
+      e2e-exporter:
+        condition: service_started
+
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:?GRAFANA_ADMIN_USER is required}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}"
+    ports: !override
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"

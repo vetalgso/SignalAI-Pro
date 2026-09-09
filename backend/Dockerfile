@@ -6,11 +6,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY backend/requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip && pip install -r /app/requirements.txt
+COPY backend/requirements.txt \
+    /app/requirements.txt
 
-COPY backend /app
+RUN pip install --upgrade pip \
+    && pip install \
+        -r /app/requirements.txt
+
+RUN addgroup --system signalai \
+    && adduser \
+        --system \
+        --ingroup signalai \
+        --home /home/signalai \
+        signalai
+
+COPY --chown=signalai:signalai \
+    backend /app
+
+USER signalai
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
