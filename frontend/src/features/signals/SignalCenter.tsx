@@ -26,6 +26,7 @@ import {
 } from './SignalChart';
 import { AIReviewJournal } from './AIReviewJournal';
 import { SignalQualityReport } from './SignalQualityReport';
+import { SignalLifecycleStatus } from './SignalLifecycleStatus';
 import {
   SignalOrderPreview,
 } from './SignalOrderPreview';
@@ -469,6 +470,8 @@ export function SignalCenter({
           {error}
         </div>
       )}
+
+      <SignalLifecycleStatus language={language} />
 
       <div className="signal-summary">
         <article>
