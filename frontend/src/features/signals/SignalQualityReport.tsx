@@ -13,6 +13,7 @@ type Group = Counts & {
 };
 type Report = {
   generated_from: string; as_of: string; source: string; summary: Counts;
+  transition_origin: 'ALL' | 'AUTOMATIC' | 'MANUAL' | 'UNKNOWN';
   groups: Group[]; total_groups: number; limit: number; offset: number;
 };
 const columns: [keyof Counts, string, string][] = [
@@ -25,7 +26,7 @@ const columns: [keyof Counts, string, string][] = [
 
 export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
   const ru = language === 'ru';
-  const [query, setQuery] = useState({ days: 30, source: 'AI_REVIEW', offset: 0 });
+  const [query, setQuery] = useState({ days: 30, source: 'AI_REVIEW', transition_origin: 'ALL', offset: 0 });
   const [reload, setReload] = useState(0);
   const [data, setData] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,7 @@ export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
     void (async () => {
       try {
         const params = new URLSearchParams({ days: String(query.days), source: query.source,
+          transition_origin: query.transition_origin,
           offset: String(query.offset), limit: '25' });
         const response = await fetch(`/api/v3/signals/quality?${params}`, {
           signal: controller.signal, headers: { Accept: 'application/json' },
@@ -66,11 +68,22 @@ export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
           <option value="ALL">{ru ? 'Все источники' : 'All sources'}</option>
         </select>
       </label>
+      <label>{ru ? 'Происхождение переходов' : 'Transition origin'}{' '}
+        <select value={query.transition_origin} onChange={event => setQuery(value => ({ ...value, transition_origin: event.target.value, offset: 0 }))}>
+          <option value="ALL">{ru ? 'Все сигналы' : 'All signals'}</option>
+          <option value="AUTOMATIC">{ru ? 'Только автоматические' : 'Automatic only'}</option>
+          <option value="MANUAL">{ru ? 'С ручными переходами' : 'With manual transitions'}</option>
+          <option value="UNKNOWN">{ru ? 'Неизвестное происхождение' : 'Unknown origin'}</option>
+        </select>
+      </label>
       <button type="button" disabled={loading} onClick={() => setReload(value => value + 1)}>{ru ? 'Обновить отчёт' : 'Refresh report'}</button>
     </div>
     <p>{ru
       ? 'Считаются сигналы, созданные за выбранный период, и их накопленные результаты к моменту обновления. TP учитывается один раз на сигнал по сохранённым переходам, включая ручные. TP1 и стоп могут относиться к одному сигналу; эти столбцы нельзя складывать. Это не доходность исполненных сделок.'
       : 'Signals created within the selected period and their recorded outcomes at refresh time. Each TP is counted once per signal from saved transitions, including manual ones. TP1 and a stop can belong to the same signal; these columns are not additive. This is not executed trade profitability.'}</p>
+    <p>{ru
+      ? '«Только автоматические»: есть записанные автоматические переходы, нет ручных или переходов неизвестного происхождения. «С ручными переходами» включает смешанную историю. Отсутствие переходов или одно лишь создание сигнала означает неизвестное происхождение. Автоматические переходы не гарантируют полноту истории и не подтверждают прибыльность.'
+      : '“Automatic only” requires recorded automatic transitions with no manual or unknown-origin transitions. “With manual transitions” includes mixed history. No transitions or signal creation alone means unknown origin. Automatic transitions do not guarantee a complete history or confirm profitability.'}</p>
     <div role="status" aria-live="polite">
       {loading && (ru ? 'Загрузка отчёта…' : 'Loading report…')}
       {error && (ru ? 'Не удалось загрузить отчёт. Повторите обновление.' : 'Unable to load the report. Try refreshing.')}
@@ -84,7 +97,7 @@ export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
         {' · '}{ru ? 'Неизвестный статус' : 'Unknown status'}: {data.summary.unknown_status}</p>
       <p>{ru ? 'Созданы с' : 'Created since'} {new Date(data.generated_from).toLocaleString(ru ? 'ru-RU' : 'en-US')}
         {' · '}{ru ? 'Отчёт на' : 'As of'} {new Date(data.as_of).toLocaleString(ru ? 'ru-RU' : 'en-US')}</p>
-      {data.summary.total === 0 ? <p>{ru ? 'За этот период сигналов нет.' : 'No signals in this period.'}</p> :
+      {data.summary.total === 0 ? <p>{ru ? 'По выбранным фильтрам сигналов нет.' : 'No signals match the selected filters.'}</p> :
         <div className="signal-quality__scroll" tabIndex={0} role="region" aria-label={ru ? 'По монете и стратегии' : 'By symbol and strategy'}>
           <table><thead><tr><th scope="col">{ru ? 'Монета / рынок' : 'Symbol / market'}</th>
             <th scope="col">{ru ? 'Стратегия / источник' : 'Strategy / source'}</th>

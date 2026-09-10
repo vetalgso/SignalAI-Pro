@@ -14,6 +14,7 @@ router = APIRouter()
 OPEN = ("ACTIVE", "ENTRY_REACHED", "TP1_REACHED", "TP2_REACHED")
 TERMINAL = ("TP3_REACHED", "STOPPED", "EXPIRED", "CANCELLED")
 DIMENSIONS = ("source", "exchange", "market_type", "symbol", "side", "timeframe", "strategy")
+TransitionOrigin = Literal["ALL", "AUTOMATIC", "MANUAL", "UNKNOWN"]
 
 
 class Counts(BaseModel):
@@ -46,6 +47,7 @@ class QualityReport(BaseModel):
     generated_from: datetime
     as_of: datetime
     source: str
+    transition_origin: TransitionOrigin = "ALL"
     summary: Counts
     groups: list[QualityGroup]
     total_groups: int
@@ -54,7 +56,8 @@ class QualityReport(BaseModel):
 
 
 def build_quality_report(db: Session, *, days: int, source: str,
-                         limit: int, offset: int, now: datetime) -> QualityReport:
+                         limit: int, offset: int, now: datetime,
+                         transition_origin: TransitionOrigin = "ALL") -> QualityReport:
     start = now - timedelta(days=days)
     signal = TradingSignal
     event = TradingSignalEvent
@@ -71,11 +74,26 @@ def build_quality_report(db: Session, *, days: int, source: str,
         select(event.signal_id, func.count(event.id).label("events"),
                *[func.max(case((event.to_status == status, 1), else_=0)).label(name)
                  for name, status in milestones.items()],
-               func.max(case((event.event_type == "STATUS_CHANGED", 1), else_=0)).label("manual"))
+               func.max(case((event.event_type == "STATUS_CHANGED", 1), else_=0)).label("manual"),
+               func.max(case((event.event_type == "MARKET_STATUS_CHANGED", 1), else_=0)).label("automatic"),
+               # CREATED is not a transition. All other unrecognized event
+               # types are conservative evidence of uncertain provenance;
+               # payload flags alone cannot confirm automatic tracking.
+               func.max(case((event.event_type.not_in((
+                   "CREATED", "STATUS_CHANGED", "MARKET_STATUS_CHANGED",
+               )), 1), else_=0)).label("unknown"))
         .join(signal, signal.id == event.signal_id)
         .where(*cohort, event.created_at <= now)
         .group_by(event.signal_id).subquery()
     )
+    origin = case(
+        (history.c.manual == 1, "MANUAL"),
+        ((history.c.automatic == 1) & (history.c.unknown == 0), "AUTOMATIC"),
+        else_="UNKNOWN",
+    )
+    report_cohort = list(cohort)
+    if transition_origin != "ALL":
+        report_cohort.append(origin == transition_origin)
 
     def count_if(condition, name):
         return func.sum(case((condition, 1), else_=0)).label(name)
@@ -94,13 +112,14 @@ def build_quality_report(db: Session, *, days: int, source: str,
                count_if(history.c.events.is_(None), "without_events"),
                count_if(history.c.manual == 1, "manual_transitions"))
         .outerjoin(history, history.c.signal_id == signal.id)
-        .where(*cohort).group_by(*dimensions).order_by(*dimensions)
+        .where(*report_cohort).group_by(*dimensions).order_by(*dimensions)
     )
     # Both totals and paged groups come from this one database statement.
     groups = [QualityGroup(**dict(row)) for row in db.execute(statement).mappings()]
     summary = Counts(**{name: sum(getattr(group, name) for group in groups)
                         for name in Counts.model_fields})
     return QualityReport(generated_from=start, as_of=now, source=source,
+                         transition_origin=transition_origin,
                          summary=summary, groups=groups[offset:offset + limit],
                          total_groups=len(groups), limit=limit, offset=offset)
 
@@ -109,9 +128,11 @@ def build_quality_report(db: Session, *, days: int, source: str,
 def get_signal_quality(
     days: int = Query(default=30, ge=1, le=365),
     source: Literal["AI_REVIEW", "SCANNER", "ALL"] = Query(default="AI_REVIEW"),
+    transition_origin: TransitionOrigin = Query(default="ALL"),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> QualityReport:
     return build_quality_report(db, days=days, source=source, limit=limit,
-                                offset=offset, now=datetime.now(timezone.utc))
+                                offset=offset, now=datetime.now(timezone.utc),
+                                transition_origin=transition_origin)
