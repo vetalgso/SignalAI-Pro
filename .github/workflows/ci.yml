@@ -91,6 +91,16 @@ jobs:
             check config \
             /etc/prometheus/prometheus.yml
 
+      - name: Test Prometheus alert rules
+        run: |
+          docker run --rm \
+            --entrypoint promtool \
+            -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" \
+            --workdir /etc/prometheus/tests \
+            prom/prometheus:v3.13.1 \
+            test rules \
+            signal-lifecycle-alerts.test.yml
+
       - name: Validate production Compose
         run: |
           docker compose             --env-file .env.production.example             -f docker-compose.yml             -f docker-compose.prod.yml             --profile monitoring             config --quiet
