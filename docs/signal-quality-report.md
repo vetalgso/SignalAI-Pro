@@ -1,7 +1,8 @@
 # Signal quality report
 
 GET `/api/v3/signals/quality` is read-only. Parameters: `days` 1–365
-(default 30), `source` AI_REVIEW/SCANNER/ALL (default AI_REVIEW), `limit`
+(default 30), `source` AI_REVIEW/SCANNER/ALL (default AI_REVIEW),
+`transition_origin` ALL/AUTOMATIC/MANUAL/UNKNOWN (default ALL), `limit`
 1–100 (default 25), `offset` >= 0. The UI offers 7/30/90/365 days.
 
 The cohort is signals whose `generated_at` falls inclusively between
@@ -11,6 +12,28 @@ that date range. Recent cohorts still have unresolved signals.
 
 Groups preserve source, exchange, market type, symbol, side, timeframe
 and strategy. Summary counts include all groups, not just the page.
+
+The transition-origin filter selects signals before computing summary,
+groups and pagination, together with the existing period and source filters.
+The response echoes `transition_origin`. Classification uses event types
+recorded at or before `as_of`:
+
+- `ALL`: the existing unfiltered cohort and counting behavior.
+- `AUTOMATIC`: at least one `MARKET_STATUS_CHANGED`, no `STATUS_CHANGED`
+  and no unrecognized event types other than `CREATED`.
+- `MANUAL`: at least one `STATUS_CHANGED`, including mixed histories
+  with automatic or unknown transitions.
+- `UNKNOWN`: all remaining signals, including no events, creation-only
+  history, and automatic transitions combined with unknown provenance.
+
+The lifecycle tracker writes `MARKET_STATUS_CHANGED` for market transitions
+and expiry; the manual status API uses the service's `STATUS_CHANGED` default.
+`CREATED` does not establish automatic tracking. Neither the absence of manual
+events, current signal status, entry timestamps nor payload flags establish it.
+Unrecognized event types conservatively prevent an automatic classification.
+Repeated events do not multiply signal counts. Automatic transitions do not
+guarantee a complete history and do not confirm profitability. Historical
+events are never rewritten or backfilled by this report.
 
 - `total`: number of distinct signal rows, including historical duplicates.
 - `open`: ACTIVE, ENTRY_REACHED, TP1_REACHED, TP2_REACHED.
