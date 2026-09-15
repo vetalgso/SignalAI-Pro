@@ -15,7 +15,12 @@ and strategy. Summary counts include all groups, not just the page.
 
 The transition-origin filter selects signals before computing summary,
 groups and pagination, together with the existing period and source filters.
-The response echoes `transition_origin`. Classification uses event types
+The response echoes `transition_origin`. Before displaying totals, the frontend
+requires this value, source and pagination to match the request. A response from
+an older server without the origin field, or with a different origin, is rejected
+and the report is hidden with a retry message. Requests bypass the browser cache.
+This checks the response contract; it cannot prove the server classified history
+correctly. Classification uses event types
 recorded at or before `as_of`:
 
 - `ALL`: the existing unfiltered cohort and counting behavior.
