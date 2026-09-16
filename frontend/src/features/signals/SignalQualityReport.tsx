@@ -1,21 +1,7 @@
 import { useEffect, useState } from 'react';
 import './SignalQualityReport.css';
+import { fetchQualityReport, type Counts, type Report, type QualityQuery } from './qualityReportApi';
 
-type Counts = {
-  total: number; open: number; terminal: number; unknown_status: number;
-  entered: number; tp1: number; tp2: number; tp3: number;
-  stopped: number; expired: number; cancelled: number;
-  without_events: number; manual_transitions: number;
-};
-type Group = Counts & {
-  source: string; exchange: string; market_type: string; symbol: string;
-  side: string; timeframe: string; strategy: string;
-};
-type Report = {
-  generated_from: string; as_of: string; source: string; summary: Counts;
-  transition_origin: 'ALL' | 'AUTOMATIC' | 'MANUAL' | 'UNKNOWN';
-  groups: Group[]; total_groups: number; limit: number; offset: number;
-};
 const columns: [keyof Counts, string, string][] = [
   ['total', 'Создано', 'Created'], ['open', 'Открыто', 'Open'],
   ['entered', 'Вход достигнут', 'Entry reached'],
@@ -26,7 +12,7 @@ const columns: [keyof Counts, string, string][] = [
 
 export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
   const ru = language === 'ru';
-  const [query, setQuery] = useState({ days: 30, source: 'AI_REVIEW', transition_origin: 'ALL', offset: 0 });
+  const [query, setQuery] = useState<QualityQuery>({ days: 30, source: 'AI_REVIEW', transition_origin: 'ALL', offset: 0 });
   const [reload, setReload] = useState(0);
   const [data, setData] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,15 +22,7 @@ export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
     setLoading(true); setError(false); setData(null);
     void (async () => {
       try {
-        const params = new URLSearchParams({ days: String(query.days), source: query.source,
-          transition_origin: query.transition_origin,
-          offset: String(query.offset), limit: '25' });
-        const response = await fetch(`/api/v3/signals/quality?${params}`, {
-          signal: controller.signal, headers: { Accept: 'application/json' },
-        });
-        if (!response.ok) throw new Error('Request failed');
-        const report: Report = await response.json();
-        if (!report.summary || !Array.isArray(report.groups)) throw new Error('Invalid report');
+        const report = await fetchQualityReport(query, controller.signal);
         if (!controller.signal.aborted) setData(report);
       } catch {
         if (!controller.signal.aborted) setError(true);
@@ -69,7 +47,7 @@ export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
         </select>
       </label>
       <label>{ru ? 'Происхождение переходов' : 'Transition origin'}{' '}
-        <select value={query.transition_origin} onChange={event => setQuery(value => ({ ...value, transition_origin: event.target.value, offset: 0 }))}>
+        <select value={query.transition_origin} onChange={event => setQuery(value => ({ ...value, transition_origin: event.target.value as Report['transition_origin'], offset: 0 }))}>
           <option value="ALL">{ru ? 'Все сигналы' : 'All signals'}</option>
           <option value="AUTOMATIC">{ru ? 'Только автоматические' : 'Automatic only'}</option>
           <option value="MANUAL">{ru ? 'С ручными переходами' : 'With manual transitions'}</option>
@@ -86,7 +64,7 @@ export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
       : '“Automatic only” requires recorded automatic transitions with no manual or unknown-origin transitions. “With manual transitions” includes mixed history. No transitions or signal creation alone means unknown origin. Automatic transitions do not guarantee a complete history or confirm profitability.'}</p>
     <div role="status" aria-live="polite">
       {loading && (ru ? 'Загрузка отчёта…' : 'Loading report…')}
-      {error && (ru ? 'Не удалось загрузить отчёт. Повторите обновление.' : 'Unable to load the report. Try refreshing.')}
+      {error && (ru ? 'Не удалось получить отчёт для выбранных фильтров. Повторите обновление.' : 'Unable to load a report matching the selected filters. Try refreshing.')}
     </div>
     {data && <>
       <div className="signal-quality__cards">{columns.map(([key, russian, english]) => <div key={key}>
