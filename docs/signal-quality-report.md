@@ -13,6 +13,15 @@ that date range. Recent cohorts still have unresolved signals.
 Groups preserve source, exchange, market type, symbol, side, timeframe
 and strategy. Summary counts include all groups, not just the page.
 
+`source=SCANNER` is the public filter for scanner-generated signals. It includes
+both the generator's current `MARKET_SCANNER` source and historical `SCANNER`
+rows, applying the same period and transition-origin filters to both. It does
+not include other source names. The response still echoes `source: SCANNER`
+so the frontend can verify its request. Groups retain the stored source names;
+the same market/strategy can therefore have separate current and legacy groups.
+`AI_REVIEW`, the default source, and `ALL` keep their existing scope. No stored
+sources or event history are rewritten, and no migration is required.
+
 The transition-origin filter selects signals before computing summary,
 groups and pagination, together with the existing period and source filters.
 The response echoes `transition_origin`. Before displaying totals, the frontend
