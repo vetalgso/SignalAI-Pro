@@ -41,6 +41,12 @@ class TradingSignalRepository:
 
         return self.db.scalar(statement)
 
+    def get_for_update(self, signal_id: int) -> TradingSignal | None:
+        return self.db.scalar(
+            select(TradingSignal).where(TradingSignal.id == signal_id)
+            .with_for_update().execution_options(populate_existing=True)
+        )
+
     def add(
         self,
         signal: TradingSignal,

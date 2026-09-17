@@ -19,3 +19,11 @@ class BinanceMarketDataProvider(MarketDataProvider):
         limit: int,
     ) -> list[dict[str, Any]]:
         return await self._service.klines(symbol, interval, limit)
+
+    async def get_candle_history(
+        self, symbol: str, interval: str, limit: int, *,
+        start_time: int, end_time: int,
+    ) -> list[dict[str, Any]]:
+        return await self._service.klines(
+            symbol, interval, limit, start_time=start_time, end_time=end_time,
+        )

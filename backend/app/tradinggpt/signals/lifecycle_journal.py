@@ -28,6 +28,15 @@ def safe_error_code(error: object) -> str:
         return "UPSTREAM_CONNECTION_ERROR"
     if name == "MarketDataError":
         return "MARKET_DATA_ERROR"
+    history_errors = {
+        "LifecycleHistoryGap": "HISTORY_GAP",
+        "LifecycleBoundaryAmbiguous": "HISTORY_BOUNDARY_AMBIGUOUS",
+        "LifecycleHistoryUnverified": "HISTORY_UNVERIFIED",
+        "LifecycleUnsupportedMarket": "HISTORY_UNSUPPORTED_MARKET",
+        "LifecycleBackfillPending": "HISTORY_BACKFILL_PENDING",
+    }
+    if name in history_errors:
+        return history_errors[name]
     if name in ("SQLAlchemyError", "OperationalError", "IntegrityError", "PendingRollbackError", "DBAPIError"):
         return "DATABASE_ERROR"
     if name in ("TypeError", "ValueError", "KeyError", "IndexError", "AttributeError", "InvalidOperation"):

@@ -191,6 +191,15 @@ class TradingSignal(Base):
         onupdate=utc_now,
     )
 
+    # Exclusive cursor: the next closed 1m candle to process. Never infer it
+    # from updated_at (price updates and manual edits also change that field).
+    lifecycle_next_candle_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    lifecycle_history_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="UNVERIFIED", server_default="UNVERIFIED",
+    )
+
 
 class TradingSignalEvent(Base):
     __tablename__ = "trading_signal_events"

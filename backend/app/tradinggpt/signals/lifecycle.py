@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+
+from .history import MINUTE, minute_ceiling
 
 from app.models.trading_signal import TradingSignal
 from app.tradinggpt.data import (
@@ -115,10 +116,12 @@ class CandleRange:
         )
 
         if (
-            high <= 0
+            not all(value.is_finite() for value in (high, low, close))
+            or high <= 0
             or low <= 0
             or close <= 0
             or high < low
+            or not low <= close <= high
         ):
             raise ValueError(
                 "Invalid candle prices."
@@ -365,360 +368,206 @@ def should_expire(
     )
 
 
+class LifecycleHistoryGap(ValueError):
+    """A requested closed-candle page is missing or invalid."""
+
+
+class LifecycleBoundaryAmbiguous(ValueError):
+    """A candle cannot resolve an entry before a sub-minute deadline."""
+
+
+def validated_history_page(raw: list[dict[str, Any]], *, start: datetime,
+                           end: datetime) -> list[CandleRange]:
+    """Reject latest-only, short, duplicate, unordered and incomplete pages."""
+    expected = int((end - start) / MINUTE)
+    if not isinstance(raw, list) or len(raw) != expected:
+        raise LifecycleHistoryGap("Incomplete page")
+    result = []
+    for index, item in enumerate(raw):
+        try:
+            candle = CandleRange.from_payload(item)
+            wanted = start + index * MINUTE
+            close_ms = int((wanted + MINUTE).timestamp() * 1000) - 1
+            if candle.opened_at != wanted or item.get("close_time") != close_ms:
+                raise ValueError("Unexpected candle interval")
+        except (ArithmeticError, ValueError, TypeError, KeyError, AttributeError, OverflowError) as exc:
+            raise LifecycleHistoryGap("Invalid historical candle") from exc
+        result.append(candle)
+    return result
+
+
 class SignalLifecycleTracker:
-    def __init__(
-        self,
-        repository: TradingSignalRepository,
-        market_data: (
-            MarketDataService | None
-        ) = None,
-    ) -> None:
+    # One bounded page per signal/cycle. Longer outages resume durably on the
+    # next cycle; never jump forward to the latest snapshot to catch up.
+    HISTORY_PAGE_SIZE = 1000
+
+    def __init__(self, repository: TradingSignalRepository,
+                 market_data: MarketDataService | None = None) -> None:
         self.repository = repository
-        self.service = TradingSignalService(
-            repository
-        )
-        self.market_data = (
-            market_data
-            or MarketDataService()
-        )
+        self.service = TradingSignalService(repository)
+        self.market_data = market_data or MarketDataService()
 
-    async def refresh_all(
-        self,
-        *,
-        limit: int = 500,
-    ) -> dict[str, object]:
-        signals = (
-            self.repository
-            .list_trackable(limit=limit)
-        )
+    def _locked_signal(self, signal_id: int) -> TradingSignal | None:
+        return self.repository.get_for_update(signal_id)
 
-        groups: dict[
-            str,
-            list[TradingSignal],
-        ] = defaultdict(list)
-
-        for signal in signals:
-            groups[signal.symbol].append(
-                signal
-            )
-
-        changes: list[
-            dict[str, object]
-        ] = []
-        errors: list[
-            dict[str, str]
-        ] = []
-
-        updated_signal_ids: set[int] = (
-            set()
-        )
+    async def refresh_all(self, *, limit: int = 500) -> dict[str, object]:
+        db = self.repository.db
+        signal_ids = [s.id for s in self.repository.list_trackable(limit=limit)]
+        # Do not hold a row lock or a stale ORM snapshot during network IO.
+        db.rollback()
+        changes: list[dict[str, object]] = []
+        errors: list[dict[str, str]] = []
+        updated_signal_ids: set[int] = set()
         price_updates = 0
         now = utc_now()
+        cutoff = now.replace(second=0, microsecond=0)
 
-        for symbol, symbol_signals in (
-            groups.items()
-        ):
+        for signal_id in signal_ids:
+            start = None
+            symbol = ""
             try:
-                snapshot = await (
-                    self.market_data
-                    .get_market_snapshot(
-                        asset=symbol,
-                        interval="1m",
-                        candle_limit=250,
-                    )
-                )
-            except Exception as exc:
-                errors.append(
-                    {
-                        "symbol": symbol,
-                        "error": (
-                            type(exc).__name__
-                        ),
-                    }
-                )
-                continue
-
-            candles: list[CandleRange] = []
-
-            for raw_candle in (
-                snapshot.candles
-            ):
-                try:
-                    candles.append(
-                        CandleRange
-                        .from_payload(
-                            raw_candle
-                        )
-                    )
-                except Exception:
+                signal = db.get(TradingSignal, signal_id)
+                if signal is None or signal.status not in TRACKABLE_STATUSES:
+                    db.rollback()
                     continue
-
-            try:
-                candles.append(
-                    current_price_candle(
-                        snapshot.price,
-                        observed_at=now,
-                    )
+                symbol, status = signal.symbol, signal.status
+                history_status = signal.lifecycle_history_status
+                if signal.lifecycle_next_candle_at is None or history_status == "UNVERIFIED":
+                    errors.append({"symbol": symbol, "signal_id": str(signal_id),
+                                   "error": "LifecycleHistoryUnverified"})
+                    db.rollback()
+                    continue
+                if (signal.exchange, signal.market_type) != ("BINANCE", "SPOT"):
+                    signal.lifecycle_history_status = "UNSUPPORTED"
+                    db.commit()
+                    errors.append({"symbol": symbol, "signal_id": str(signal_id),
+                                   "error": "LifecycleUnsupportedMarket"})
+                    continue
+                start = aware_datetime(signal.lifecycle_next_candle_at)
+                if start != start.replace(second=0, microsecond=0):
+                    raise LifecycleHistoryGap("Cursor is not minute aligned")
+                if start < minute_ceiling(signal.generated_at):
+                    raise LifecycleHistoryGap("Cursor precedes signal creation")
+                if (signal.expires_at is not None
+                        and start == minute_ceiling(signal.generated_at)
+                        and aware_datetime(signal.expires_at) < start):
+                    raise LifecycleBoundaryAmbiguous("No full minute in entry window")
+                if start >= cutoff:
+                    # Waiting for the first/next fully closed minute is normal.
+                    db.rollback()
+                    continue
+                end = min(cutoff, start + self.HISTORY_PAGE_SIZE * MINUTE)
+                db.rollback()
+                raw = await self.market_data.get_candle_history(
+                    asset=symbol, start_at=start, end_at=end,
+                    limit=int((end - start) / MINUTE),
                 )
-            except (
-                ArithmeticError,
-                TypeError,
-                ValueError,
-            ):
-                pass
-
-            candles.sort(
-                key=lambda item: (
-                    item.opened_at
+                candles = validated_history_page(raw, start=start, end=end)
+                signal = self._locked_signal(signal_id)
+                if (signal is None or signal.status != status
+                        or signal.lifecycle_next_candle_at is None
+                        or aware_datetime(signal.lifecycle_next_candle_at) != start
+                        or signal.lifecycle_history_status != history_status):
+                    # Another worker/operator advanced this signal while we fetched.
+                    db.rollback()
+                    continue
+                page_changes = self._process_page(signal, candles, now)
+                signal.lifecycle_history_status = (
+                    "CURRENT" if signal.status in TERMINAL_STATUSES
+                    or aware_datetime(signal.lifecycle_next_candle_at) >= cutoff
+                    else "BACKFILL"
                 )
-            )
-
-            for signal in symbol_signals:
-                try:
-                    signal_changes = (
-                        self._refresh_signal(
-                            signal=signal,
-                            candles=candles,
-                            now=now,
-                        )
-                    )
-
-                    if signal_changes:
-                        updated_signal_ids.add(
-                            signal.id
-                        )
-                        changes.extend(
-                            signal_changes
-                        )
-
-                    latest_price = (
-                        candles[-1].close
-                        if candles
-                        else decimal_value(
-                            snapshot.price
-                        )
-                    )
-
-                    self.service.update_market_price(
-                        signal_id=signal.id,
-                        price=latest_price,
-                        checked_at=now,
-                    )
-                    price_updates += 1
-                except Exception as exc:
-                    self.repository.db.rollback()
-
-                    errors.append(
-                        {
-                            "symbol": (
-                                signal.symbol
-                            ),
-                            "signal_id": str(
-                                signal.id
-                            ),
-                            "error": (
-                                type(exc)
-                                .__name__
-                            ),
-                        }
-                    )
-
+                signal.updated_at = now
+                pending = signal.lifecycle_history_status == "BACKFILL"
+                # Transitions, outbox messages, price and cursor are atomic.
+                db.commit()
+                changes.extend(page_changes)
+                if page_changes:
+                    updated_signal_ids.add(signal_id)
+                price_updates += 1
+                if pending:
+                    errors.append({"symbol": symbol, "signal_id": str(signal_id),
+                                   "error": "LifecycleBackfillPending"})
+            except Exception as exc:
+                db.rollback()
+                # Keep the old cursor and status transitions on every failure.
+                # Mark the coverage failure only if no other worker advanced it.
+                signal = self._locked_signal(signal_id)
+                if (signal is not None and start is not None
+                        and signal.lifecycle_next_candle_at is not None
+                        and aware_datetime(signal.lifecycle_next_candle_at) == start
+                        and signal.status in TRACKABLE_STATUSES):
+                    signal.lifecycle_history_status = "GAP"
+                    db.commit()
+                else:
+                    db.rollback()
+                errors.append({"symbol": symbol, "signal_id": str(signal_id),
+                               "error": type(exc).__name__})
         return {
-            "checked_signals": len(
-                signals
-            ),
-            "updated_signals": len(
-                updated_signal_ids
-            ),
-            "transition_count": len(
-                changes
-            ),
-            "price_updates": (
-                price_updates
-            ),
-            "changes": changes,
-            "errors": errors,
+            "checked_signals": len(signal_ids),
+            "updated_signals": len(updated_signal_ids),
+            "transition_count": len(changes), "price_updates": price_updates,
+            "changes": changes, "errors": errors,
         }
 
-    def _refresh_signal(
-        self,
-        *,
-        signal: TradingSignal,
-        candles: list[CandleRange],
-        now: datetime,
-    ) -> list[dict[str, object]]:
-        changes: list[
-            dict[str, object]
-        ] = []
-
-        generated_at = aware_datetime(
-            signal.generated_at
-        )
-        updated_at = aware_datetime(
-            signal.updated_at
-        )
-
-        start_at = max(
-            generated_at,
-            updated_at
-            - timedelta(minutes=2),
-        )
-
-        expires_at = (
-            aware_datetime(
-                signal.expires_at
-            )
-            if signal.expires_at
-            is not None
-            else None
-        )
-
-        candidates = [
-            candle
-            for candle in candles
-            if candle.opened_at
-            >= start_at
-        ]
-
-        for candle in candidates:
-            if (
-                signal.status
-                == SignalStatus.ACTIVE.value
-                and expires_at is not None
-                and candle.opened_at
-                > expires_at
-            ):
-                break
-
-            while (
-                signal.status
-                in TRACKABLE_STATUSES
-            ):
-                decision = next_transition(
-                    signal,
-                    candle,
-                )
-
+    def _process_page(self, signal: TradingSignal, candles: list[CandleRange],
+                      now: datetime) -> list[dict[str, object]]:
+        changes = []
+        expires = aware_datetime(signal.expires_at) if signal.expires_at else None
+        for candle in candles:
+            if signal.status == SignalStatus.ACTIVE.value and expires is not None:
+                if candle.opened_at > expires:
+                    # Earlier candles have been checked; no need to inspect later ones.
+                    break
+                if (candle.opened_at <= expires < candle.opened_at + MINUTE
+                        and level_touched(candle, lower=signal.entry_min, upper=signal.entry_max)):
+                    # OHLC cannot tell if entry happened before or after expiry.
+                    raise LifecycleBoundaryAmbiguous("Entry crosses expiry boundary")
+            while signal.status in TRACKABLE_STATUSES:
+                decision = next_transition(signal, candle)
                 if decision is None:
                     break
-
                 from_status = signal.status
-
                 self.service.transition(
                     signal_id=signal.id,
-                    request=(
-                        SignalTransitionRequest(
-                            status=(
-                                decision.status
-                            ),
-                            price=(
-                                decision
-                                .trigger_price
-                            ),
-                            note=decision.note,
-                        )
+                    request=SignalTransitionRequest(
+                        status=decision.status, price=decision.trigger_price, note=decision.note,
                     ),
-                    event_type=(
-                        "MARKET_STATUS_CHANGED"
-                    ),
+                    event_type="MARKET_STATUS_CHANGED", commit=False,
                     event_payload={
-                        "automatic": True,
-                        "candle": (
-                            candle.payload()
-                        ),
+                        "automatic": True, "candle": candle.payload(),
+                        "history": {"policy": "CLOSED_1M_V1",
+                                    "coverage_from": minute_ceiling(signal.generated_at).isoformat(),
+                                    "covered_until": (candle.opened_at + MINUTE).isoformat()},
                     },
                 )
-
-                changes.append(
-                    {
-                        "signal_id": signal.id,
-                        "symbol": signal.symbol,
-                        "from_status": (
-                            from_status
-                        ),
-                        "to_status": (
-                            signal.status
-                        ),
-                        "trigger_price": (
-                            decision
-                            .trigger_price
-                        ),
-                        "triggered_at": (
-                            utc_now()
-                        ),
-                        "candle_opened_at": (
-                            candle.opened_at
-                        ),
-                    }
-                )
-
-                if (
-                    signal.status
-                    in TERMINAL_STATUSES
-                ):
-                    break
-
-            if (
-                signal.status
-                in TERMINAL_STATUSES
-            ):
+                changes.append({
+                    "signal_id": signal.id, "symbol": signal.symbol,
+                    "from_status": from_status, "to_status": signal.status,
+                    "trigger_price": decision.trigger_price, "triggered_at": utc_now(),
+                    "candle_opened_at": candle.opened_at,
+                })
+            signal.lifecycle_next_candle_at = candle.opened_at + MINUTE
+            signal.current_price = candle.close
+            if signal.status in TERMINAL_STATUSES:
                 break
-
-        if should_expire(
-            signal,
-            now,
-        ):
-            from_status = signal.status
-            price = (
-                candles[-1].close
-                if candles
-                else signal.current_price
-                or signal.entry_min
-            )
-
+        if (should_expire(signal, now) and expires is not None
+                and aware_datetime(signal.lifecycle_next_candle_at) > expires):
+            # The deadline is behind the verified cursor, not merely wall time.
+            price = signal.current_price or signal.entry_min
             self.service.transition(
                 signal_id=signal.id,
-                request=(
-                    SignalTransitionRequest(
-                        status=(
-                            SignalStatus.EXPIRED
-                        ),
-                        price=price,
-                        note=(
-                            "Signal expired before "
-                            "entry was reached."
-                        ),
-                    )
+                request=SignalTransitionRequest(
+                    status=SignalStatus.EXPIRED, price=price,
+                    note="Signal expired after its entry window was checked.",
                 ),
-                event_type=(
-                    "MARKET_STATUS_CHANGED"
-                ),
-                event_payload={
-                    "automatic": True,
-                    "reason": (
-                        "ENTRY_WINDOW_EXPIRED"
-                    ),
-                },
+                event_type="MARKET_STATUS_CHANGED", commit=False,
+                event_payload={"automatic": True, "reason": "ENTRY_WINDOW_EXPIRED",
+                               "history": {"policy": "CLOSED_1M_V1",
+                                           "covered_until": signal.lifecycle_next_candle_at.isoformat()}},
             )
-
-            changes.append(
-                {
-                    "signal_id": signal.id,
-                    "symbol": signal.symbol,
-                    "from_status": (
-                        from_status
-                    ),
-                    "to_status": (
-                        signal.status
-                    ),
-                    "trigger_price": price,
-                    "triggered_at": (
-                        utc_now()
-                    ),
-                    "candle_opened_at": (
-                        None
-                    ),
-                }
-            )
-
+            changes.append({"signal_id": signal.id, "symbol": signal.symbol,
+                            "from_status": "ACTIVE", "to_status": signal.status,
+                            "trigger_price": price, "triggered_at": utc_now(),
+                            "candle_opened_at": None})
         return changes

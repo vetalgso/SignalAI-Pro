@@ -331,6 +331,9 @@ class SignalResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    lifecycle_next_candle_at: datetime | None = None
+    lifecycle_history_status: str = "UNVERIFIED"
+
     model_config = ConfigDict(
         from_attributes=True
     )

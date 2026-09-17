@@ -121,10 +121,18 @@ class BinanceMarketService:
 
         return [item for item in payload if isinstance(item, dict)]
 
-    async def klines(self, symbol: str, interval: str, limit: int) -> list[dict[str, Any]]:
+    async def klines(
+        self, symbol: str, interval: str, limit: int, *,
+        start_time: int | None = None, end_time: int | None = None,
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"symbol": symbol, "interval": interval, "limit": limit}
+        if start_time is not None:
+            params["startTime"] = start_time
+        if end_time is not None:
+            params["endTime"] = end_time
         payload = await self._get(
             "/api/v3/klines",
-            {"symbol": symbol, "interval": interval, "limit": limit},
+            params,
         )
 
         candles: list[dict[str, Any]] = []

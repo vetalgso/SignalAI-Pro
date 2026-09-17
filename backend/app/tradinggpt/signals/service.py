@@ -15,6 +15,7 @@ from app.models.trading_signal import (
 )
 
 from .repository import TradingSignalRepository
+from .history import minute_ceiling
 from .schemas import (
     SignalCreateRequest,
     SignalSide,
@@ -259,6 +260,8 @@ class TradingSignalService:
 
         signal = TradingSignal(
             fingerprint=fingerprint,
+            lifecycle_next_candle_at=minute_ceiling(request.generated_at),
+            lifecycle_history_status="PENDING",
             exchange=request.exchange,
             market_type=(
                 request.market_type.value
@@ -404,8 +407,15 @@ class TradingSignalService:
         event_type: str = "STATUS_CHANGED",
         event_payload: dict[str, Any]
         | None = None,
+        commit: bool = True,
     ) -> TradingSignal:
-        signal = self.get(signal_id)
+        # Serialize manual changes against a tracker page. The tracker owns
+        # this same row lock when commit=False and commits events + cursor.
+        if not commit:
+            self.repository.db.flush()
+        signal = self.repository.get_for_update(signal_id)
+        if signal is None:
+            signal = self.get(signal_id)  # Preserve the existing not-found error.
 
         from_status = signal.status
         to_status = request.status.value
@@ -432,6 +442,11 @@ class TradingSignalService:
 
         signal.status = to_status
         signal.updated_at = now
+
+        if event_type != "MARKET_STATUS_CHANGED":
+            # An operator override is not evidence of covered market history.
+            signal.lifecycle_next_candle_at = None
+            signal.lifecycle_history_status = "UNVERIFIED"
 
         if request.price is not None:
             signal.current_price = (
@@ -467,7 +482,10 @@ class TradingSignalService:
             event_id=transition_event.id,
         )
 
-        self.repository.db.commit()
-        self.repository.db.refresh(signal)
+        if commit:
+            self.repository.db.commit()
+            self.repository.db.refresh(signal)
+        else:
+            self.repository.db.flush()
 
         return signal

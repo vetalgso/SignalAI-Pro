@@ -65,6 +65,9 @@ class FakeRepository:
     ) -> object | None:
         return self.existing
 
+    def get_for_update(self, signal_id: int) -> object | None:
+        return self.get(signal_id)
+
     def add(self, signal: object) -> object:
         signal.id = 101
         self.operations.append("signal")
