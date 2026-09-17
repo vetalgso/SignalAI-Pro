@@ -55,6 +55,22 @@ class MarketDataService:
         self.cache_enabled = cache_enabled
         self.cache_client = cache_client
 
+    async def get_candle_history(
+        self, *, asset: str, start_at: datetime, end_at: datetime, limit: int,
+    ) -> list[dict[str, Any]]:
+        """Uncached [start_at, end_at) page, independent of snapshot indicators."""
+        if not 1 <= limit <= 1000 or start_at >= end_at:
+            raise ValueError("Invalid history page bounds")
+        symbol = self._to_spot_symbol(self._normalize_asset(asset))
+        return await asyncio.wait_for(
+            self.provider.get_candle_history(
+                symbol=symbol, interval="1m", limit=limit,
+                start_time=int(start_at.timestamp() * 1000),
+                end_time=int(end_at.timestamp() * 1000) - 1,
+            ),
+            timeout=self.timeout_seconds,
+        )
+
     async def get_market_snapshot(
         self,
         asset: str,

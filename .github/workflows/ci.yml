@@ -23,6 +23,7 @@ jobs:
       ENVIRONMENT: test
       DEBUG: "false"
       DATABASE_URL: postgresql+psycopg2://signalai:signalai@127.0.0.1:5432/signalai
+      SIGNALAI_HISTORY_TEST_DATABASE_URL: postgresql+psycopg2://signalai:signalai@127.0.0.1:5432/signalai
       REDIS_URL: redis://127.0.0.1:6379/0
       JWT_SECRET_KEY: ci-only-jwt-secret-not-used-in-production-000000000000
       EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ci-only-encryption-key-000000000000000000000000
