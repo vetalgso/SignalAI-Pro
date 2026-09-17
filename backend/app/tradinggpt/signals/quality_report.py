@@ -62,7 +62,10 @@ def build_quality_report(db: Session, *, days: int, source: str,
     signal = TradingSignal
     event = TradingSignalEvent
     cohort = [signal.generated_at >= start, signal.generated_at <= now]
-    if source != "ALL":
+    if source == "SCANNER":
+        # The generator writes MARKET_SCANNER; retain historical SCANNER rows.
+        cohort.append(signal.source.in_(("SCANNER", "MARKET_SCANNER")))
+    elif source != "ALL":
         cohort.append(signal.source == source)
 
     # Aggregate events before joining signals: repeated events must not inflate

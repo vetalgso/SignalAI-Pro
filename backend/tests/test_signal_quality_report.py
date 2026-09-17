@@ -265,3 +265,68 @@ def test_quality_api_origin_filter_and_read_only_history(db, monkeypatch):
             assert body["summary"]["total"] == body["total_groups"] == total
             assert len(body["groups"]) == int(total > 1)
     assert [db.execute(table.select()).all() for table in tables] == before
+
+
+@pytest.mark.parametrize("origin,total", [
+    ("ALL", 6), ("AUTOMATIC", 2), ("MANUAL", 2), ("UNKNOWN", 2),
+])
+def test_scanner_filter_combines_current_and_legacy_sources(db, origin, total):
+    for number, source in enumerate(("SCANNER", "MARKET_SCANNER")):
+        add_signal(db, number * 3 + 1, "STOPPED",
+                   ("ENTRY_REACHED", "TP1_REACHED", "TP1_REACHED", "STOPPED"),
+                   source=source)
+        add_signal(db, number * 3 + 2, "ENTRY_REACHED",
+                   ("ENTRY_REACHED",), source=source, manual=True)
+        add_signal(db, number * 3 + 3, "ACTIVE", source=source)
+    add_signal(db, 7, "ACTIVE", source="AI_REVIEW")
+    add_signal(db, 8, "ACTIVE", source="SCANNER_OTHER")
+
+    result = report(db, source="SCANNER", transition_origin=origin)
+    assert result.source == "SCANNER"  # The frontend checks the echoed filter.
+    assert result.summary.total == total
+    assert result.total_groups == 2
+    assert {group.source for group in result.groups} == {"SCANNER", "MARKET_SCANNER"}
+    assert sum(group.total for group in result.groups) == total
+    assert result.summary.tp1 == result.summary.stopped == (2 if origin in ("ALL", "AUTOMATIC") else 0)
+    assert result.summary.manual_transitions == (2 if origin in ("ALL", "MANUAL") else 0)
+    assert result.summary.without_events == (2 if origin in ("ALL", "UNKNOWN") else 0)
+    for offset in (0, 1, 2):
+        page = report(db, source="SCANNER", transition_origin=origin, limit=1, offset=offset)
+        assert page.summary == result.summary
+        assert page.total_groups == 2
+        assert page.groups == result.groups[offset:offset + 1]
+    assert report(db).summary.total == 1
+    assert report(db, source="ALL").summary.total == 8
+
+
+@pytest.mark.parametrize("source", ["SCANNER", "MARKET_SCANNER"])
+def test_scanner_sources_respect_creation_window(db, source):
+    for number, generated in enumerate((
+        NOW - timedelta(days=30), NOW,
+        NOW - timedelta(days=30, microseconds=1), NOW + timedelta(microseconds=1),
+    ), start=1):
+        add_signal(db, number, "ACTIVE", source=source, generated=generated)
+    result = report(db, source="SCANNER")
+    assert result.summary.total == 2
+    assert result.total_groups == 1
+    assert result.groups[0].source == source
+
+
+def test_scanner_api_preserves_echo_and_historical_rows(db):
+    generated = datetime.now(timezone.utc) - timedelta(hours=1)
+    for number, source in enumerate(("MARKET_SCANNER", "SCANNER", "AI_REVIEW"), start=1):
+        add_signal(db, number, "ACTIVE", source=source, generated=generated)
+    tables = (TradingSignal.__table__, TradingSignalEvent.__table__)
+    before = [db.execute(table.select()).all() for table in tables]
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v3")
+    app.dependency_overrides[get_db] = lambda: db
+    with TestClient(app) as client:
+        response = client.get("/api/v3/signals/quality", params={"source": "SCANNER"})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["source"] == "SCANNER"
+        assert body["transition_origin"] == "ALL"
+        assert body["summary"]["total"] == 2
+        assert {group["source"] for group in body["groups"]} == {"SCANNER", "MARKET_SCANNER"}
+    assert [db.execute(table.select()).all() for table in tables] == before
