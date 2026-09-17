@@ -1,0 +1,101 @@
+groups:
+  - name: signalai-scheduler
+    interval: 5s
+    rules:
+      - alert: SignalAISchedulerMetricsTargetDown
+        expr: up{job="signalai-scheduler"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: SignalAI scheduler metrics target is unavailable
+          description: Prometheus cannot scrape the scheduler metrics endpoint.
+
+      - alert: SignalAISchedulerNotReady
+        expr: signalai_scheduler_ready == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: SignalAI scheduler is not ready
+          description: The scheduler readiness gate reports NOT_READY.
+
+      - alert: SignalAISchedulerBackgroundLoopDown
+        expr: signalai_scheduler_background_running == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: Scheduler background loop is not running
+          description: The scheduler background loop has stopped.
+
+      - alert: SignalAISchedulerBackgroundLoopStopping
+        expr: signalai_scheduler_background_stopping == 1
+        for: 30s
+        labels:
+          severity: warning
+          component: scheduler
+        annotations:
+          summary: Scheduler background loop is stopping
+          description: The background loop remains in stopping state.
+
+      - alert: SignalAISchedulerBackgroundTickFailure
+        expr: increase(signalai_scheduler_background_failed_ticks_total[5m]) > 0
+        labels:
+          severity: warning
+          component: scheduler
+        annotations:
+          summary: Scheduler background tick failed
+          description: A background scheduler tick failed during the last five minutes.
+
+      - alert: SignalAISchedulerLatestCycleFailed
+        expr: signalai_scheduler_last_cycle_failed == 1
+        for: 30s
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: Latest scheduler cycle failed
+          description: The latest persisted scheduler cycle has FAILED status.
+
+      - alert: SignalAISchedulerNewFailedCycle
+        expr: increase(signalai_scheduler_cycles_total{status="FAILED"}[10m]) > 0
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: New scheduler cycle failure detected
+          description: A scheduler cycle failed during the last ten minutes.
+
+      - alert: SignalAISchedulerConsecutiveFailures
+        expr: signalai_scheduler_consecutive_failures > 0
+        for: 30s
+        labels:
+          severity: warning
+          component: scheduler
+        annotations:
+          summary: Scheduler has consecutive failures
+          description: Scheduler state reports consecutive failures.
+
+      - alert: SignalAISchedulerDistributedLockDisabled
+        expr: signalai_scheduler_distributed_lock_enabled == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: Scheduler distributed lock is disabled
+          description: Distributed scheduler execution protection is disabled.
+
+      - alert: SignalAISchedulerEnabledWithoutPayload
+        expr: signalai_scheduler_enabled == 1 and signalai_scheduler_payload_configured == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: scheduler
+        annotations:
+          summary: Scheduler enabled without payload
+          description: Scheduler is enabled without a persisted execution payload.

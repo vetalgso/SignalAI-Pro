@@ -1,0 +1,280 @@
+rule_files:
+- ../rules/signal-pipeline-alerts.yml
+evaluation_interval: 5s
+tests:
+- name: healthy
+  interval: 1m
+  input_series:
+  - series: signalai_signal_lifecycle_enabled{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_poll_interval_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_completed_observed{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_seconds_since_last_completion{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 10+0x12
+  - series: signalai_signal_lifecycle_latest_duration_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0.2+0x12
+  - series: signalai_signal_lifecycle_latest_errors{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0+0x12
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleStale
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleErrors
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleSlow
+    exp_alerts: []
+- name: missing
+  interval: 1m
+  input_series:
+  - series: signalai_signal_lifecycle_enabled{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_poll_interval_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_completed_observed{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0+0x12
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts:
+    - exp_labels:
+        job: signalai-signal-pipeline
+        instance: api:8000
+        severity: warning
+        component: signal-pipeline
+      exp_annotations:
+        summary: Нет завершённых lifecycle-циклов
+        description: Tracking включён, но журнал не содержит завершённых циклов.
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleStale
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleErrors
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleSlow
+    exp_alerts: []
+  - eval_time: 4m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts: []
+- name: stale
+  interval: 1m
+  input_series:
+  - series: signalai_signal_lifecycle_enabled{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_poll_interval_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_completed_observed{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_seconds_since_last_completion{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 181+0x12
+  - series: signalai_signal_lifecycle_latest_duration_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0.2+0x12
+  - series: signalai_signal_lifecycle_latest_errors{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0+0x12
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleStale
+    exp_alerts:
+    - exp_labels:
+        job: signalai-signal-pipeline
+        instance: api:8000
+        severity: warning
+        component: signal-pipeline
+      exp_annotations:
+        summary: Задержка lifecycle-цикла
+        description: Возраст последнего завершения превышает три интервала (минимум 180 секунд). Проверьте журнал
+          и процесс API.
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleErrors
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleSlow
+    exp_alerts: []
+- name: errors
+  interval: 1m
+  input_series:
+  - series: signalai_signal_lifecycle_enabled{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_poll_interval_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_completed_observed{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_seconds_since_last_completion{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 10+0x12
+  - series: signalai_signal_lifecycle_latest_duration_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0.2+0x12
+  - series: signalai_signal_lifecycle_latest_errors{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 2+0x12
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleStale
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleErrors
+    exp_alerts:
+    - exp_labels:
+        job: signalai-signal-pipeline
+        instance: api:8000
+        severity: warning
+        component: signal-pipeline
+      exp_annotations:
+        summary: Ошибки последнего lifecycle-цикла
+        description: Последний завершённый цикл содержит ошибки. Это снимок журнала, не накопительный счётчик.
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleSlow
+    exp_alerts: []
+- name: slow
+  interval: 1m
+  input_series:
+  - series: signalai_signal_lifecycle_enabled{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_poll_interval_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_completed_observed{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_seconds_since_last_completion{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 10+0x12
+  - series: signalai_signal_lifecycle_latest_duration_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 61+0x12
+  - series: signalai_signal_lifecycle_latest_errors{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0+0x12
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleStale
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleErrors
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleSlow
+    exp_alerts:
+    - exp_labels:
+        job: signalai-signal-pipeline
+        instance: api:8000
+        severity: warning
+        component: signal-pipeline
+      exp_annotations:
+        summary: Медленный lifecycle-цикл
+        description: Длительность последнего завершённого цикла превышает интервал (минимум 60 секунд).
+- name: disabled
+  interval: 1m
+  input_series:
+  - series: signalai_signal_lifecycle_enabled{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0+0x12
+  - series: signalai_signal_lifecycle_poll_interval_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_completed_observed{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_seconds_since_last_completion{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1000+0x12
+  - series: signalai_signal_lifecycle_latest_duration_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1000+0x12
+  - series: signalai_signal_lifecycle_latest_errors{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 2+0x12
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleStale
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleErrors
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleSlow
+    exp_alerts: []
+- name: disabled empty
+  interval: 1m
+  input_series:
+  - series: signalai_signal_lifecycle_enabled{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0+0x12
+  - series: signalai_signal_lifecycle_poll_interval_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_completed_observed{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0+0x12
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleStale
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleErrors
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleSlow
+    exp_alerts: []
+- name: exact thresholds
+  interval: 1m
+  input_series:
+  - series: signalai_signal_lifecycle_enabled{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_poll_interval_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_completed_observed{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_seconds_since_last_completion{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 180+0x12
+  - series: signalai_signal_lifecycle_latest_duration_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_errors{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0+0x12
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleStale
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleErrors
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleSlow
+    exp_alerts: []
+- name: errors recover
+  interval: 1m
+  input_series:
+  - series: signalai_signal_lifecycle_enabled{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_poll_interval_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 60+0x12
+  - series: signalai_signal_lifecycle_latest_completed_observed{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 1+0x12
+  - series: signalai_signal_lifecycle_seconds_since_last_completion{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 10+0x12
+  - series: signalai_signal_lifecycle_latest_duration_seconds{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 0.2+0x12
+  - series: signalai_signal_lifecycle_latest_errors{job="signalai-signal-pipeline",instance="api:8000"}
+    values: 2 0+0x11
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleMissing
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleStale
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleErrors
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: SignalAISignalLifecycleSlow
+    exp_alerts: []

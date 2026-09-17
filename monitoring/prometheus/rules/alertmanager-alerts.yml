@@ -1,0 +1,103 @@
+groups:
+  - name: signalai-alertmanager
+    interval: 5s
+    rules:
+      - alert: SignalAIAlertmanagerMetricsTargetDown
+        expr: up{job="signalai-alertmanager"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: alerting
+        annotations:
+          summary: SignalAI Alertmanager metrics target is unavailable
+          description: Prometheus cannot scrape the Alertmanager metrics endpoint.
+
+      - alert: SignalAIAlertmanagerConfigReloadFailed
+        expr: alertmanager_config_last_reload_successful{job="signalai-alertmanager"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: alerting
+        annotations:
+          summary: Alertmanager configuration reload failed
+          description: Alertmanager reports that its latest configuration reload was unsuccessful.
+
+      - alert: SignalAIAlertmanagerTelegramNotificationFailure
+        expr: |
+          sum by (job, instance, integration) (
+            increase(
+              alertmanager_notifications_failed_total{
+                job="signalai-alertmanager",
+                integration="telegram"
+              }[5m]
+            )
+          ) > 0
+        labels:
+          severity: critical
+          component: alerting
+        annotations:
+          summary: Alertmanager failed to deliver a Telegram notification
+          description: One or more Telegram notifications failed during the last five minutes.
+
+      - alert: SignalAIAlertmanagerUnprocessedAlerts
+        expr: alertmanager_alerts{job="signalai-alertmanager",state="unprocessed"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: alerting
+        annotations:
+          summary: Alertmanager has unprocessed alerts
+          description: One or more alerts remain in the unprocessed state.
+
+      - alert: SignalAIAlertmanagerInvalidAlertsReceived
+        expr: increase(alertmanager_alerts_invalid_total{job="signalai-alertmanager"}[5m]) > 0
+        labels:
+          severity: warning
+          component: alerting
+        annotations:
+          summary: Alertmanager received invalid alerts
+          description: Alertmanager rejected one or more invalid alerts during the last five minutes.
+
+      - alert: SignalAIAlertmanagerAggregationGroupLimitReached
+        expr: |
+          increase(
+            alertmanager_dispatcher_aggregation_group_limit_reached_total{
+              job="signalai-alertmanager"
+            }[5m]
+          ) > 0
+        labels:
+          severity: critical
+          component: alerting
+        annotations:
+          summary: Alertmanager aggregation group limit was reached
+          description: Alertmanager could not create a notification aggregation group because its limit was reached.
+
+      - alert: SignalAIAlertmanagerActiveSilences
+        expr: alertmanager_silences{job="signalai-alertmanager",state="active"} > 0
+        for: 5m
+        labels:
+          severity: info
+          component: alerting
+        annotations:
+          summary: Alertmanager has active silences
+          description: One or more Alertmanager silences have remained active for at least five minutes.
+
+      - alert: SignalAIAlertmanagerSuppressedAlerts
+        expr: alertmanager_alerts{job="signalai-alertmanager",state="suppressed"} > 0
+        for: 5m
+        labels:
+          severity: info
+          component: alerting
+        annotations:
+          summary: Alertmanager has suppressed alerts
+          description: One or more alerts are currently suppressed by silences or inhibition rules.
+
+      - alert: SignalAIAlertmanagerUnexpectedClusterMembers
+        expr: alertmanager_cluster_members{job="signalai-alertmanager"} != 1
+        for: 1m
+        labels:
+          severity: warning
+          component: alerting
+        annotations:
+          summary: Unexpected Alertmanager cluster member count
+          description: The local SignalAI monitoring stack expects exactly one Alertmanager cluster member.
