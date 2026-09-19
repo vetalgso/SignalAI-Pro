@@ -9,3 +9,5 @@
 .ai-review-journal__pagination button { background: transparent; color: inherit; border: 1px solid #64748b; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
 .ai-review-journal button:disabled { opacity: .45; cursor: default; }
 .ai-review-journal button:focus-visible, .ai-review-journal__scroll:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
+
+.ai-admission-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; padding-left: 20px; }

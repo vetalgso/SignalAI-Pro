@@ -17,6 +17,7 @@ from app.database.session import get_db
 from app.tradinggpt.facade import tradinggpt
 
 from .ai_review_read import router as ai_review_read_router
+from .ai_admission_read import router as ai_admission_read_router
 from .quality_report import router as quality_report_router
 from .lifecycle_read import router as lifecycle_read_router
 
@@ -63,6 +64,7 @@ router = APIRouter(
 )
 
 router.include_router(ai_review_read_router)
+router.include_router(ai_admission_read_router)
 router.include_router(quality_report_router)
 router.include_router(lifecycle_read_router)
 

@@ -25,6 +25,9 @@ from app.tradinggpt.signals.ai_reviewer import (
 )
 
 
+from .ai_admission import AdmissionDecision
+
+
 TERMINAL_REVIEW_STATUSES = {
     "APPROVED",
     "REJECTED",
@@ -111,36 +114,46 @@ class SignalAIReviewService:
         )
 
         eligible_ids: list[int] = []
+        selected_ids: list[int] = []
         promotion_risk_skips = 0
 
         for candidate in candidates:
-            payload = self._candidate_payload(
-                candidate
-            )
-            eligible, _ = (
-                candidate_ai_eligibility(
-                    payload,
-                    self.settings,
-                )
-            )
-
-            if not eligible:
-                continue
-
-            risk_level = str(
-                candidate.risk_level or ""
-            ).strip().upper()
-
-            if risk_level == "HIGH":
+            payload = self._candidate_payload(candidate)
+            eligible, reason = candidate_ai_eligibility(payload, self.settings)
+            if eligible and str(candidate.risk_level or "").strip().upper() == "HIGH":
                 promotion_risk_skips += 1
-                continue
+                eligible, reason = False, "HIGH_RISK"
 
-            eligible_ids.append(candidate.id)
+            selected = False
+            if eligible:
+                eligible_ids.append(candidate.id)
+                selected = len(selected_ids) < self.settings.signal_ai_max_candidates
+                if selected:
+                    selected_ids.append(candidate.id)
+                else:
+                    reason = "BATCH_LIMIT"
 
-        selected_ids = eligible_ids[
-            : self.settings
-            .signal_ai_max_candidates
-        ]
+            decision = AdmissionDecision(
+                action="SELECTED" if selected else "SKIPPED",
+                reason=reason,
+                confidence=(float(candidate.confidence) if candidate.confidence is not None else None),
+                minimum_confidence=self.settings.signal_ai_min_confidence,
+                candidate_age_seconds=payload["candidate_age_seconds"],
+                max_candidates=self.settings.signal_ai_max_candidates,
+                evaluated_at=datetime.now(timezone.utc),
+            )
+            candidate.snapshot = {
+                **(candidate.snapshot if isinstance(candidate.snapshot, dict) else {}),
+                "ai_admission": decision.model_dump(mode="json"),
+            }
+
+        # Commit the entire selection before any provider calls or promotions.
+        # SELECTED records intent, not proof that a request or approval happened.
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
         results = [
             self.review_candidate(candidate_id)
