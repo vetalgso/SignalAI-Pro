@@ -526,12 +526,14 @@ def test_low_confidence_admission_is_saved_without_review_or_signal():
         reviewer = ApprovingReviewer()
         config = settings()
         config.signal_ai_min_confidence = 65
+        config.signal_ai_max_quality_penalty = 20
         result = SignalAIReviewService(db=db, settings=config, reviewer=reviewer).review_scan_run(item.run_id)
         db.expire_all()
         decision = read_admission(db.get(SignalScanCandidate, item.id).snapshot)
         assert (decision.action, decision.reason) == ("SKIPPED", "LOW_CONFIDENCE")
         assert decision.confidence == 42
         assert decision.minimum_confidence == 65
+        assert decision.maximum_quality_penalty == 20
         assert decision.evaluated_at.tzinfo is not None
         assert decision.candidate_age_seconds < 10
         assert result["selected_candidates"] == reviewer.calls == 0
@@ -539,6 +541,8 @@ def test_low_confidence_admission_is_saved_without_review_or_signal():
         assert item.signal_id is None
         assert item.snapshot["score"] == 78.17
         config.signal_ai_min_confidence = 40
+        config.signal_ai_max_quality_penalty = 30
+        assert read_admission(item.snapshot).maximum_quality_penalty == 20
         assert read_admission(item.snapshot).minimum_confidence == 65
         assert "sk-test" not in str(item.snapshot["ai_admission"])
 

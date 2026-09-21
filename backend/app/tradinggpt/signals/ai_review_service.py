@@ -138,6 +138,7 @@ class SignalAIReviewService:
                 reason=reason,
                 confidence=(float(candidate.confidence) if candidate.confidence is not None else None),
                 minimum_confidence=self.settings.signal_ai_min_confidence,
+                maximum_quality_penalty=self.settings.signal_ai_max_quality_penalty,
                 candidate_age_seconds=payload["candidate_age_seconds"],
                 max_candidates=self.settings.signal_ai_max_candidates,
                 evaluated_at=datetime.now(timezone.utc),

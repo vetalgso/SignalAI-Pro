@@ -11,3 +11,8 @@
 .ai-review-journal button:focus-visible, .ai-review-journal__scroll:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
 
 .ai-admission-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; padding-left: 20px; }
+.quality-penalty-details { min-width: 230px; max-width: 380px; line-height: 1.5; overflow-wrap: anywhere; }
+.quality-penalty-details summary { cursor: pointer; }
+.quality-penalty-details summary:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
+.quality-penalty-details ul { padding-left: 18px; }
+.quality-penalty-details li { margin: 8px 0; }

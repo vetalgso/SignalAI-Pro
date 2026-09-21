@@ -1,16 +1,29 @@
+export type QualityBreakdown = {
+  version: 1;
+  calculated_at: string;
+  forecast: {
+    points: number; state: 'AVAILABLE' | 'MISSING'; uncertain_count: number;
+    horizons: { horizon_minutes: number | null; direction: 'UP' | 'DOWN' | 'SIDEWAYS' | 'UNCERTAIN' | 'UNKNOWN' }[];
+  };
+  volume: { points: number; state: 'AVAILABLE' | 'MISSING' | 'INVALID'; ratio: number | null };
+  news: { points: number; state: 'AVAILABLE' | 'MISSING'; article_count: number; unverified_count: number };
+  uncapped_total: number; cap: number; total: number;
+};
+
 export type AdmissionDecision = {
   version: 1;
   action: 'SELECTED' | 'SKIPPED';
   reason: string;
   confidence: number | null;
   minimum_confidence: number;
+  maximum_quality_penalty?: number | null;
   candidate_age_seconds: number;
   max_candidates: number;
   evaluated_at: string;
 };
 export type AdmissionPage = {
   run: { id: number; completed_at: string; scanned_assets: number } | null;
-  items: { candidate_id: number; symbol: string; decision: AdmissionDecision | null }[];
+  items: { candidate_id: number; symbol: string; decision: AdmissionDecision | null; quality?: QualityBreakdown | null }[];
   total: number; limit: number; offset: number;
   reason_counts: Record<string, number>;
   not_recorded_count: number;

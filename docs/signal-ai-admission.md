@@ -67,3 +67,45 @@ failure, safe projection, pagination and legacy records. Frontend request tests
 cover scan pinning, mismatched responses, errors and cancellation.
 Existing PostgreSQL concurrency coverage for lifecycle history still runs in CI;
 this feature does not change signal lifecycle or existing history.
+
+## Quality penalty breakdown
+
+New scanner candidates also save `snapshot.quality_breakdown` version 1, captured
+from the same inputs used to calculate the penalty. The asset-analysis response
+and market-scan response expose this same structure. Existing component functions
+and their numeric thresholds remain unchanged, as do the 30-point total cap,
+confidence deduction, candidate ranking, and AI eligibility checks.
+
+The structure records:
+
+- UTC calculation time;
+- forecast component points, data availability, uncertainty/sideways count, and
+  the original status for every supplied horizon (including the 2-day horizon);
+- volume component points, missing/invalid/available state and finite volume ratio;
+- news component points, missing/available state, article count and count without
+  the exact `verified` status;
+- sum before the cap, cap, and final penalty.
+
+Warnings now report counts instead of claiming a majority for any positive
+penalty. Missing volume or news is distinguished from observed low volume or
+unverified articles. These clearer warning strings also flow into the existing
+AI payload; model wording can change even though numeric gates are unchanged.
+No raw news articles, credentials or provider messages are added to the journal.
+
+`AdmissionDecision.maximum_quality_penalty` saves the configured AI maximum at
+preselection time. It is nullable for older records. It is different from the
+30-point calculation cap. For example, component points 15 + 15 + 10 sum to 40,
+are capped at 30, and exceed a saved AI maximum of 20.
+
+The admission endpoint adds nullable `items[].quality`, validated from the stored
+snapshot. Invalid versions, inconsistent component totals/counts, or a mismatch
+with the candidate's saved `quality_penalty` return null. Reads never recalculate
+historical details or substitute today's threshold. No database migration is
+needed. Older candidates, including scan 433, remain without a saved breakdown.
+
+The new expandable Quality penalty cell displays the components, availability,
+raw forecast statuses and saved AI maximum. Raw UP/DOWN/SIDEWAYS/UNCERTAIN statuses
+are distinct from derived LONG/SHORT timeframe labels. They are not rewritten to
+make these two different calculations appear identical. Component tests render
+Russian/English states, capped totals, missing data, legacy records and zero
+values. Desktop/mobile browser layout still needs visual verification at rollout.
