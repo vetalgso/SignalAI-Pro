@@ -271,3 +271,80 @@ def test_review_endpoint_pagination_and_validation() -> None:
     assert db.query(SignalAIReview).count() == 2
     db.close()
     engine.dispose()
+
+
+def admission_record(**overrides):
+    return {
+        "version": 1, "action": "SKIPPED", "reason": "LOW_CONFIDENCE",
+        "confidence": 42, "minimum_confidence": 65, "candidate_age_seconds": 2,
+        "max_candidates": 1, "evaluated_at": "2026-09-19T06:20:00Z", **overrides,
+    }
+
+
+def test_admission_projection_ignores_legacy_malformed_and_private_data():
+    from app.tradinggpt.signals.ai_admission import read_admission
+
+    for snapshot in (None, [], {}, {"ai_admission": "private"}):
+        assert read_admission(snapshot) is None
+    for record in (
+        admission_record(reason="private"), admission_record(version=999),
+        admission_record(action="SELECTED"), admission_record(confidence=float("nan")),
+        admission_record(evaluated_at="not a date"),
+    ):
+        assert read_admission({"ai_admission": record}) is None
+    result = read_admission({"ai_admission": admission_record(secret="private"), "key": "private"})
+    assert result.minimum_confidence == 65
+    assert "private" not in result.model_dump_json()
+
+
+def test_admission_endpoint_pins_scan_and_counts_unrecorded_across_pages():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.pool import StaticPool
+    from app.database.session import get_db
+    from app.tradinggpt.signals.router import router
+
+    engine = create_engine("sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[get_db] = lambda: db
+        with TestClient(app) as client:
+            assert client.get("/signals/ai-admission").json()["run"] is None
+            first = candidate(db)
+            run_id = first.run_id
+            first.snapshot = {"ai_admission": admission_record(), "secret": "private"}
+            legacy = SignalScanCandidate(
+                run_id=run_id, symbol="BTCUSDT", asset="BTC", outcome="REJECTED",
+                rejection_reason="RECOMMENDATION_CONFLICT", snapshot={},
+            )
+            unrelated = SignalScanCandidate(
+                run_id=run_id, symbol="ETHUSDT", asset="ETH", outcome="REJECTED",
+                rejection_reason="NO_ACTIONABLE_TECHNICAL_SIGNAL", snapshot={},
+            )
+            db.add_all([legacy, unrelated])
+            db.commit()
+            response = client.get("/signals/ai-admission?limit=1")
+            page = response.json()
+            assert response.status_code == 200
+            assert page["run"]["id"] == run_id
+            assert page["total"] == 2
+            assert page["reason_counts"] == {"LOW_CONFIDENCE": 1}
+            assert page["not_recorded_count"] == 1
+            assert page["items"][0]["decision"]["minimum_confidence"] == 65
+            assert "private" not in response.text
+            newer = candidate(db)
+            assert client.get("/signals/ai-admission").json()["run"]["id"] == newer.run_id
+            old = client.get(f"/signals/ai-admission?run_id={run_id}&limit=1&offset=1").json()
+            assert old["run"]["id"] == run_id
+            assert old["items"][0]["decision"] is None
+            assert old["reason_counts"] == page["reason_counts"]
+            assert client.get(f"/signals/ai-admission?run_id={run_id}&offset=2").json()["items"] == []
+            assert client.get("/signals/ai-admission?run_id=99999").status_code == 404
+            for query in ("limit=101", "offset=-1", "run_id=0"):
+                assert client.get(f"/signals/ai-admission?{query}").status_code == 422
+            assert db.query(SignalAIReview).count() == 0
+            assert legacy.snapshot == {}
+    engine.dispose()

@@ -513,3 +513,147 @@ def test_scan_run_does_not_spend_ai_slot_on_tight_geometry(
     assert result["failed_count"] == 0
     assert result["results"] == []
     assert reviewer.calls == 0
+
+
+def test_low_confidence_admission_is_saved_without_review_or_signal():
+    from app.models.signal_ai_review import SignalAIReview
+    from app.tradinggpt.signals.ai_admission import read_admission
+
+    with session() as db:
+        item = candidate(db, risk_level="MEDIUM")
+        item.confidence = 42
+        db.commit()
+        reviewer = ApprovingReviewer()
+        config = settings()
+        config.signal_ai_min_confidence = 65
+        result = SignalAIReviewService(db=db, settings=config, reviewer=reviewer).review_scan_run(item.run_id)
+        db.expire_all()
+        decision = read_admission(db.get(SignalScanCandidate, item.id).snapshot)
+        assert (decision.action, decision.reason) == ("SKIPPED", "LOW_CONFIDENCE")
+        assert decision.confidence == 42
+        assert decision.minimum_confidence == 65
+        assert decision.evaluated_at.tzinfo is not None
+        assert decision.candidate_age_seconds < 10
+        assert result["selected_candidates"] == reviewer.calls == 0
+        assert db.query(SignalAIReview).count() == 0
+        assert item.signal_id is None
+        assert item.snapshot["score"] == 78.17
+        config.signal_ai_min_confidence = 40
+        assert read_admission(item.snapshot).minimum_confidence == 65
+        assert "sk-test" not in str(item.snapshot["ai_admission"])
+
+
+def test_admission_preserves_ranking_and_records_batch_limit_before_provider_call():
+    from app.tradinggpt.signals.ai_admission import read_admission
+
+    with session() as db:
+        item = candidate(db, risk_level="MEDIUM")
+        other = SignalScanCandidate(
+            run_id=item.run_id, symbol="BTCUSDT", asset="BTC", outcome="REJECTED",
+            rejection_reason=item.rejection_reason, recommendation="WAIT",
+            signal_action="LONG", trade_direction="LONG", confidence=80,
+            risk_level="MEDIUM", ranking_score=70,
+            snapshot=dict(item.snapshot),
+        )
+        db.add(other)
+        db.commit()
+
+        class CheckPersistedSelection(ApprovingReviewer):
+            async def review(self, payload):
+                # The lower-ranked candidate has higher confidence, but ranking wins.
+                db.expire_all()
+                assert read_admission(db.get(SignalScanCandidate, item.id).snapshot).action == "SELECTED"
+                decision = read_admission(db.get(SignalScanCandidate, other.id).snapshot)
+                assert decision.reason == "BATCH_LIMIT"
+                assert decision.action == "SKIPPED"
+                return await super().review(payload)
+
+        reviewer = CheckPersistedSelection()
+        config = settings()
+        config.signal_ai_max_candidates = 1
+        result = SignalAIReviewService(db=db, settings=config, reviewer=reviewer).review_scan_run(item.run_id)
+        assert result["eligible_candidates"] == 2
+        assert result["selected_candidates"] == reviewer.calls == 1
+
+
+def test_admission_records_real_age_and_first_failed_condition():
+    from datetime import timedelta
+    from app.tradinggpt.signals.ai_admission import read_admission
+
+    with session() as db:
+        item = candidate(db, risk_level="MEDIUM")
+        item.created_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        db.commit()
+        reviewer = ApprovingReviewer()
+        service = SignalAIReviewService(db=db, settings=settings(), reviewer=reviewer)
+        service.review_scan_run(item.run_id)
+        decision = read_admission(item.snapshot)
+        assert decision.reason == "STALE_CANDIDATE"
+        assert decision.candidate_age_seconds >= 3600
+        item.confidence = 10
+        db.commit()
+        service.review_scan_run(item.run_id)
+        assert read_admission(item.snapshot).reason == "LOW_CONFIDENCE"
+        assert reviewer.calls == 0
+
+
+def test_admission_high_risk_and_geometry_do_not_call_ai():
+    from app.tradinggpt.signals.ai_admission import read_admission
+
+    with session() as db:
+        item = candidate(db, risk_level="HIGH")
+        reviewer = ApprovingReviewer()
+        service = SignalAIReviewService(db=db, settings=settings(), reviewer=reviewer)
+        service.review_scan_run(item.run_id)
+        assert read_admission(item.snapshot).reason == "HIGH_RISK"
+        item.snapshot = {**item.snapshot, "signal_levels": {
+            "entry": "100", "stop_loss": "99.80", "take_profit": "101",
+        }}
+        db.commit()
+        service.review_scan_run(item.run_id)
+        assert read_admission(item.snapshot).reason == "STOP_DISTANCE_TOO_TIGHT"
+        assert reviewer.calls == 0
+
+
+def test_admission_commit_failure_rolls_back_without_provider_call(monkeypatch):
+    import pytest
+    from sqlalchemy.exc import SQLAlchemyError
+
+    with session() as db:
+        item = candidate(db, risk_level="MEDIUM")
+        run_id, item_id = item.run_id, item.id
+        reviewer = ApprovingReviewer()
+        def fail_commit():
+            db.flush()
+            raise SQLAlchemyError("test failure")
+        with monkeypatch.context() as patch:
+            patch.setattr(db, "commit", fail_commit)
+            with pytest.raises(SQLAlchemyError):
+                SignalAIReviewService(db=db, settings=settings(), reviewer=reviewer).review_scan_run(run_id)
+        assert reviewer.calls == 0
+        assert "ai_admission" not in db.get(SignalScanCandidate, item_id).snapshot
+
+
+def test_admission_configuration_skips_and_zero_score_are_observable():
+    from app.tradinggpt.signals.ai_admission import read_admission
+
+    with session() as db:
+        item = candidate(db, risk_level="MEDIUM")
+        # A literal zero must remain distinguishable from a missing score.
+        item.confidence = 0
+        item.snapshot = {**item.snapshot, "ai_promotion": {"action": "CREATED", "signal_id": 123}}
+        db.commit()
+        reviewer = ApprovingReviewer()
+        config = settings()
+        service = SignalAIReviewService(db=db, settings=config, reviewer=reviewer)
+        service.review_scan_run(item.run_id)
+        assert read_admission(item.snapshot).confidence == 0
+        assert read_admission(item.snapshot).reason == "LOW_CONFIDENCE"
+        assert item.snapshot["ai_promotion"]["signal_id"] == 123
+        config.signal_ai_api_key = ""
+        service.review_scan_run(item.run_id)
+        assert read_admission(item.snapshot).reason == "AI_NOT_CONFIGURED"
+        config.signal_ai_review_enabled = False
+        service.review_scan_run(item.run_id)
+        assert read_admission(item.snapshot).reason == "AI_REVIEW_DISABLED"
+        assert reviewer.calls == 0

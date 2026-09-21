@@ -25,6 +25,7 @@ import {
   SignalChart,
 } from './SignalChart';
 import { AIReviewJournal } from './AIReviewJournal';
+import { AIAdmissionJournal } from './AIAdmissionJournal';
 import { SignalQualityReport } from './SignalQualityReport';
 import { SignalLifecycleStatus } from './SignalLifecycleStatus';
 import {
@@ -877,6 +878,7 @@ export function SignalCenter({
         </div>
       )}
 
+      <AIAdmissionJournal language={language} />
       <AIReviewJournal language={language} />
       <SignalQualityReport language={language} />
 
