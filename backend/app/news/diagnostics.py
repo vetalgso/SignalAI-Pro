@@ -6,6 +6,7 @@ from pydantic import AwareDatetime, BaseModel, Field, ValidationError, model_val
 
 class NewsDiagnostics(BaseModel):
     version: Literal[1] = 1
+    matcher_version: Literal[1] | None = None
     observed_at: AwareDatetime
     coverage: Literal["ALL", "SUPPORTED", "UNSUPPORTED"]
     sources_state: Literal["COMPLETE", "PARTIAL", "FAILED"]

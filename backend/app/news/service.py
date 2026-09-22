@@ -10,17 +10,14 @@ from xml.etree import ElementTree
 import httpx
 
 from .diagnostics import NewsDiagnostics
+from .assets import ASSETS, MATCHER_VERSION, match_assets, visible_text
 
 FEEDS = [
     ("CoinDesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
     ("Cointelegraph", "https://cointelegraph.com/rss"),
     ("Decrypt", "https://decrypt.co/feed"),
 ]
-ASSETS = {
-    "BTC": ["bitcoin", "btc"], "ETH": ["ethereum", "ether", "eth"], "BNB": ["bnb", "binance coin"],
-    "SOL": ["solana", "sol"], "XRP": ["xrp", "ripple"], "ADA": ["cardano", "ada"],
-    "DOGE": ["dogecoin", "doge"], "TRX": ["tron", "trx"], "AVAX": ["avalanche", "avax"], "LINK": ["chainlink", "link"],
-}
+
 POSITIVE = {"approve", "approval", "adoption", "launch", "upgrade", "partnership", "surge", "gain", "record", "inflow", "bullish"}
 NEGATIVE = {"hack", "exploit", "lawsuit", "ban", "outflow", "crash", "fraud", "liquidation", "bearish", "breach", "shutdown"}
 
@@ -47,6 +44,7 @@ class NewsService:
 
         diagnostics = NewsDiagnostics(
             observed_at=datetime.now(timezone.utc),
+            matcher_version=MATCHER_VERSION,
             coverage="ALL" if not asset else "SUPPORTED" if asset.upper() in ASSETS else "UNSUPPORTED",
             sources_state="FAILED" if len(errors) == len(FEEDS) else "PARTIAL" if errors else "COMPLETE",
             total_sources=len(FEEDS), failed_sources=len(errors),
@@ -115,9 +113,9 @@ class NewsService:
         for item in items:
             title = self._text(item, "title")
             link = self._text(item, "link")
-            description = re.sub("<[^>]+>", " ", self._text(item, "description"))
+            description = visible_text(self._text(item, "description"))
             text = f"{title} {description}".lower()
-            assets = [symbol for symbol, keys in ASSETS.items() if any(re.search(rf"\b{re.escape(k)}\b", text) for k in keys)]
+            assets = match_assets(title, description)
             tokens = set(re.findall(r"[a-z]+", text))
             pos, neg = len(tokens & POSITIVE), len(tokens & NEGATIVE)
             sentiment = "positive" if pos > neg else "negative" if neg > pos else "neutral"
