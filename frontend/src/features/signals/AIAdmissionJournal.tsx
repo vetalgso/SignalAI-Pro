@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchAdmission, type AdmissionPage } from './aiAdmissionApi';
 import './AIReviewJournal.css';
+import { RiskDetails } from './RiskDetails';
 import { QualityPenaltyDetails } from './QualityPenaltyDetails';
 
 type Language = 'ru' | 'en';
@@ -94,7 +95,9 @@ export function AIAdmissionJournal({ language }: { language: Language }) {
         <tbody>{page.items.map(row => <tr key={row.candidate_id}>
           <td>{row.symbol}</td>
           <td>{!row.decision ? (ru ? 'Не записан' : 'Not recorded') : row.decision.action === 'SELECTED' ? (ru ? 'Выбран' : 'Selected') : (ru ? 'Пропущен' : 'Skipped')}</td>
-          <td>{row.decision ? label(row.decision.reason) : '—'}</td>
+          <td>{row.decision ? label(row.decision.reason) : '—'}
+            {row.decision?.reason === 'HIGH_RISK' && <RiskDetails language={language} risk={row.risk ?? null} />}
+          </td>
           <td>{number(row.decision?.confidence ?? null)}</td>
           <td>{number(row.decision?.minimum_confidence ?? null)}</td>
           <td>{row.decision?.max_candidates ?? '—'}</td>

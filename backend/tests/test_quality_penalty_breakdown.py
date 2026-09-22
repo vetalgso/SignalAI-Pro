@@ -116,6 +116,12 @@ def test_projection_filters_private_data_and_refuses_inconsistent_history():
 
 def test_scanner_journal_roundtrip_keeps_quality_and_old_rows_unknown():
     payload = inputs(uncertain=2, ratio=0.25)
+    payload["forecast"]["forecasts"][-1]["risk_level"] = "high"
+    payload["news"]["diagnostics"] = {
+        "version": 1, "observed_at": "2026-09-22T12:00:00Z", "coverage": "SUPPORTED",
+        "sources_state": "PARTIAL", "total_sources": 3, "failed_sources": 1,
+        "collected_articles": 10, "matched_articles": 2,
+    }
 
     class FixtureModule(CryptoAssetAnalysisModule):
         def __init__(self):
@@ -150,8 +156,15 @@ def test_scanner_journal_roundtrip_keeps_quality_and_old_rows_unknown():
         page = list_ai_admission(run_id=run.id, limit=25, offset=0, db=db)
         assert page.items[0].quality.volume.ratio == 0.25
         assert page.items[0].decision is None
+        assert page.items[0].risk.reason == "FORECAST_HIGH"
+        assert page.items[0].risk.horizons[-1].horizon_minutes == 2880
+        assert page.items[0].quality.news.diagnostics.sources_state == "PARTIAL"
+        # Re-reading after input changes must return saved facts, not a fresh calculation.
+        payload["forecast"]["forecasts"][-1]["risk_level"] = "normal"
+        assert list_ai_admission(run_id=run.id, limit=25, offset=0, db=db).items[0].risk.reason == "FORECAST_HIGH"
         candidate.snapshot = {"quality_penalty": 25, "warnings": ["legacy warning"]}
         db.commit()
         page = list_ai_admission(run_id=run.id, limit=25, offset=0, db=db)
         assert page.items[0].quality is None
+        assert page.items[0].risk is None
     engine.dispose()

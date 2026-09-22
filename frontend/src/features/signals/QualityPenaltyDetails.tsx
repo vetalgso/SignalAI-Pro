@@ -41,6 +41,27 @@ export function QualityPenaltyDetails({ language, quality, maximum }: Props) {
       <li><strong>{ru ? 'Новости' : 'News'}: {points(news.points)}</strong><br />
         {news.state === 'MISSING' ? (ru ? 'Данные отсутствуют или список пуст.' : 'Data missing or list empty.')
           : `${ru ? 'Без статуса verified' : 'Without verified status'}: ${news.unverified_count} / ${news.article_count}.`}
+        {news.diagnostics && <>
+          <br />{news.diagnostics.coverage === 'UNSUPPORTED'
+            ? (ru ? 'Монета не поддерживается словарём новостей.' : 'Asset is not covered by the news dictionary.')
+            : news.diagnostics.coverage === 'SUPPORTED'
+              ? (ru ? 'Монета поддерживается словарём новостей.' : 'Asset is covered by the news dictionary.')
+              : (ru ? 'Запрос без фильтра монеты.' : 'Query without an asset filter.')}
+          <br />{news.diagnostics.sources_state === 'FAILED'
+            ? (ru ? 'Ошибка загрузки всех RSS-источников.' : 'All RSS sources failed to load.')
+            : news.diagnostics.sources_state === 'PARTIAL'
+              ? (ru ? 'Часть RSS-источников недоступна.' : 'Some RSS sources failed to load.')
+              : (ru ? 'RSS-источники ответили без ошибок.' : 'RSS sources responded without errors.')}
+          <br />{ru ? 'Ошибок источников' : 'Failed sources'}: {news.diagnostics.failed_sources} / {news.diagnostics.total_sources}.
+          <br />{ru ? 'Статей в общей подборке' : 'Articles in collected feeds'}: {news.diagnostics.collected_articles};{' '}
+          {ru ? 'совпадений до ограничения выдачи' : 'matches before response limit'}: {news.diagnostics.matched_articles}.
+          {news.diagnostics.coverage === 'SUPPORTED' && news.diagnostics.sources_state === 'COMPLETE'
+            && news.diagnostics.matched_articles === 0 && <p>{ru
+              ? 'Совпадений в загруженной подборке нет; это не означает отсутствие новостей вообще.'
+              : 'No matches in the loaded feed sample; this does not mean there is no news anywhere.'}</p>}
+          <br />{ru ? 'Проверено' : 'Observed'}: {new Date(news.diagnostics.observed_at).toLocaleString(ru ? 'ru-RU' : 'en-US')}.
+        </>}
+        {!news.diagnostics && <p>{ru ? 'Диагностика источников не записана.' : 'Source diagnostics were not recorded.'}</p>}
       </li>
     </ul>
     {forecast.horizons.length > 0 && <>

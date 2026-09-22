@@ -1,3 +1,15 @@
+export type NewsDiagnostics = {
+  version: 1; observed_at: string; coverage: 'ALL' | 'SUPPORTED' | 'UNSUPPORTED';
+  sources_state: 'COMPLETE' | 'PARTIAL' | 'FAILED'; total_sources: number;
+  failed_sources: number; collected_articles: number; matched_articles: number;
+};
+export type RiskAssessment = {
+  version: 1; calculated_at: string; level: string; profile_risk: string; reason: string;
+  horizons: { horizon_minutes: number | null; level: string }[];
+  signal_available: boolean; warning_count: number;
+  volume_state: 'AVAILABLE' | 'MISSING' | 'INVALID' | 'NONFINITE'; volume_ratio: number | null;
+};
+
 export type QualityBreakdown = {
   version: 1;
   calculated_at: string;
@@ -6,7 +18,7 @@ export type QualityBreakdown = {
     horizons: { horizon_minutes: number | null; direction: 'UP' | 'DOWN' | 'SIDEWAYS' | 'UNCERTAIN' | 'UNKNOWN' }[];
   };
   volume: { points: number; state: 'AVAILABLE' | 'MISSING' | 'INVALID'; ratio: number | null };
-  news: { points: number; state: 'AVAILABLE' | 'MISSING'; article_count: number; unverified_count: number };
+  news: { diagnostics?: NewsDiagnostics | null; points: number; state: 'AVAILABLE' | 'MISSING'; article_count: number; unverified_count: number };
   uncapped_total: number; cap: number; total: number;
 };
 
@@ -23,7 +35,7 @@ export type AdmissionDecision = {
 };
 export type AdmissionPage = {
   run: { id: number; completed_at: string; scanned_assets: number } | null;
-  items: { candidate_id: number; symbol: string; decision: AdmissionDecision | null; quality?: QualityBreakdown | null }[];
+  items: { candidate_id: number; symbol: string; decision: AdmissionDecision | null; quality?: QualityBreakdown | null; risk?: RiskAssessment | null }[];
   total: number; limit: number; offset: number;
   reason_counts: Record<string, number>;
   not_recorded_count: number;
