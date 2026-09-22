@@ -1,5 +1,9 @@
 # Saved risk and news diagnostics
 
+For the subsequent dictionary expansion and matching rules, see
+[News asset coverage and matching](news-asset-matching.md). The ten-asset
+coverage described below records the original diagnostics rollout.
+
 The admission journal now explains the first rule that produced the asset risk
 and separates news-dictionary coverage from RSS collection health. This is a
 read-only explanation of saved scan facts, not a new admission policy.

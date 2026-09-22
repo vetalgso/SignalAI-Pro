@@ -61,9 +61,9 @@ def test_risk_projection_preserves_history_and_excludes_extra_data():
 
 
 @pytest.mark.parametrize("asset,fail_count,matching,coverage,source_state", [
-    ("ZEC", 0, False, "UNSUPPORTED", "COMPLETE"),
-    ("NEAR", 1, False, "UNSUPPORTED", "PARTIAL"),
-    ("CRCLB", 3, False, "UNSUPPORTED", "FAILED"),
+    ("UNLISTED", 0, False, "UNSUPPORTED", "COMPLETE"),
+    ("UNLISTED", 1, False, "UNSUPPORTED", "PARTIAL"),
+    ("UNLISTED", 3, False, "UNSUPPORTED", "FAILED"),
     ("BTC", 0, False, "SUPPORTED", "COMPLETE"),
     ("BTC", 1, False, "SUPPORTED", "PARTIAL"),
     ("BTC", 3, False, "SUPPORTED", "FAILED"),
