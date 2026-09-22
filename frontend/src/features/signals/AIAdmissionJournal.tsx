@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchAdmission, type AdmissionPage } from './aiAdmissionApi';
 import './AIReviewJournal.css';
+import { QualityPenaltyDetails } from './QualityPenaltyDetails';
 
 type Language = 'ru' | 'en';
 const reasons: Record<string, [string, string]> = {
@@ -87,8 +88,8 @@ export function AIAdmissionJournal({ language }: { language: Language }) {
     {page && page.items.length > 0 && <div className="ai-review-journal__scroll" tabIndex={0} role="region" aria-label={ru ? 'Условия допуска к AI' : 'AI admission conditions'}>
       <table>
         <thead><tr>{(ru
-          ? ['Монета', 'Отбор', 'Причина', 'Confidence', 'Минимум confidence', 'Лимит AI', 'Проверено']
-          : ['Symbol', 'Selection', 'Reason', 'Confidence', 'Minimum confidence', 'AI batch limit', 'Evaluated']
+          ? ['Монета', 'Отбор', 'Причина', 'Confidence', 'Минимум confidence', 'Лимит AI', 'Штраф за качество', 'Проверено']
+          : ['Symbol', 'Selection', 'Reason', 'Confidence', 'Minimum confidence', 'AI batch limit', 'Quality penalty', 'Evaluated']
         ).map(title => <th key={title} scope="col">{title}</th>)}</tr></thead>
         <tbody>{page.items.map(row => <tr key={row.candidate_id}>
           <td>{row.symbol}</td>
@@ -97,6 +98,8 @@ export function AIAdmissionJournal({ language }: { language: Language }) {
           <td>{number(row.decision?.confidence ?? null)}</td>
           <td>{number(row.decision?.minimum_confidence ?? null)}</td>
           <td>{row.decision?.max_candidates ?? '—'}</td>
+          <td><QualityPenaltyDetails language={language} quality={row.quality ?? null}
+            maximum={row.decision?.maximum_quality_penalty ?? null} /></td>
           <td>{row.decision ? <time dateTime={row.decision.evaluated_at}>{date(row.decision.evaluated_at)}</time> : '—'}</td>
         </tr>)}</tbody>
       </table>

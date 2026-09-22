@@ -5,6 +5,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
+from .quality_details import QualityBreakdown
+
+
 RiskLevel = Literal["low", "medium", "high"]
 InvestmentHorizon = Literal["short", "medium", "long"]
 AssistantIntent = Literal[
@@ -239,6 +242,7 @@ class MarketScanAsset(BaseModel):
     ]
     reasons: list[str] = Field(default_factory=list)
     quality_penalty: int
+    quality_breakdown: QualityBreakdown | None = None
     warnings: list[str] = Field(default_factory=list)
 
 

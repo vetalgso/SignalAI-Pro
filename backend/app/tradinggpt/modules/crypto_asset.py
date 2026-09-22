@@ -142,13 +142,11 @@ class CryptoAssetAnalysisModule:
             news_available=news is not None,
         )
 
-        quality_penalty, quality_warnings = (
-            AnalysisQualityGuard.confidence_penalty(
-                signal=signal,
-                forecast=forecast,
-                news=news,
-            )
+        quality_details = AnalysisQualityGuard.quality_breakdown(
+            signal=signal, forecast=forecast, news=news,
         )
+        quality_penalty = quality_details.total
+        quality_warnings = AnalysisQualityGuard.quality_warnings(quality_details)
 
         confidence = max(15, confidence - quality_penalty)
 
@@ -348,6 +346,7 @@ class CryptoAssetAnalysisModule:
                 "reasons": reasons,
                 "sources_available": available_sources,
                 "quality_penalty": quality_penalty,
+                "quality_breakdown": quality_details.model_dump(mode="json"),
                 "quality_warnings": quality_warnings,
                 "signal": signal,
                 "forecast": forecast,

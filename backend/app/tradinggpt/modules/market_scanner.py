@@ -37,6 +37,7 @@ class ScannerResult:
     reasons: list[str]
     quality_penalty: int
     warnings: list[str]
+    quality_breakdown: dict[str, Any] | None = None
     market_price: float | None = None
     signal_strategy: str | None = None
     signal_levels: dict[str, Any] | None = None
@@ -64,6 +65,7 @@ class ScannerResult:
             "trade_style": self.trade_style,
             "reasons": self.reasons,
             "quality_penalty": self.quality_penalty,
+            "quality_breakdown": self.quality_breakdown,
             "warnings": self.warnings,
             "market_price": self.market_price,
             "signal_strategy": self.signal_strategy,
@@ -246,13 +248,11 @@ class CryptoMarketScanner:
             news_available=news is not None,
         )
 
-        quality_penalty, warnings = (
-            AnalysisQualityGuard.confidence_penalty(
-                signal=signal,
-                forecast=forecast,
-                news=news,
-            )
+        quality_details = AnalysisQualityGuard.quality_breakdown(
+            signal=signal, forecast=forecast, news=news,
         )
+        quality_penalty = quality_details.total
+        warnings = AnalysisQualityGuard.quality_warnings(quality_details)
 
         confidence = max(15, confidence - quality_penalty)
 
@@ -362,6 +362,7 @@ class CryptoMarketScanner:
             trade_style=timeframe_analysis["trade_style"],
             reasons=reasons,
             quality_penalty=quality_penalty,
+            quality_breakdown=quality_details.model_dump(mode="json"),
             warnings=warnings,
             market_price=market_price,
             signal_strategy=signal_strategy,

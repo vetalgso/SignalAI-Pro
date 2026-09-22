@@ -294,6 +294,7 @@ def test_admission_projection_ignores_legacy_malformed_and_private_data():
         assert read_admission({"ai_admission": record}) is None
     result = read_admission({"ai_admission": admission_record(secret="private"), "key": "private"})
     assert result.minimum_confidence == 65
+    assert result.maximum_quality_penalty is None
     assert "private" not in result.model_dump_json()
 
 

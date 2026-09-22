@@ -20,6 +20,7 @@ class AdmissionDecision(BaseModel):
     action: Literal["SELECTED", "SKIPPED"]
     reason: AdmissionReason
     confidence: FiniteFloat | None
+    maximum_quality_penalty: FiniteFloat | None = Field(default=None, ge=0)
     minimum_confidence: FiniteFloat
     candidate_age_seconds: FiniteFloat = Field(ge=0)
     max_candidates: int = Field(ge=1)
