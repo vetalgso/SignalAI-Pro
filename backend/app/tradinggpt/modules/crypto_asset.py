@@ -6,6 +6,7 @@ from typing import Any
 from app.forecasting import ForecastService
 from app.news import NewsService
 from app.signal_engine.service import build_signal_analysis
+from app.tradinggpt.risk_assessment import assess_risk
 from app.tradinggpt.quality_guard import AnalysisQualityGuard
 from app.tradinggpt.scoring import ScoringEngine
 from app.tradinggpt.data import MarketDataService
@@ -151,11 +152,12 @@ class CryptoAssetAnalysisModule:
         confidence = max(15, confidence - quality_penalty)
 
         market_view = self._market_view(weighted_score)
-        risk = self._risk_level(
+        risk_details = assess_risk(
             signal,
             forecast,
             request.context.risk_level,
         )
+        risk = risk_details.level
         recommendation = self._recommendation(
             weighted_score,
             confidence,
@@ -347,6 +349,7 @@ class CryptoAssetAnalysisModule:
                 "sources_available": available_sources,
                 "quality_penalty": quality_penalty,
                 "quality_breakdown": quality_details.model_dump(mode="json"),
+                "risk_assessment": risk_details.model_dump(mode="json"),
                 "quality_warnings": quality_warnings,
                 "signal": signal,
                 "forecast": forecast,
@@ -424,57 +427,7 @@ class CryptoAssetAnalysisModule:
         forecast: dict[str, Any] | None,
         profile_risk: str,
     ) -> str:
-        forecast_risks: list[str] = []
-
-        if forecast:
-            forecast_risks = [
-                item.get("risk_level", "normal")
-                for item in forecast.get("forecasts", [])
-            ]
-
-        if "high" in forecast_risks:
-            return "high"
-
-        elevated_count = forecast_risks.count("elevated")
-
-        if elevated_count >= 2:
-            return "high"
-
-        if elevated_count == 1 and profile_risk == "high":
-            return "high"
-
-        if signal:
-            decision = signal.get("decision")
-            warnings = (
-                decision.get("warnings", [])
-                if isinstance(decision, dict)
-                else []
-            )
-
-            indicators = signal.get("indicators")
-            volume = (
-                indicators.get("volume")
-                if isinstance(indicators, dict)
-                else None
-            )
-            raw_ratio = (
-                volume.get("ratio")
-                if isinstance(volume, dict)
-                else None
-            )
-
-            try:
-                volume_ratio = float(raw_ratio)
-            except (TypeError, ValueError):
-                return "high"
-
-            if volume_ratio != volume_ratio:
-                return "high"
-
-            if len(warnings) >= 2 or volume_ratio < 0.25:
-                return "high"
-
-        return profile_risk
+        return assess_risk(signal, forecast, profile_risk).level
 
     @staticmethod
     def _signal_summary(decision: dict[str, Any]) -> str:

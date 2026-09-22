@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
+from app.tradinggpt.risk_assessment import assess_risk
 from app.tradinggpt.quality_guard import AnalysisQualityGuard
 from app.tradinggpt.scoring import ScoringEngine
 from app.tradinggpt.signals.market_universe import (
@@ -37,6 +38,7 @@ class ScannerResult:
     reasons: list[str]
     quality_penalty: int
     warnings: list[str]
+    risk_assessment: dict[str, Any] | None = None
     quality_breakdown: dict[str, Any] | None = None
     market_price: float | None = None
     signal_strategy: str | None = None
@@ -66,6 +68,7 @@ class ScannerResult:
             "reasons": self.reasons,
             "quality_penalty": self.quality_penalty,
             "quality_breakdown": self.quality_breakdown,
+            "risk_assessment": self.risk_assessment,
             "warnings": self.warnings,
             "market_price": self.market_price,
             "signal_strategy": self.signal_strategy,
@@ -296,11 +299,12 @@ class CryptoMarketScanner:
             opportunity_score,
         )
 
-        risk = self.crypto_asset_module._risk_level(
+        risk_details = assess_risk(
             signal,
             forecast,
             risk_level,
         )
+        risk = risk_details.level
 
         signal_action = None
         market_price = None
@@ -353,6 +357,7 @@ class CryptoMarketScanner:
             ranking_score=ranking_score,
             confidence=confidence,
             risk=risk,
+            risk_assessment=risk_details.model_dump(mode="json"),
             recommendation=recommendation,
             trade_direction=trade_direction,
             signal_action=signal_action,

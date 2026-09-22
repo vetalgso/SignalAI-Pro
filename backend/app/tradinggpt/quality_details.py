@@ -4,6 +4,9 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel, Field, FiniteFloat, ValidationError, model_validator
 
 
+from app.news.diagnostics import NewsDiagnostics
+
+
 class ForecastHorizon(BaseModel):
     horizon_minutes: int | None = Field(default=None, gt=0)
     direction: Literal["UP", "DOWN", "SIDEWAYS", "UNCERTAIN", "UNKNOWN"]
@@ -23,6 +26,7 @@ class VolumeQuality(BaseModel):
 
 
 class NewsQuality(BaseModel):
+    diagnostics: NewsDiagnostics | None = None
     points: int = Field(ge=0, le=10)
     state: Literal["AVAILABLE", "MISSING"]
     article_count: int = Field(ge=0)

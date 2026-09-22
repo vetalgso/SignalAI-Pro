@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 from .quality_details import QualityBreakdown
+from .risk_assessment import RiskAssessment
 
 
 RiskLevel = Literal["low", "medium", "high"]
@@ -243,6 +244,7 @@ class MarketScanAsset(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     quality_penalty: int
     quality_breakdown: QualityBreakdown | None = None
+    risk_assessment: RiskAssessment | None = None
     warnings: list[str] = Field(default_factory=list)
 
 

@@ -9,6 +9,8 @@ from typing import Any
 from xml.etree import ElementTree
 import httpx
 
+from .diagnostics import NewsDiagnostics
+
 FEEDS = [
     ("CoinDesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
     ("Cointelegraph", "https://cointelegraph.com/rss"),
@@ -37,12 +39,21 @@ class NewsService:
         articles, errors = await self._all_articles()
 
         articles = list(articles)
+        collected_count = len(articles)
 
         if asset:
             wanted = asset.upper()
             articles = [a for a in articles if wanted in a["assets"]]
 
+        diagnostics = NewsDiagnostics(
+            observed_at=datetime.now(timezone.utc),
+            coverage="ALL" if not asset else "SUPPORTED" if asset.upper() in ASSETS else "UNSUPPORTED",
+            sources_state="FAILED" if len(errors) == len(FEEDS) else "PARTIAL" if errors else "COMPLETE",
+            total_sources=len(FEEDS), failed_sources=len(errors),
+            collected_articles=collected_count, matched_articles=len(articles),
+        )
         return {
+            "diagnostics": diagnostics.model_dump(mode="json"),
             "count": len(articles[:limit]),
             "partial": bool(errors),
             "articles": articles[:limit],

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.models.signal_discovery import SignalScanCandidate, SignalScanRun
+from app.tradinggpt.risk_assessment import RiskAssessment, read_risk_assessment
 from app.tradinggpt.quality_details import QualityBreakdown, read_quality_breakdown
 from .ai_admission import AdmissionDecision, read_admission
 
@@ -25,6 +26,7 @@ class AdmissionRow(BaseModel):
     symbol: str
     decision: AdmissionDecision | None
     quality: QualityBreakdown | None = None
+    risk: RiskAssessment | None = None
 
 
 class AdmissionPage(BaseModel):
@@ -60,7 +62,8 @@ def list_ai_admission(
     ).order_by(SignalScanCandidate.id)).all()
     rows = [AdmissionRow(candidate_id=c.id, symbol=c.symbol,
                          decision=read_admission(c.snapshot),
-                         quality=read_quality_breakdown(c.snapshot)) for c in candidates]
+                         quality=read_quality_breakdown(c.snapshot),
+                         risk=read_risk_assessment(c.snapshot, c.risk_level)) for c in candidates]
     return AdmissionPage(
         run=AdmissionRun(id=run.id, completed_at=run.completed_at,
                          scanned_assets=run.scanned_assets),

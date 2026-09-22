@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from math import isfinite
 from typing import Any
 
+from app.news.diagnostics import read_news_diagnostics
+
 from .quality_details import QualityBreakdown
 
 
@@ -151,6 +153,7 @@ class AnalysisQualityGuard:
             },
             volume={"points": volume_points, "state": volume_state, "ratio": ratio},
             news={
+                "diagnostics": read_news_diagnostics(news.get("diagnostics")) if news else None,
                 "points": news_points, "state": "AVAILABLE" if articles else "MISSING",
                 "article_count": len(articles),
                 "unverified_count": sum(a.get("status") != "verified" for a in articles),

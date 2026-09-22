@@ -66,3 +66,37 @@ test('English text distinguishes invalid volume from zero and preserves zero max
   assert.match(html, /2 d: Uncertain/);
   assert.match(render({ ...quality, volume: { points: 15, state: 'AVAILABLE', ratio: 0 } }, 20, 'en'), /Volume \/ average: 0/);
 });
+
+const diagnostics = {
+  version: 1, observed_at: '2026-09-22T12:00:00Z', coverage: 'UNSUPPORTED',
+  sources_state: 'COMPLETE', total_sources: 3, failed_sources: 0,
+  collected_articles: 85, matched_articles: 0,
+};
+const newsWith = (changes = {}) => ({ ...quality, news: {
+  points: 5, state: 'MISSING', article_count: 0, unverified_count: 0,
+  diagnostics: { ...diagnostics, ...changes },
+} });
+
+test('unsupported asset and healthy feeds are shown independently', () => {
+  const html = render(newsWith());
+  assert.match(html, /Монета не поддерживается словарём новостей/);
+  assert.match(html, /RSS-источники ответили без ошибок/);
+  assert.match(html, /Статей в общей подборке: 85/);
+  assert.doesNotMatch(html, /Ошибка загрузки|Часть RSS/);
+});
+test('unsupported coverage does not hide simultaneous source failure', () => {
+  const html = render(newsWith({ sources_state: 'FAILED', failed_sources: 3, collected_articles: 0 }), 20, 'en');
+  assert.match(html, /not covered by the news dictionary/);
+  assert.match(html, /All RSS sources failed/);
+  assert.match(html, /Failed sources: 3 \/ 3/);
+});
+test('no matches only describes the loaded sample, not all news', () => {
+  const html = render(newsWith({ coverage: 'SUPPORTED' }));
+  assert.match(html, /Совпадений в загруженной подборке нет/);
+  assert.match(html, /не означает отсутствие новостей вообще/);
+  assert.match(render(newsWith({ coverage: 'SUPPORTED', sources_state: 'PARTIAL', failed_sources: 1 })), /Часть RSS-источников недоступна/);
+});
+test('legacy source diagnostics are not inferred from empty articles', () => {
+  assert.match(render(quality), /Диагностика источников не записана/);
+  assert.doesNotMatch(render(quality), /Монета не поддерживается|RSS-источники ответили/);
+});
