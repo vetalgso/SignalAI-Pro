@@ -9,6 +9,7 @@ from typing import Any
 from xml.etree import ElementTree
 import httpx
 
+from .related_reports import annotate_related_reports
 from .diagnostics import NewsDiagnostics
 from .assets import ASSETS, MATCHER_VERSION, match_assets, visible_text
 
@@ -35,7 +36,7 @@ class NewsService:
     async def latest(self, limit: int = 50, asset: str | None = None) -> dict[str, Any]:
         articles, errors = await self._all_articles()
 
-        articles = list(articles)
+        articles = annotate_related_reports(articles)
         collected_count = len(articles)
 
         if asset:
@@ -120,8 +121,14 @@ class NewsService:
             pos, neg = len(tokens & POSITIVE), len(tokens & NEGATIVE)
             sentiment = "positive" if pos > neg else "negative" if neg > pos else "neutral"
             impact = min(100, 35 + 10 * len(assets) + 12 * abs(pos - neg) + (10 if source == "CoinDesk" else 5))
-            published = self._date(self._text(item, "pubDate"))
-            out.append({"id": hashlib.sha1((title + link).encode()).hexdigest()[:16], "source": source, "title": title, "url": link, "summary": description[:300].strip(), "published_at": published, "assets": assets, "sentiment": sentiment, "impact_score": impact, "status": "unverified"})
+            raw_date = self._text(item, "pubDate")
+            published = self._date(raw_date)
+            try:
+                parsed = parsedate_to_datetime(raw_date)
+                date_source = "RSS" if parsed.tzinfo is not None else "FALLBACK"
+            except (TypeError, ValueError, OverflowError):
+                date_source = "FALLBACK"
+            out.append({"id": hashlib.sha1((title + link).encode()).hexdigest()[:16], "source": source, "title": title, "url": link, "summary": description[:300].strip(), "published_at": published, "published_at_source": date_source, "assets": assets, "sentiment": sentiment, "impact_score": impact, "status": "unverified"})
         return out
 
     @staticmethod

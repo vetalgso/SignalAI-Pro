@@ -1450,3 +1450,5 @@ aside button{cursor:pointer}.section-heading{font-size:18px;margin:20px 0 14px}.
     flex-direction: column;
   }
 }
+
+.news-related{color:#9bb0c1;font-size:12px;padding:0 2px 14px;line-height:1.5;overflow-wrap:anywhere}.news-related p{margin:6px 0}.news-related summary{cursor:pointer;color:#b7dcf5}.news-related ul{padding-left:20px}.news-related li{margin:12px 0}.news .news-related a{border:0;padding:0;color:#75c7ff;text-decoration:underline}.news-related li>span{display:block;font-size:11px}

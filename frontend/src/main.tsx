@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ExchangeCenter } from './features/exchange/ExchangeCenter';
 import { SignalCenter } from './features/signals/SignalCenter';
+import { RelatedReports } from './features/news/RelatedReports';
 import './styles.css';
 
 const API = '/api';
@@ -361,13 +362,16 @@ function App() {
     <section className="panel news">
       <div className="panel-title"><h2>{t.latest}</h2><span>{baseAsset}</span></div>
       {news.length ? news.map((item, index) => (
-        <a key={`${item.url}-${index}`} href={item.url} target="_blank" rel="noreferrer">
+        <article className="news-item" key={`${item.url}-${index}`}>
+        <a href={item.url} target="_blank" rel="noreferrer">
           <div>
             <span className={`badge ${item.sentiment}`}>{translateDirection(item.sentiment)}</span>
             <b>{item.title}</b>
             <small>{item.source} · {t.sourceImpact} {item.impact_score}/100</small>
           </div>
         </a>
+        <RelatedReports coverage={item.related_coverage} language={lang} />
+        </article>
       )) : <p>{t.noNews}</p>}
     </section>
   );
