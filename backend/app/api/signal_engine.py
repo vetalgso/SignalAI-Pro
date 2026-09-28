@@ -6,14 +6,13 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_user
 from app.api.market import normalize_symbol
 from app.database.session import get_db
-from app.indicators.service import calculate_indicator_snapshot
 from app.models.signal import Signal
 from app.models.user import User
 from app.schemas.indicators import IndicatorResponse
 from app.schemas.market import ALLOWED_KLINE_INTERVALS
 from app.schemas.signal_engine import GeneratedSignalResponse, SignalAnalysisResponse
-from app.services.binance_market import BinanceMarketService
 from app.signal_engine.service import build_signal_analysis
+from app.tradinggpt.data import MarketDataService
 
 router = APIRouter(prefix="/signal-engine", tags=["Signal Engine"])
 
@@ -24,15 +23,20 @@ async def _analyze(symbol: str, interval: str, limit: int) -> SignalAnalysisResp
         allowed = ", ".join(sorted(ALLOWED_KLINE_INTERVALS))
         raise HTTPException(status_code=422, detail=f"Unsupported interval. Allowed: {allowed}")
 
-    candles = await BinanceMarketService().klines(normalized_symbol, interval, limit)
-    snapshot = calculate_indicator_snapshot(candles)
-    indicators = IndicatorResponse(
-        symbol=normalized_symbol,
+    snapshot = await MarketDataService().get_market_snapshot(
+        asset=normalized_symbol.removesuffix("USDT"),
         interval=interval,
-        candles_used=len(candles),
-        **snapshot,
+        candle_limit=limit,
     )
-    decision = build_signal_analysis(snapshot)
+
+    indicators = IndicatorResponse(
+        symbol=snapshot.symbol,
+        interval=snapshot.interval,
+        candles_used=len(snapshot.candles),
+        **snapshot.indicators,
+    )
+
+    decision = build_signal_analysis(snapshot.indicators)
     return SignalAnalysisResponse(
         symbol=normalized_symbol,
         interval=interval,
