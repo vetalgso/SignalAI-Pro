@@ -326,3 +326,49 @@ def test_skips_unsafe_opportunities(
         "DIRECTION_CONFLICT",
         "LEVELS_UNAVAILABLE",
     }
+
+
+def test_changed_levels_in_same_scan_reuse_active_signal_and_keep_next_symbol(db):
+    result = generator(db).persist_scan(
+        scan_result=scan(
+            opportunity(symbol="SOLUSDT"),
+            opportunity(symbol="SOLUSDT", entry="64010", stop_loss="62510", take_profit="67010"),
+            opportunity(symbol="ETHUSDT"),
+        ),
+        min_confidence=Decimal("60"),
+    )
+    assert result["created_count"] == 2
+    assert result["duplicate_count"] == 1
+    assert result["duplicates"] == [{"symbol": "SOLUSDT", "existing_signal_id": result["created"][0].id}]
+    assert [item["outcome"] for item in result["evaluations"]] == ["CREATED", "DUPLICATE", "CREATED"]
+    assert result["created"][0].entry_min == Decimal("64000")
+    assert [db.query(model).count() for model in
+            (TradingSignal, TradingSignalEvent, TelegramSignalDelivery)] == [2, 2, 2]
+
+
+def test_manual_scan_api_reports_existing_signal_when_levels_change(db, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.database.session import get_db
+    from app.tradinggpt.signals import router as routes
+
+    responses = iter([
+        scan(opportunity()),
+        scan(opportunity(entry="64010", stop_loss="62510", take_profit="67010")),
+    ])
+    async def scan_market(**kwargs):
+        return next(responses)
+    monkeypatch.setattr(routes.tradinggpt, "scan_market", scan_market)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[get_db] = lambda: db
+    with TestClient(app) as client:
+        first = client.post("/signals/scan", json={})
+        second = client.post("/signals/scan", json={})
+    assert first.status_code == second.status_code == 200
+    body = second.json()
+    assert body["created_count"] == 0
+    assert body["duplicate_count"] == 1
+    assert body["duplicates"][0]["existing_signal_id"] == first.json()["created"][0]["id"]
+    assert [db.query(model).count() for model in
+            (TradingSignal, TradingSignalEvent, TelegramSignalDelivery)] == [1, 1, 1]

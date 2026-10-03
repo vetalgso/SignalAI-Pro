@@ -144,6 +144,10 @@ class TradingSignalGenerator:
                     request
                 )
             except DuplicateSignalError as exc:
+                # Each successful create already commits its signal/event/outbox.
+                # Release this duplicate's advisory lock before another symbol;
+                # opposite scan order must not accumulate locks and deadlock.
+                self.service.repository.db.rollback()
                 duplicates.append(
                     {
                         "symbol": symbol,

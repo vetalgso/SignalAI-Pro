@@ -186,9 +186,12 @@ class TradingSignalService:
             rounding=ROUND_HALF_UP,
         )
 
-    def _active_ai_duplicate(
+    def _active_source_duplicate(
         self,
         request: SignalCreateRequest,
+        *,
+        sources: tuple[str, ...],
+        lock_namespace: bytes,
     ) -> TradingSignal | None:
         from sqlalchemy import select, text
 
@@ -202,12 +205,12 @@ class TradingSignalService:
         }
         db = self.repository.db
         if db.get_bind().dialect.name == "postgresql":
-            # Serialize cooperating AI creators until commit or rollback.
+            # Serialize cooperating creators in this source family until commit or rollback.
             encoded = json.dumps(
                 scope, sort_keys=True, separators=(",", ":"),
             ).encode("utf-8")
             lock_key = int.from_bytes(
-                hashlib.sha256(b"active-ai-signal:" + encoded).digest()[:8],
+                hashlib.sha256(lock_namespace + encoded).digest()[:8],
                 byteorder="big",
                 signed=True,
             )
@@ -219,7 +222,7 @@ class TradingSignalService:
         statement = (
             select(TradingSignal)
             .where(
-                TradingSignal.source == "AI_REVIEW",
+                TradingSignal.source.in_(sources),
                 TradingSignal.status.in_(
                     ("ACTIVE", "ENTRY_REACHED", "TP1_REACHED", "TP2_REACHED")
                 ),
@@ -237,10 +240,19 @@ class TradingSignalService:
         self,
         request: SignalCreateRequest,
     ) -> TradingSignal:
-        if request.source == "AI_REVIEW":
-            existing_ai = self._active_ai_duplicate(request)
-            if existing_ai is not None:
-                raise DuplicateSignalError(existing_ai.id)
+        source_families = {
+            "AI_REVIEW": (("AI_REVIEW",), b"active-ai-signal:"),
+            "SCANNER": (("SCANNER", "MARKET_SCANNER"), b"active-scanner-signal:"),
+            "MARKET_SCANNER": (("SCANNER", "MARKET_SCANNER"), b"active-scanner-signal:"),
+        }
+        family = source_families.get(request.source)
+        if family is not None:
+            sources, lock_namespace = family
+            existing = self._active_source_duplicate(
+                request, sources=sources, lock_namespace=lock_namespace,
+            )
+            if existing is not None:
+                raise DuplicateSignalError(existing.id)
 
         fingerprint = self._fingerprint(
             request
