@@ -10,10 +10,10 @@ const { outputText } = ts.transpileModule(source, {
 });
 const { fetchQualityReport } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 
-const query = { days: 30, source: 'AI_REVIEW', transition_origin: 'AUTOMATIC', offset: 0 };
+const query = { days: 30, source: 'AI_REVIEW', transition_origin: 'AUTOMATIC', history_status: 'ALL', offset: 0 };
 const report = {
   generated_from: '2026-08-16T00:00:00Z', as_of: '2026-09-15T00:00:00Z',
-  source: 'AI_REVIEW', transition_origin: 'AUTOMATIC', offset: 0, limit: 25,
+  source: 'AI_REVIEW', transition_origin: 'AUTOMATIC', history_status: 'ALL', offset: 0, limit: 25,
   summary: { total: 1 }, groups: [], total_groups: 0,
 };
 function respond(t, body, status = 200) {
@@ -84,3 +84,26 @@ test('passes cancellation through to the caller', async t => {
   t.mock.method(globalThis, 'fetch', async () => { throw error; });
   await assert.rejects(load(), e => e === error);
 });
+
+
+test('rejects a legacy backend that ignores the history filter', async t => {
+  const { history_status, ...legacy } = report;
+  respond(t, legacy);
+  await assert.rejects(load({ ...query, history_status: 'CURRENT' }), /requested filters/);
+});
+
+test('rejects ALL history totals returned for CURRENT', async t => {
+  respond(t, report);
+  await assert.rejects(load({ ...query, history_status: 'CURRENT' }), /requested filters/);
+});
+
+for (const state of ['ALL', 'CURRENT', 'PENDING', 'BACKFILL', 'GAP', 'UNVERIFIED', 'UNSUPPORTED', 'UNKNOWN']) {
+  test(`sends and validates history state ${state}`, async t => {
+    const expected = { ...report, history_status: state };
+    const mock = respond(t, expected);
+    assert.deepEqual(await load({ ...query, history_status: state }), expected);
+    const params = new URL(mock.mock.calls[0].arguments[0], 'https://example.test').searchParams;
+    assert.equal(params.get('history_status'), state);
+    assert.equal(params.get('transition_origin'), 'AUTOMATIC');
+  });
+}

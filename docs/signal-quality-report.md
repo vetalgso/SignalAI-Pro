@@ -3,7 +3,7 @@
 GET `/api/v3/signals/quality` is read-only. Parameters: `days` 1–365
 (default 30), `source` AI_REVIEW/SCANNER/ALL (default AI_REVIEW),
 `transition_origin` ALL/AUTOMATIC/MANUAL/UNKNOWN (default ALL), `limit`
-1–100 (default 25), `offset` >= 0. The UI offers 7/30/90/365 days.
+1–100 (default 25), `offset` >= 0, and `history_status` (default ALL; values below). The UI offers 7/30/90/365 days.
 
 The cohort is signals whose `generated_at` falls inclusively between
 `as_of - days` and `as_of`, in UTC. Results reflect recorded lifecycle
@@ -71,3 +71,43 @@ market data or change those rules. Historical duplicates are not deleted.
 
 No migrations, background tasks, order execution, promotion or external
 market/provider requests are performed by the endpoint.
+
+## Tracking history state
+
+`history_status` accepts ALL, CURRENT, PENDING, BACKFILL, GAP, UNVERIFIED,
+UNSUPPORTED and UNKNOWN. It intersects the creation period, source and
+transition-origin filters **before** summary, grouping and pagination. The
+response echoes it; the UI rejects missing/mismatched echoes, including a
+legacy server that silently ignores the parameter. ALL preserves the prior
+cohort by default.
+
+The filter reads the stored `lifecycle_history_status` at report time:
+
+- CURRENT: contiguous full minute candles processed through the last tracking
+  cycle cutoff or terminal decision. The partial creation minute is excluded.
+- PENDING: no full minute has been processed yet.
+- BACKFILL: a page was committed and more minutes remain to be processed.
+- GAP: missing, invalid or ambiguous history; cursor retained for recovery.
+- UNVERIFIED: legacy/imported/manual-reset history requiring reconciliation.
+- UNSUPPORTED: no supported history feed for this market.
+- UNKNOWN: an unrecognized or null stored state (not silently treated as CURRENT).
+
+CURRENT is a stored state, not a live freshness check. It can become stale
+when tracking stops. A terminal signal intentionally stops advancing its
+cursor. Neither a current cursor nor automatic events prove tick-level
+completeness, fills or profitability. See `signal-lifecycle-history.md` for
+candle coverage boundaries. No rows or events are repaired by this report.
+
+Summary and each group include `history_current`, `history_pending`,
+`history_backfill`, `history_gap`, `history_unverified`, `history_unsupported`
+and `history_unknown`. Their sum equals `total` in the **filtered** cohort.
+Summary counts remain independent of the displayed page. The UI exposes this
+breakdown in a collapsible section. Origin UNKNOWN and history UNKNOWN are
+independent: a newly tracked CURRENT signal with no transitions can have
+unknown origin. A legacy signal can have automatic events and UNVERIFIED history.
+
+For evaluating recorded automatic outcomes, compare sources/strategies with
+`transition_origin=AUTOMATIC&history_status=CURRENT`, keeping open and terminal
+counts visible. This is an observational cohort that excludes signals without
+recorded transitions; it is not an unbiased backtest or executed win rate.
+Do not tune admission thresholds from TP counts alone.

@@ -15,6 +15,8 @@ OPEN = ("ACTIVE", "ENTRY_REACHED", "TP1_REACHED", "TP2_REACHED")
 TERMINAL = ("TP3_REACHED", "STOPPED", "EXPIRED", "CANCELLED")
 DIMENSIONS = ("source", "exchange", "market_type", "symbol", "side", "timeframe", "strategy")
 TransitionOrigin = Literal["ALL", "AUTOMATIC", "MANUAL", "UNKNOWN"]
+HISTORY_STATUSES = ("PENDING", "CURRENT", "BACKFILL", "GAP", "UNVERIFIED", "UNSUPPORTED")
+HistoryStatus = Literal["ALL", "PENDING", "CURRENT", "BACKFILL", "GAP", "UNVERIFIED", "UNSUPPORTED", "UNKNOWN"]
 
 
 class Counts(BaseModel):
@@ -31,6 +33,13 @@ class Counts(BaseModel):
     cancelled: int = 0
     without_events: int = 0
     manual_transitions: int = 0
+    history_pending: int = 0
+    history_current: int = 0
+    history_backfill: int = 0
+    history_gap: int = 0
+    history_unverified: int = 0
+    history_unsupported: int = 0
+    history_unknown: int = 0
 
 
 class QualityGroup(Counts):
@@ -48,6 +57,7 @@ class QualityReport(BaseModel):
     as_of: datetime
     source: str
     transition_origin: TransitionOrigin = "ALL"
+    history_status: HistoryStatus = "ALL"
     summary: Counts
     groups: list[QualityGroup]
     total_groups: int
@@ -57,7 +67,8 @@ class QualityReport(BaseModel):
 
 def build_quality_report(db: Session, *, days: int, source: str,
                          limit: int, offset: int, now: datetime,
-                         transition_origin: TransitionOrigin = "ALL") -> QualityReport:
+                         transition_origin: TransitionOrigin = "ALL",
+                         history_status: HistoryStatus = "ALL") -> QualityReport:
     start = now - timedelta(days=days)
     signal = TradingSignal
     event = TradingSignalEvent
@@ -94,7 +105,15 @@ def build_quality_report(db: Session, *, days: int, source: str,
         ((history.c.automatic == 1) & (history.c.unknown == 0), "AUTOMATIC"),
         else_="UNKNOWN",
     )
+    # Use the stored tracker state, not a completeness inference from events,
+    # the current wall clock, or a terminal signal's intentionally stopped cursor.
+    history_state = case(
+        (signal.lifecycle_history_status.in_(HISTORY_STATUSES), signal.lifecycle_history_status),
+        else_="UNKNOWN",
+    )
     report_cohort = list(cohort)
+    if history_status != "ALL":
+        report_cohort.append(history_state == history_status)
     if transition_origin != "ALL":
         report_cohort.append(origin == transition_origin)
 
@@ -113,7 +132,9 @@ def build_quality_report(db: Session, *, days: int, source: str,
                count_if(signal.status == "EXPIRED", "expired"),
                count_if(signal.status == "CANCELLED", "cancelled"),
                count_if(history.c.events.is_(None), "without_events"),
-               count_if(history.c.manual == 1, "manual_transitions"))
+               count_if(history.c.manual == 1, "manual_transitions"),
+               *[count_if(history_state == state, "history_" + state.lower())
+                 for state in (*HISTORY_STATUSES, "UNKNOWN")])
         .outerjoin(history, history.c.signal_id == signal.id)
         .where(*report_cohort).group_by(*dimensions).order_by(*dimensions)
     )
@@ -122,7 +143,7 @@ def build_quality_report(db: Session, *, days: int, source: str,
     summary = Counts(**{name: sum(getattr(group, name) for group in groups)
                         for name in Counts.model_fields})
     return QualityReport(generated_from=start, as_of=now, source=source,
-                         transition_origin=transition_origin,
+                         transition_origin=transition_origin, history_status=history_status,
                          summary=summary, groups=groups[offset:offset + limit],
                          total_groups=len(groups), limit=limit, offset=offset)
 
@@ -132,10 +153,11 @@ def get_signal_quality(
     days: int = Query(default=30, ge=1, le=365),
     source: Literal["AI_REVIEW", "SCANNER", "ALL"] = Query(default="AI_REVIEW"),
     transition_origin: TransitionOrigin = Query(default="ALL"),
+    history_status: HistoryStatus = Query(default="ALL"),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> QualityReport:
     return build_quality_report(db, days=days, source=source, limit=limit,
                                 offset=offset, now=datetime.now(timezone.utc),
-                                transition_origin=transition_origin)
+                                transition_origin=transition_origin, history_status=history_status)

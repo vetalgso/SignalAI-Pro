@@ -14,3 +14,9 @@
 .signal-quality th, .signal-quality td { text-align: left; padding: 12px; border-bottom: 1px solid #334155; vertical-align: top; min-width: 80px; }
 .signal-quality td small { display: block; margin-top: 6px; white-space: nowrap; opacity: .75; }
 .signal-quality button:focus-visible, .signal-quality select:focus-visible, .signal-quality__scroll:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
+
+.signal-quality__toolbar label { max-width: 100%; }
+.signal-quality__toolbar select { max-width: 100%; }
+.signal-quality details { margin: 12px 0; font-size: 13px; line-height: 1.6; }
+.signal-quality summary { cursor: pointer; }
+.signal-quality summary:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
