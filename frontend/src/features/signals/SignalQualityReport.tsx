@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import './SignalQualityReport.css';
-import { fetchQualityReport, type Counts, type Report, type QualityQuery } from './qualityReportApi';
+import { fetchQualityReport, type Counts, type Report, type QualityQuery, type HistoryStatus } from './qualityReportApi';
 
 const columns: [keyof Counts, string, string][] = [
   ['total', 'Создано', 'Created'], ['open', 'Открыто', 'Open'],
@@ -10,9 +10,19 @@ const columns: [keyof Counts, string, string][] = [
   ['expired', 'Истекли', 'Expired'], ['cancelled', 'Отменены', 'Cancelled'],
 ];
 
+const historyStates: [HistoryStatus, keyof Counts, string, string][] = [
+  ['CURRENT', 'history_current', 'Обработана до последнего цикла', 'Caught up at last cycle'],
+  ['PENDING', 'history_pending', 'Ожидает обработки', 'Pending'],
+  ['BACKFILL', 'history_backfill', 'Восстанавливается', 'Backfilling'],
+  ['GAP', 'history_gap', 'Пробел или ошибка', 'Gap or error'],
+  ['UNVERIFIED', 'history_unverified', 'Не проверена', 'Unverified'],
+  ['UNSUPPORTED', 'history_unsupported', 'Не поддерживается', 'Unsupported'],
+  ['UNKNOWN', 'history_unknown', 'Неизвестное состояние', 'Unknown state'],
+];
+
 export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
   const ru = language === 'ru';
-  const [query, setQuery] = useState<QualityQuery>({ days: 30, source: 'AI_REVIEW', transition_origin: 'ALL', offset: 0 });
+  const [query, setQuery] = useState<QualityQuery>({ days: 30, source: 'AI_REVIEW', transition_origin: 'ALL', history_status: 'ALL', offset: 0 });
   const [reload, setReload] = useState(0);
   const [data, setData] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +64,12 @@ export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
           <option value="UNKNOWN">{ru ? 'Неизвестное происхождение' : 'Unknown origin'}</option>
         </select>
       </label>
+      <label>{ru ? 'История сопровождения' : 'Tracking history'}{' '}
+        <select value={query.history_status} onChange={event => setQuery(value => ({ ...value, history_status: event.target.value as Report['history_status'], offset: 0 }))}>
+          <option value="ALL">{ru ? 'Все состояния' : 'All states'}</option>
+          {historyStates.map(([state, , russian, english]) => <option key={state} value={state}>{ru ? russian : english} ({state})</option>)}
+        </select>
+      </label>
       <button type="button" disabled={loading} onClick={() => setReload(value => value + 1)}>{ru ? 'Обновить отчёт' : 'Refresh report'}</button>
     </div>
     <p>{ru
@@ -62,6 +78,12 @@ export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
     <p>{ru
       ? '«Только автоматические»: есть записанные автоматические переходы, нет ручных или переходов неизвестного происхождения. «С ручными переходами» включает смешанную историю. Отсутствие переходов или одно лишь создание сигнала означает неизвестное происхождение. Автоматические переходы не гарантируют полноту истории и не подтверждают прибыльность.'
       : '“Automatic only” requires recorded automatic transitions with no manual or unknown-origin transitions. “With manual transitions” includes mixed history. No transitions or signal creation alone means unknown origin. Automatic transitions do not guarantee a complete history or confirm profitability.'}</p>
+    <details>
+      <summary>{ru ? 'Что означает состояние истории' : 'What the history state means'}</summary>
+      <p>{ru
+        ? 'CURRENT: полные минутные свечи обработаны без разрывов до последнего цикла сопровождения или завершения сигнала. Неполная минута создания исключена. Это сохранённое состояние: при остановке сопровождения оно может устареть. UNVERIFIED включает старые, импортированные и вручную изменённые записи. Состояние истории не подтверждает исполнение сделок или прибыльность.'
+        : 'CURRENT: full minute candles were processed without gaps through the last tracking cycle or terminal decision. The partial creation minute is excluded. This is a saved state and can become stale if tracking stops. UNVERIFIED includes legacy, imported and manually changed records. History state does not confirm trade execution or profitability.'}</p>
+    </details>
     <div role="status" aria-live="polite">
       {loading && (ru ? 'Загрузка отчёта…' : 'Loading report…')}
       {error && (ru ? 'Не удалось получить отчёт для выбранных фильтров. Повторите обновление.' : 'Unable to load a report matching the selected filters. Try refreshing.')}
@@ -73,6 +95,12 @@ export function SignalQualityReport({ language }: { language: 'ru' | 'en' }) {
       <p>{ru ? 'Завершено' : 'Terminal'}: {data.summary.terminal} · {ru ? 'Без истории событий' : 'Without event history'}: {data.summary.without_events}
         {' · '}{ru ? 'С ручными переходами' : 'With manual transitions'}: {data.summary.manual_transitions}
         {' · '}{ru ? 'Неизвестный статус' : 'Unknown status'}: {data.summary.unknown_status}</p>
+      <details>
+        <summary>{ru ? 'Состояния истории в выбранной выборке' : 'History states in the selected cohort'}</summary>
+        <ul>{historyStates.map(([state, count, russian, english]) => <li key={state}>
+          {ru ? russian : english} ({state}): {data.summary[count]}
+        </li>)}</ul>
+      </details>
       <p>{ru ? 'Созданы с' : 'Created since'} {new Date(data.generated_from).toLocaleString(ru ? 'ru-RU' : 'en-US')}
         {' · '}{ru ? 'Отчёт на' : 'As of'} {new Date(data.as_of).toLocaleString(ru ? 'ru-RU' : 'en-US')}</p>
       {data.summary.total === 0 ? <p>{ru ? 'По выбранным фильтрам сигналов нет.' : 'No signals match the selected filters.'}</p> :

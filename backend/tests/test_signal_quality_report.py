@@ -49,7 +49,8 @@ def add_signal(db, number, status, events=(), *, source="AI_REVIEW",
 def report(db, **kwargs):
     return build_quality_report(db, days=30, source=kwargs.get("source", "AI_REVIEW"),
                                 limit=kwargs.get("limit", 25), offset=kwargs.get("offset", 0), now=NOW,
-                                transition_origin=kwargs.get("transition_origin", "ALL"))
+                                transition_origin=kwargs.get("transition_origin", "ALL"),
+                                history_status=kwargs.get("history_status", "ALL"))
 
 
 def test_milestones_survive_stop_and_repeated_events_are_counted_once(db):
@@ -113,7 +114,8 @@ def test_quality_route_validation_and_read_only_behavior(db):
         assert response.json()["source"] == "AI_REVIEW"
         assert response.json()["transition_origin"] == "ALL"
         for query in ("days=0", "days=366", "source=INVALID", "limit=101", "offset=-1",
-                      "transition_origin=INVALID", "transition_origin=automatic"):
+                      "transition_origin=INVALID", "transition_origin=automatic",
+                      "history_status=INVALID", "history_status=current"):
             assert client.get("/signals/quality?" + query).status_code == 422
     assert db.query(TradingSignal).count() == 1
     assert db.query(TradingSignalEvent).count() == 0
@@ -330,3 +332,72 @@ def test_scanner_api_preserves_echo_and_historical_rows(db):
         assert body["summary"]["total"] == 2
         assert {group["source"] for group in body["groups"]} == {"SCANNER", "MARKET_SCANNER"}
     assert [db.execute(table.select()).all() for table in tables] == before
+
+
+def test_history_states_partition_counts_before_pagination_without_rewriting(db):
+    states = ("PENDING", "CURRENT", "BACKFILL", "GAP", "UNVERIFIED", "UNSUPPORTED", "FUTURE_STATE")
+    for number, state in enumerate(states, 1):
+        row = add_signal(db, number, "STOPPED", ("ENTRY_REACHED", "TP1_REACHED", "TP1_REACHED", "STOPPED"), strategy=str(number))
+        row.lifecycle_history_status = state
+        # Terminal cursors intentionally stop; do not reclassify by wall clock.
+        row.lifecycle_next_candle_at = NOW - timedelta(hours=12)
+    db.commit()
+    tables = (TradingSignal.__table__, TradingSignalEvent.__table__)
+    before = [db.execute(table.select()).all() for table in tables]
+    whole = report(db)
+    assert whole.history_status == "ALL"
+    assert whole.summary.total == 7
+    assert sum(getattr(whole.summary, "history_" + state.lower())
+               for state in (*states[:-1], "UNKNOWN")) == 7
+    for state in (*states[:-1], "UNKNOWN"):
+        filtered = report(db, history_status=state, transition_origin="AUTOMATIC")
+        assert filtered.history_status == state
+        assert filtered.summary.total == filtered.summary.tp1 == filtered.summary.stopped == 1
+        assert getattr(filtered.summary, "history_" + state.lower()) == 1
+        assert filtered.groups[0].total == 1
+        beyond = report(db, history_status=state, transition_origin="AUTOMATIC", limit=1, offset=5)
+        assert beyond.groups == []
+        assert beyond.summary == filtered.summary
+    assert [db.execute(table.select()).all() for table in tables] == before
+
+
+def test_history_filter_intersects_origin_source_and_creation_window(db):
+    for number, source in enumerate(("SCANNER", "MARKET_SCANNER", "AI_REVIEW"), 1):
+        row = add_signal(db, number, "TP1_REACHED", ("ENTRY_REACHED", "TP1_REACHED"), source=source)
+        row.lifecycle_history_status = "CURRENT"
+    legacy = add_signal(db, 4, "STOPPED", ("ENTRY_REACHED", "STOPPED"), source="SCANNER")
+    assert legacy.lifecycle_history_status == "UNVERIFIED"
+    manual = add_signal(db, 5, "STOPPED", ("STOPPED",), source="SCANNER", manual=True)
+    manual.lifecycle_history_status = "CURRENT"
+    for number, generated in enumerate((NOW - timedelta(days=31), NOW + timedelta(days=1)), 6):
+        row = add_signal(db, number, "ACTIVE", source="SCANNER", generated=generated)
+        row.lifecycle_history_status = "CURRENT"
+    pending = add_signal(db, 8, "ACTIVE", source="SCANNER")
+    pending.lifecycle_history_status = "CURRENT"  # No transitions: CURRENT alone does not prove origin.
+    db.commit()
+    filtered = report(db, source="SCANNER", transition_origin="AUTOMATIC", history_status="CURRENT", limit=1)
+    assert filtered.summary.total == filtered.summary.history_current == filtered.summary.tp1 == 2
+    assert filtered.total_groups == 2
+    assert len(filtered.groups) == 1
+    assert report(db, source="SCANNER", transition_origin="AUTOMATIC").summary.total == 3
+    assert report(db, source="SCANNER", history_status="CURRENT").summary.total == 4
+    empty = report(db, source="SCANNER", history_status="GAP")
+    assert empty.summary.total == empty.summary.history_gap == empty.total_groups == 0
+    assert empty.groups == []
+
+
+def test_history_filter_api_echo_and_default(db):
+    row = add_signal(db, 1, "ACTIVE", generated=datetime.now(timezone.utc) - timedelta(hours=1))
+    row.lifecycle_history_status = "CURRENT"
+    db.commit()
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_db] = lambda: db
+    with TestClient(app) as client:
+        assert client.get("/signals/quality").json()["history_status"] == "ALL"
+        for state in ("CURRENT", "UNVERIFIED", "UNKNOWN"):
+            response = client.get("/signals/quality", params={"history_status": state})
+            assert response.status_code == 200
+            body = response.json()
+            assert body["history_status"] == state
+            assert body["summary"]["total"] == int(state == "CURRENT")
