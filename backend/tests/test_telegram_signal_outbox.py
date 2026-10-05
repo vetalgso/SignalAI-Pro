@@ -30,6 +30,12 @@ class FakeDatabase:
     ) -> None:
         self.operations = operations
 
+    def get_bind(self):
+        return SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
+
+    def scalar(self, statement):
+        return None  # No open-scope match; exact fingerprint is handled by the repository.
+
     def commit(self) -> None:
         self.operations.append("commit")
 

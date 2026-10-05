@@ -449,7 +449,7 @@ def test_invalid_long_levels_are_rejected(
         )
 
 
-def test_new_hour_allows_new_signal(
+def test_new_hour_allows_new_signal_after_terminal_state(
     db: Session,
 ) -> None:
     service = make_service(db)
@@ -457,6 +457,9 @@ def test_new_hour_allows_new_signal(
     first = service.create(
         make_request()
     )
+
+    first.status = "STOPPED"
+    db.commit()
 
     second = service.create(
         make_request(
@@ -476,3 +479,113 @@ def test_new_hour_allows_new_signal(
         first.fingerprint
         != second.fingerprint
     )
+
+
+@pytest.mark.parametrize("sources", [
+    ("SCANNER", "MARKET_SCANNER"), ("MARKET_SCANNER", "SCANNER"),
+    ("SCANNER", "SCANNER"), ("MARKET_SCANNER", "MARKET_SCANNER"),
+])
+@pytest.mark.parametrize("status", ["ACTIVE", "ENTRY_REACHED", "TP1_REACHED", "TP2_REACHED"])
+def test_scanner_active_setup_blocks_price_drift_across_hours(db, sources, status):
+    service = make_service(db)
+    first = service.create(make_request(source=sources[0]))
+    first.status = status
+    # A passed entry deadline is not permission to bypass durable expiry tracking.
+    first.expires_at = first.generated_at + timedelta(minutes=1)
+    db.commit()
+    before = [db.execute(model.__table__.select()).all()
+              for model in (TradingSignal, TradingSignalEvent, TelegramSignalDelivery)]
+    with pytest.raises(DuplicateSignalError) as error:
+        service.create(make_request(
+            source=sources[1], stop_loss=Decimal("62790"), take_profit_1=Decimal("65510"),
+            generated_at=make_request().generated_at + timedelta(hours=2),
+        ))
+    assert error.value.existing_signal_id == first.id
+    assert before == [db.execute(model.__table__.select()).all()
+                      for model in (TradingSignal, TradingSignalEvent, TelegramSignalDelivery)]
+
+
+@pytest.mark.parametrize("status", ["TP3_REACHED", "STOPPED", "EXPIRED", "CANCELLED"])
+def test_scanner_terminal_setup_allows_another_signal(db, status):
+    service = make_service(db)
+    first = service.create(make_request(source="SCANNER"))
+    first.status = status
+    db.commit()
+    second = service.create(make_request(
+        source="MARKET_SCANNER", generated_at=make_request().generated_at + timedelta(hours=2),
+    ))
+    assert second.id != first.id
+
+
+@pytest.mark.parametrize("change", [
+    {"exchange": "OTHER"}, {"market_type": "SPOT"}, {"symbol": "ETHUSDT"},
+    {"timeframe": "4H"}, {"strategy": "another strategy"},
+    {"side": "SHORT", "stop_loss": Decimal("66000"), "take_profit_1": Decimal("63000"),
+     "take_profit_2": Decimal("62000"), "take_profit_3": Decimal("61000")},
+])
+def test_scanner_guard_keeps_market_direction_and_strategy_scopes_separate(db, change):
+    service = make_service(db)
+    first = service.create(make_request(source="MARKET_SCANNER"))
+    second = service.create(make_request(source="SCANNER", **change))
+    assert second.id != first.id
+
+
+def test_ai_and_unrecognized_sources_do_not_enter_scanner_guard(db):
+    service = make_service(db)
+    original = make_request(source="AI_REVIEW")
+    first = service.create(original)
+    second = service.create(make_request(
+        source="SCANNER", generated_at=original.generated_at + timedelta(hours=1),
+    ))
+    third = service.create(make_request(
+        source="IMPORT", generated_at=original.generated_at + timedelta(hours=2),
+    ))
+    assert len({first.id, second.id, third.id}) == 3
+
+
+def test_concurrent_postgres_scanner_aliases_create_only_one_signal():
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from uuid import uuid4
+    from sqlalchemy import text
+
+    url = os.environ.get("SIGNALAI_HISTORY_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Requires isolated PostgreSQL test database; enabled in CI")
+    schema = "scanner_guard_test_" + uuid4().hex
+    admin = create_engine(url)
+    with admin.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_engine(url, execution_options={"schema_translate_map": {None: schema}})
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    barrier = Barrier(2)
+    try:
+        for model in (TradingSignal, TradingSignalEvent, TelegramSignalDelivery):
+            model.__table__.create(engine)
+        def worker(source, stop):
+            with factory() as session:
+                # Bound waits if the transaction lock is leaked by a failure.
+                session.execute(text("SET LOCAL lock_timeout = '10s'"))
+                barrier.wait(timeout=10)
+                try:
+                    row = make_service(session).create(make_request(source=source, stop_loss=stop))
+                    return "CREATED", row.id
+                except DuplicateSignalError as exc:
+                    session.rollback()
+                    return "DUPLICATE", exc.existing_signal_id
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            futures = [workers.submit(worker, source, stop) for source, stop in (
+                ("SCANNER", Decimal("62800")), ("MARKET_SCANNER", Decimal("62790")),
+            )]
+            results = [future.result(timeout=20) for future in futures]
+        assert sorted(action for action, _ in results) == ["CREATED", "DUPLICATE"]
+        assert len({signal_id for _, signal_id in results}) == 1
+        with factory() as session:
+            assert [session.query(model).count() for model in
+                    (TradingSignal, TradingSignalEvent, TelegramSignalDelivery)] == [1, 1, 1]
+    finally:
+        engine.dispose()
+        with admin.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
