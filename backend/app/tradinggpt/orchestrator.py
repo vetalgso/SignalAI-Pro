@@ -5,6 +5,7 @@ from typing import Any
 
 from app.tradinggpt.intent_classifier import classify_intent
 from app.tradinggpt.modules.crypto_asset import CryptoAssetAnalysisModule, SUPPORTED_CRYPTO_ASSETS
+from app.tradinggpt.portfolio import PortfolioEngine
 from app.tradinggpt.schemas import (
     AnalysisFactor,
     AssistantChatRequest,
@@ -55,60 +56,245 @@ class TradingGPTOrchestrator:
         context = request.context
         capital = context.capital
 
-        allocations = self._allocation_for_risk(context.risk_level)
+        current_allocations = (
+            dict(context.current_allocations)
+            if context.current_allocations
+            else {
+                asset: 0.0
+                for asset in context.existing_assets
+            }
+        )
+
+        engine_result = PortfolioEngine.build(
+            risk_level=context.risk_level,
+            capital=capital,
+            currency=context.currency,
+            max_position_percent=(
+                context.max_position_percent
+            ),
+            current_allocations=current_allocations,
+            min_trade_amount=context.min_trade_amount,
+            trading_fee_percent=(
+                context.trading_fee_percent
+            ),
+            rebalance_tolerance_percent=(
+                context.rebalance_tolerance_percent
+            ),
+            trade_rounding_amount=(
+                context.trade_rounding_amount
+            ),
+        )
+
         portfolio = [
             PortfolioAllocationItem(
-                asset=asset,
-                allocation_percent=percent,
-                amount=round(capital * percent / 100, 2) if capital else None,
-                reason=reason,
+                asset=position.asset,
+                allocation_percent=round(
+                    position.target_percent,
+                    2,
+                ),
+                amount=position.amount,
+                reason=(
+                    f"[{position.action}] "
+                    f"{position.reason}"
+                ),
             )
-            for asset, percent, reason in allocations
+            for position in engine_result.positions
         ]
 
         capital_text = (
-            f"Для капитала {capital:,.2f} {context.currency}"
+            f"Для капитала {capital:,.2f} "
+            f"{context.currency.upper()}"
             if capital
             else "Для указанного риск-профиля"
         )
 
-        answer = (
-            f"{capital_text} я предлагаю диверсифицированную базовую структуру. "
-            f"Профиль риска: {context.risk_level}. "
-            "Портфель сочетает активы роста, защитные инструменты и резерв "
-            "ликвидности. Перед реальным инвестированием необходимо уточнить "
-            "срок, текущие активы и допустимую просадку."
+        warning_text = (
+            " Предупреждения: "
+            + " ".join(engine_result.warnings)
+            if engine_result.warnings
+            else ""
         )
+
+        active_trades = [
+            trade
+            for trade in engine_result.trades
+            if trade.action != "HOLD"
+        ]
+
+        trade_summary = (
+            f" Для ребалансировки требуется "
+            f"{len(active_trades)} операций."
+            if current_allocations
+            else ""
+        )
+
+        answer = (
+            f"{capital_text} сформирована целевая структура портфеля. "
+            f"Профиль риска: {context.risk_level}. "
+            f"Риск портфеля: "
+            f"{engine_result.portfolio_risk_score:.1f}/100. "
+            f"Максимальный риск на одну сделку: "
+            f"{engine_result.max_risk_per_trade_percent:.2f}% "
+            f"капитала. "
+            f"Инвестировано: "
+            f"{engine_result.invested_percent:.1f}%. "
+            f"Денежный резерв: "
+            f"{engine_result.cash_reserve_percent:.1f}%. "
+            f"Максимальная доля одной позиции: "
+            f"{engine_result.max_position_percent:.1f}%."
+            f"{trade_summary}"
+            f"{warning_text}"
+        )
+
+        liquidity_score = round(
+            min(
+                100.0,
+                engine_result.cash_reserve_percent * 4,
+            )
+        )
+
+        personalization_score = 75
+
+        if context.current_allocations:
+            personalization_score += 15
+        elif context.existing_assets:
+            personalization_score += 10
+
+        if capital:
+            personalization_score += 5
 
         return AssistantChatResponse(
             intent="portfolio_allocation",
             answer=answer,
-            confidence=68,
+            confidence=82,
             risk=context.risk_level,
             market_view="mixed",
             factors=[
                 AnalysisFactor(
-                    type="diversification",
-                    score=82,
-                    summary="Капитал распределён между несколькими классами активов.",
+                    type="portfolio_risk",
+                    score=round(
+                        engine_result.portfolio_risk_score
+                    ),
+                    summary=(
+                        "Расчётный уровень риска портфеля: "
+                        f"{engine_result.portfolio_risk_score:.1f}"
+                        "/100."
+                    ),
                 ),
                 AnalysisFactor(
                     type="liquidity",
-                    score=75,
-                    summary="Часть капитала оставлена в денежном резерве.",
+                    score=liquidity_score,
+                    summary=(
+                        "Денежный резерв составляет "
+                        f"{engine_result.cash_reserve_percent:.1f}%."
+                    ),
+                ),
+                AnalysisFactor(
+                    type="position_limit",
+                    score=100,
+                    summary=(
+                        "Максимальная доля одной позиции ограничена "
+                        f"уровнем "
+                        f"{engine_result.max_position_percent:.1f}%."
+                    ),
                 ),
                 AnalysisFactor(
                     type="personalization",
-                    score=55,
-                    summary="Распределение основано пока только на базовом риск-профиле.",
+                    score=min(
+                        personalization_score,
+                        100,
+                    ),
+                    summary=(
+                        "Распределение учитывает капитал, "
+                        "риск-профиль, лимит позиции и "
+                        "текущие доли активов."
+                    ),
                 ),
             ],
             portfolio=portfolio,
             follow_up_questions=[
-                "На какой срок вы планируете инвестировать?",
-                "Какая максимальная просадка для вас приемлема?",
-                "Какие активы уже находятся в вашем портфеле?",
+                (
+                    "Подтвердите, готовы ли вы выполнить "
+                    "предложенную ребалансировку."
+                ),
+                (
+                    "Какая максимальная просадка портфеля для вас "
+                    "приемлема?"
+                ),
             ],
+            details={
+                "portfolio_risk_score": (
+                    engine_result.portfolio_risk_score
+                ),
+                "cash_reserve_percent": (
+                    engine_result.cash_reserve_percent
+                ),
+                "invested_percent": (
+                    engine_result.invested_percent
+                ),
+                "max_position_percent": (
+                    engine_result.max_position_percent
+                ),
+                "max_risk_per_trade_percent": (
+                    engine_result.max_risk_per_trade_percent
+                ),
+                "warnings": engine_result.warnings,
+                "execution": {
+                    "min_trade_amount": (
+                        engine_result.min_trade_amount
+                    ),
+                    "trading_fee_percent": (
+                        engine_result.trading_fee_percent
+                    ),
+                    "rebalance_tolerance_percent": (
+                        engine_result
+                        .rebalance_tolerance_percent
+                    ),
+                    "trade_rounding_amount": (
+                        engine_result.trade_rounding_amount
+                    ),
+                    "estimated_total_fees": (
+                        engine_result.estimated_total_fees
+                    ),
+                },
+                "trade_plan": [
+                    {
+                        "asset": trade.asset,
+                        "action": trade.action,
+                        "current_percent": round(
+                            trade.current_percent,
+                            2,
+                        ),
+                        "target_percent": round(
+                            trade.target_percent,
+                            2,
+                        ),
+                        "delta_percent": round(
+                            trade.delta_percent,
+                            2,
+                        ),
+                        "current_amount": (
+                            trade.current_amount
+                        ),
+                        "target_amount": (
+                            trade.target_amount
+                        ),
+                        "trade_amount": (
+                            trade.trade_amount
+                        ),
+                        "estimated_fee": (
+                            trade.estimated_fee
+                        ),
+                        "net_cash_flow": (
+                            trade.net_cash_flow
+                        ),
+                        "currency": trade.currency,
+                        "reason": trade.reason,
+                    }
+                    for trade in engine_result.trades
+                ],
+                "portfolio": engine_result.to_dict(),
+            },
             disclaimer=DISCLAIMER,
         )
 
@@ -351,35 +537,3 @@ class TradingGPTOrchestrator:
 
         raw = match.group(1) or match.group(2)
         return int(raw)
-
-    @staticmethod
-    def _allocation_for_risk(
-        risk_level: str,
-    ) -> list[tuple[str, float, str]]:
-        allocations: dict[str, list[tuple[str, float, str]]] = {
-            "low": [
-                ("Cash / USD", 30, "Резерв ликвидности и снижение волатильности."),
-                ("Gold", 25, "Защитная часть портфеля."),
-                ("NASDAQ ETF", 20, "Долгосрочная доля акций роста."),
-                ("BTC", 15, "Ограниченная доля высокорискового актива."),
-                ("ETH", 10, "Дополнительная диверсификация криптовалютной части."),
-            ],
-            "medium": [
-                ("BTC", 25, "Основная криптовалютная позиция."),
-                ("ETH", 20, "Диверсификация криптовалютной части."),
-                ("NASDAQ ETF", 20, "Экспозиция к технологическому сектору."),
-                ("Gold", 15, "Снижение общей волатильности."),
-                ("S&P 500 ETF", 10, "Широкая диверсификация по акциям."),
-                ("Cash / USD", 10, "Резерв для новых возможностей."),
-            ],
-            "high": [
-                ("BTC", 35, "Высокая потенциальная доходность при высоком риске."),
-                ("ETH", 25, "Крупный криптовалютный актив роста."),
-                ("NASDAQ ETF", 20, "Акции технологического сектора."),
-                ("Growth Stocks", 10, "Дополнительная доля активов роста."),
-                ("Gold", 5, "Небольшая защитная позиция."),
-                ("Cash / USD", 5, "Минимальный резерв ликвидности."),
-            ],
-        }
-
-        return allocations.get(risk_level, allocations["medium"])
